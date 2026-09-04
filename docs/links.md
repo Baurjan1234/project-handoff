@@ -47,6 +47,18 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 | Context7 overview | https://www.trevorlasn.com/blog/context7-mcp |
 | Supabase dashboard | https://supabase.com/dashboard |
 
+## World, conditional on the Sep 9 gate
+
+Nothing here is in scope yet. See `decisions/2026-09-05-world-selfie-check-gated.md`.
+
+| What | Where |
+|---|---|
+| World prize page | https://ethglobal.com/events/ethonline2026/prizes/world |
+| Sandbox access form | https://forms.gle/mqbaiwMvX5MzmKdY8 |
+| Selfie Check credential | https://docs.world.org/world-id/credentials/11 |
+| Selfie Check sandbox testing | https://docs.world.org/world-id/sandbox/testing-selfie-check |
+| World developer portal | https://developer.world.org |
+
 ## Event
 
 | What | Where |

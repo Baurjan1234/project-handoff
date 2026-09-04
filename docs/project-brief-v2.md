@@ -319,8 +319,10 @@ expert web app itself; custodial key management is a weeks-scale project.
   requester form; second-opinion audit; reject-rate reputation signal; budget/approval
   prompt before an agent spends.
 - **Tier 3 (stub/slide only, never build):** dispute m-of-n + UI; reject→RFQ fix
-  market; `execution` demo path; redline class; custodial web2 wrap; fiat rails; World;
-  token; general MCP↔MCP negotiation.
+  market; `execution` demo path; redline class; custodial web2 wrap; fiat rails;
+  token; general MCP↔MCP negotiation. **World ID is Tier 3 until the Sep 9 gate**, and
+  Tier 2 only if that gate passes — see
+  `decisions/2026-09-05-world-selfie-check-gated.md`.
 
 ## Demo arc
 
