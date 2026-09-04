@@ -17,7 +17,7 @@ Information has exactly **three homes**, chosen by who needs it:
 | **Linear** | Everything a *human* needs to coordinate: the event calendar, check-in deadlines, issues, cycles, blockers, who's-doing-what | Realtime, and agents can read/update it via MCP — but never depend on it at build time |
 | **Vault** (1Password/Bitwarden) | Operator key, Supabase service key | Never anywhere else |
 
-Everything else (NotebookLM, Drive, chat) is a **feeder** — anything decided or learned
+Everything else (Gemini Notebook, Drive, chat) is a **feeder** — anything decided or learned
 there gets written back into one of the three homes or it doesn't exist.
 
 ## Repo structure
@@ -114,8 +114,9 @@ criteria. Install with `/plugin marketplace add hedera-dev/hedera-skills`.
 
 ## Learning materials in one place
 
-NotebookLM (one shared notebook: Hedera SDK, HCS and Schedule Service docs, Agent Kit
-README, MCP spec, ETHGlobal rules) is the *human* study tool — audio overviews, Q&A.
+**Gemini Notebook**, the product formerly called NotebookLM (one shared notebook: Hedera SDK,
+HCS and Schedule Service docs, Agent Kit README, x402 and Blocky402 docs, MCP spec,
+ETHGlobal rules) is the *human* study tool — audio overviews, Q&A.
 With Context7 in the stack, the write-back burden shrinks: agents get live SDK docs
 themselves, so what goes back to `docs/research/` is only **conclusions and gotchas**
 ("ScheduleCreate needs X — verified on testnet"), not documentation summaries.
