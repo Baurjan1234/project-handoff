@@ -389,8 +389,14 @@ a test fixture only.
 4. Never slash on a single disagreement.
 5. Testnet only. No mainnet, ever. This includes the x402 facilitator: Blocky402's
    hosted testnet endpoint only, never `api.blocky402.com`.
-6. From Scratch: no project code before Sat Sep 5 12:00am UB. `AI-USAGE.md` from the
-   first code commit, appended every session. Commit small and often; never force-push.
+6. From Scratch: no project code before kick-off, and **commit small and often, which is
+   an eligibility requirement rather than hygiene.** ETHGlobal treats repositories that
+   arrive as single commits without proper history as unqualified by default until proven
+   otherwise, and names repo history as the evidence. One commit per package, per config
+   concern, per meaningful step; never force-push or rewrite history. AI disclosure is not
+   required by ETHGlobal — `AI-USAGE.md` is our own choice, one honest paragraph before
+   submission, and the per-seat log in `ai-usage/` is event-timeline evidence. See
+   `research/ethglobal-rules-verified.md`.
 7. **Demo artifacts are fabricated only** — never real contracts, filings, PII, or
    anything that could read as a real professional opinion; label them FAKE on screen.
 
@@ -412,7 +418,7 @@ a test fixture only.
 
 - **Git repo** = anything an agent session needs to build correctly. **Linear** =
   human coordination (issues, cycles on check-ins, decision log) via Linear MCP —
-  agents never depend on Linear at build time. **NotebookLM** (one shared notebook) for
+  agents never depend on Linear at build time. **Gemini Notebook** (one shared notebook) for
   human study; conclusions written back to the repo. **Telegram/Discord** + ETHGlobal
   Discord. **Vault** for the operator + Supabase service keys. Architecture diagrams are
   Mermaid in `architecture.md`, not a drawing tool. **OBS/Loom** recording. **Hashscan + mirror-node REST** bookmarked day 1.
@@ -432,10 +438,11 @@ Still open:
 
 4. Ratify the demo price point (proposed: 200 HBAR, pending faucet check), and separately
    the x402 per-call fee.
-7. **Select the ETHGlobal track.** Building from Scratch, not Continuity. Every team
-   member must be on the same track as the project or nobody can submit. One click,
-   nobody has made it yet.
-8. Someone presents at **live judging round 2**, Tue Sep 15. v1 assumed judging was
+7. Someone presents at **live judging round 2**, Tue Sep 15. v1 assumed judging was
    asynchronous throughout.
+
+Also closed on 2026-09-05: the ETHGlobal track is **Building from Scratch**, so the
+Continuity prize is not available to us, and the public repo required by the prize is
+`https://github.com/nasaa0528/project-handoff`, linked on the ETHGlobal project.
 
 The event calendar and check-in deadlines live on the Linear board, not in this repo.

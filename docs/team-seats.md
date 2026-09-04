@@ -32,7 +32,7 @@ The board is the only place work status lives. These are the accounts to assign 
 | Check-in submissions (Sep 8 + Sep 11, 11:59am UB) | Nasaa | Dates and deadlines live on the Linear board |
 | On-camera expert in the demo | Jack (fallback: Nasaa) | Khishgee + Tseegii drive the terminal side |
 | **Live judging round 2, Tue Sep 15** | **UNASSIGNED** | New in v2. Round 1 is asynchronous, round 2 is not. Somebody presents and answers questions |
-| ETHGlobal track selection | Nasaa | Building from Scratch. Blocks submission until clicked |
+| ETHGlobal track selection | Nasaa | Done 2026-09-05. Building from Scratch |
 | Linear board + decision log | Nasaa | Decisions land in `docs/decisions/` within the hour |
 
 ## If a seat wobbles (collapse rules)

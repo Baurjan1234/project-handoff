@@ -4,6 +4,15 @@ One file, everything reachable from it. Add a line rather than pasting a URL in 
 
 Lines marked **TODO** need a human to fill in and are tracked in the brief's open items.
 
+**This file is in a public repository.** Every URL here is world-readable. That is fine
+for documentation and for access-gated destinations like the notebook or the board, where
+the link alone grants nothing. Never put a URL here that is itself the credential: no
+signed URLs, no invite links, no vault share links. The vault row names the vault, it does
+not link into it.
+
+Source documents for study go in the notebook, not here. This file is a directory of
+destinations, one line each, not a reading list.
+
 ## Hedera — bookmark day 1
 
 | What | Where |
@@ -21,6 +30,8 @@ Lines marked **TODO** need a human to fill in and are tracked in the brief's ope
 | Hedera and the x402 standard | https://hedera.com/blog/hedera-and-the-x402-payment-standard/ |
 | x402 protocol | https://github.com/x402-foundation/x402 |
 | x402 pay-per-request reference build | https://github.com/hedera-dev/x402-inference-pay-per-request-poc |
+| Scaffold-HBAR x402 template | https://github.com/hedera-dev/scaffold-hbar/tree/templates/x402-pay-per-use |
+| Scaffold-HBAR payments-scheduler template | https://github.com/hedera-dev/scaffold-hbar/tree/templates/payments-scheduler |
 | Hedera docs MCP | https://docs.hedera.com/mcp |
 | Official Hedera Claude Code plugins | https://github.com/hedera-dev/hedera-skills |
 
@@ -43,8 +54,9 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 | ETHGlobal event page | https://ethglobal.com/events/ethonline2026 |
 | Hacker dashboard | https://ethglobal.com/events/ethonline2026/home |
 | Hedera prize page | https://ethglobal.com/events/ethonline2026/prizes/hedera |
+| Public repo, linked on the ETHGlobal project | https://github.com/nasaa0528/project-handoff |
 | Event calendar and check-in deadlines | On the Linear board, not in this repo |
-| ETHGlobal Discord | **TODO** |
+| ETHGlobal Discord | All four joined. Reach it from the event page |
 | Hedera prize, AI and Agentic Payments | $6,000, up to 3 teams at $2,000. Requires x402 via Blocky402 |
 
 ## Team
@@ -52,7 +64,7 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 | What | Where |
 |---|---|
 | Linear board, Project handoff | https://linear.app/nasantogtokh/project/project-handoff-dbc693664e86 |
-| Shared Drive folder, recordings and big assets | **TODO** |
-| Vault, operator key and Supabase service key | **TODO** |
-| NotebookLM shared notebook | **TODO** |
-| Telegram or Discord group | **TODO** |
+| Shared Drive folder, recordings and big assets | https://drive.google.com/drive/folders/1hEX-Gln-K4mXoaCj-V7DNlhRJxJIp1X5 — shared to the four by email |
+| Vault, operator key and Supabase service key | **TODO**, deferred. Name the vault here, never link into it |
+| Gemini Notebook, shared team notebook | https://notebook.google.com/notebook/e64d59ed-189e-4255-add6-ed66758a607b |
+| Team Telegram | In use, all four present. No link here on purpose, see the rule above |

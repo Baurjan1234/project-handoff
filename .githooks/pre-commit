@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Hard rule 2: no secrets in the repo, ever. This runs before every commit.
+# Installed by the root package.json prepare script, which points
+# core.hooksPath at this directory. CI runs gitleaks again, so bypassing
+# this locally buys you nothing.
+set -uo pipefail
+
+fail() { printf '\n\033[31mpre-commit blocked:\033[0m %s\n\n' "$1" >&2; exit 1; }
+
+# 1. Never stage a real env file. Cheap, runs even without gitleaks.
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+offenders="$(printf '%s\n' "$staged" | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' || true)"
+if [ -n "$offenders" ]; then
+  fail "these look like real env files:
+$offenders
+
+Hard rule 2. Only .env.example belongs in the repo."
+fi
+
+# 2. Full secret scan.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  fail "gitleaks is not installed, and hard rule 2 requires it on every commit.
+
+  Arch      sudo pacman -S gitleaks
+  macOS     brew install gitleaks
+  Go        GOBIN="$HOME/.local/bin" go install github.com/zricethezav/gitleaks/v8@latest
+  Binaries  https://github.com/gitleaks/gitleaks/releases
+
+Install it and commit again. Do not pass --no-verify on money-path code."
+fi
+
+if ! gitleaks protect --staged --redact --no-banner; then
+  fail "gitleaks found a secret in the staged changes.
+
+If it is a false positive, add a narrow allowlist rule to .gitleaks.toml
+and say why in the commit message. Never silence it with --no-verify."
+fi
+
+exit 0

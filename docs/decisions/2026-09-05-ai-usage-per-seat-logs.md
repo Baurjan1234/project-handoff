@@ -1,5 +1,9 @@
 # AI usage logged per seat
 
+> **Amended** by `2026-09-05-hard-rule-6-reworded.md`. ETHGlobal requires no AI
+> disclosure. The hook and the per-seat files stay, but as event-timeline evidence
+> rather than as disclosure.
+
 **Decision.** A SessionEnd hook appends one dated line per Claude Code session to
 `ai-usage/<seat>.md`. Root `AI-USAGE.md` holds the written disclosure and points at
 those logs.

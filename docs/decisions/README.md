@@ -29,3 +29,5 @@ Newest last.
 - [x402 gates handoff_verify](2026-09-05-x402-gates-handoff-verify.md) — **changes Tier 1**
 - [Confirmed schedule, and we freeze on Sep 11 anyway](2026-09-05-schedule-and-track.md)
 - [Brief bumped to v2](2026-09-05-brief-v2.md)
+- [No Gemini Notebook MCP server](2026-09-05-no-notebooklm-mcp.md)
+- [Hard rule 6 reworded: commit granularity is the eligibility requirement](2026-09-05-hard-rule-6-reworded.md) — amends the AI usage decision above
