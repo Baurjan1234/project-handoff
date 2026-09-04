@@ -293,6 +293,22 @@ These are said out loud before a judge asks. Do not let marketing copy contradic
   verdict ships. Never say the incentive system is closed, and keep the symmetry slogan
   out of the 90-second hook.
 
+## Project tooling for sessions
+
+Checked in, so cloning gets them. Nothing here restates a rule that is already above;
+these carry the depth or the chore.
+
+| What | Kind | For |
+|---|---|---|
+| `/decision` | command | Writes the dated file in `docs/decisions/` and the index line. The log rule dies to friction otherwise |
+| `/scoped-commit` | command | Commits the tree as small related commits with the trailers. Granularity is an eligibility requirement, and agents batch by default |
+| `hedera-primitives` | skill | Verified Hedera facts and the never-recall-from-memory rule. Loads when you touch the SDK, HCS, schedules, keys or mirror reads |
+| `money-path` | skill | Invariants and the required tests for money, hashing and validation. Loads when you touch code where a bug costs real money |
+| `rules-auditor` | agent | Audits a diff against the seven hard rules and the tier ladder. Run it before opening a PR |
+
+Skills load themselves when relevant, so you do not need to invoke them. Run the auditor
+as a subagent so the diff stays out of your session.
+
 ## Session protocol
 
 - Read `docs/project-brief-v2.md` and your lane's CLAUDE.md before touching scope,
