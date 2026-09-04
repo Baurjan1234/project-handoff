@@ -16,14 +16,8 @@
 
 import * as z from "zod";
 import { byteLength, canonicalize } from "./canonical.js";
-import {
-  CERT_TAG_MAX_BYTES,
-  DEFECT_CODE_MAX_BYTES,
-  DEFECTS_MAX_ITEMS,
-  HCS_MESSAGE_MAX_BYTES,
-  ORDER_ID_MAX_BYTES,
-  SCHEMA_VERSION,
-} from "./constants.js";
+import { DEFECTS_MAX_ITEMS, HCS_MESSAGE_MAX_BYTES, SCHEMA_VERSION } from "./constants.js";
+import { CertTag, DefectCode, OrderId, Sha256Hex } from "./primitives.js";
 
 export class HcsSizeError extends Error {
   constructor(message: string) {
@@ -31,23 +25,6 @@ export class HcsSizeError extends Error {
     this.name = "HcsSizeError";
   }
 }
-
-/** Lowercase hex, because a hash that differs only in case is two hashes. */
-export const Sha256Hex = z
-  .string()
-  .regex(/^[0-9a-f]{64}$/, "expected 64 lowercase hexadecimal characters");
-
-const bounded = (maxBytes: number, label: string) =>
-  z
-    .string()
-    .min(1, `${label} must not be empty`)
-    .refine((value) => byteLength(value) <= maxBytes, {
-      message: `${label} must be at most ${maxBytes} bytes`,
-    });
-
-export const OrderId = bounded(ORDER_ID_MAX_BYTES, "order_id");
-export const CertTag = bounded(CERT_TAG_MAX_BYTES, "cert_tag");
-export const DefectCode = bounded(DEFECT_CODE_MAX_BYTES, "defect code");
 
 /**
  * A reject is a delivered product and gets paid, same as an approve. Payment
