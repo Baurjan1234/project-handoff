@@ -434,12 +434,14 @@ Closed on 2026-09-05 from the ETHGlobal dashboard and `team-seats.md`:
 5. ~~Video owner.~~ Nasaa.
 6. ~~Agent Kit required?~~ No. **x402 through Blocky402 is required instead.**
 
+7. ~~Someone presents at live judging round 2.~~ **Nasaa**, claimed 2026-09-05. v1
+   assumed judging was asynchronous throughout and planned no rehearsal; that happens in
+   the slack after the Sep 11 freeze.
+
 Still open:
 
 4. Ratify the demo price point (proposed: 200 HBAR, pending faucet check), and separately
    the x402 per-call fee.
-7. Someone presents at **live judging round 2**, Tue Sep 15. v1 assumed judging was
-   asynchronous throughout.
 
 Also closed on 2026-09-05: the ETHGlobal track is **Building from Scratch**, so the
 Continuity prize is not available to us, and the public repo required by the prize is
