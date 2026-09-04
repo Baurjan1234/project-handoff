@@ -23,7 +23,7 @@ if ! command -v gitleaks >/dev/null 2>&1; then
 
   Arch      sudo pacman -S gitleaks
   macOS     brew install gitleaks
-  Go        go install github.com/gitleaks/gitleaks/v8@latest
+  Go        GOBIN="$HOME/.local/bin" go install github.com/zricethezav/gitleaks/v8@latest
   Binaries  https://github.com/gitleaks/gitleaks/releases
 
 Install it and commit again. Do not pass --no-verify on money-path code."
