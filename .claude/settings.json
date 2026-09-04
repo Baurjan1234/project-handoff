@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm i:*)",
+      "Bash(pnpm -v)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm -r typecheck:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm -r test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm -r build:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm -r lint:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm exec vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(node --version)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote -v)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(curl https://testnet.mirrornode.hedera.com/**)",
+      "Read(./.env.example)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Bash(cat .env:*)",
+      "Bash(cat ./.env:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git commit --no-verify:*)",
+      "Bash(git commit -n:*)",
+      "Bash(curl https://mainnet-public.mirrornode.hedera.com/**)",
+      "Bash(curl https://mainnet.mirrornode.hedera.com/**)"
+    ]
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/append-ai-usage.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
