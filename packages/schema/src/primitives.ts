@@ -9,6 +9,7 @@
 import * as z from "zod";
 import { byteLength } from "./canonical.js";
 import { CERT_TAG_MAX_BYTES, DEFECT_CODE_MAX_BYTES, ORDER_ID_MAX_BYTES } from "./constants.js";
+import { assertPositive, parseTinybars } from "./money.js";
 
 /** Lowercase hex, because a hash that differs only in case is two hashes. */
 export const Sha256Hex = z
@@ -53,3 +54,27 @@ export const Utc = z
 export function utcToEpochSeconds(value: string): number {
   return Math.floor(Date.parse(Utc.parse(value)) / 1000);
 }
+
+/**
+ * An amount on the wire: a tinybar integer as a string.
+ *
+ * Validated through the money module rather than a regex here, so there is one
+ * definition of what an amount is. Stays a string after parsing, because
+ * canonical hashing needs the exact bytes that were published.
+ */
+export const TinybarAmount = z.string().superRefine((value, ctx) => {
+  try {
+    parseTinybars(value);
+  } catch (error) {
+    ctx.addIssue({ code: "custom", message: (error as Error).message });
+  }
+});
+
+/** A price. Zero is not a price. */
+export const PositiveTinybarAmount = z.string().superRefine((value, ctx) => {
+  try {
+    assertPositive(parseTinybars(value));
+  } catch (error) {
+    ctx.addIssue({ code: "custom", message: (error as Error).message });
+  }
+});

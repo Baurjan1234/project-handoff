@@ -28,3 +28,18 @@ export const DEFECT_CODE_MAX_BYTES = 48;
 
 export const CERT_TAG_MAX_BYTES = 32;
 export const ORDER_ID_MAX_BYTES = 64;
+
+/**
+ * Claim-timeout bounds.
+ *
+ * Claim-timeout and order-deadline expiry are different events. The claim
+ * timeout is short relative to the deadline so that a lazy claimant cannot hold
+ * funds hostage until the order expires. These bounds keep it sane in
+ * isolation; `assertClaimTimeoutFitsWindow` enforces the relative part once the
+ * consensus timestamp is known.
+ */
+export const CLAIM_TIMEOUT_MIN_SECONDS = 300;
+export const CLAIM_TIMEOUT_MAX_SECONDS = 21_600;
+
+/** The claim timeout may take at most this share of the post-to-deadline window. */
+export const CLAIM_TIMEOUT_MAX_SHARE_OF_WINDOW = 1 / 3;
