@@ -47,6 +47,29 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 | Context7 overview | https://www.trevorlasn.com/blog/context7-mcp |
 | Supabase dashboard | https://supabase.com/dashboard |
 
+## World — TENTATIVE, parked
+
+**Nothing here is in scope.** Parked pending the Sep 9 gate, NAS-34, and revisited only if
+that gate passes. Reasoning in `decisions/2026-09-05-world-selfie-check-gated.md`. Kept
+here so a decision to proceed costs minutes rather than an afternoon of re-research.
+
+| What | Where |
+|---|---|
+| The requirements themselves | https://ethglobal.com/events/ethonline2026/prizes/world |
+| Sandbox access form | https://forms.gle/mqbaiwMvX5MzmKdY8 |
+| Selfie Check credential | https://docs.world.org/world-id/credentials/11 |
+| Selfie Check sandbox testing | https://docs.world.org/world-id/sandbox/testing-selfie-check |
+| IDKit, Selfie Check beta | https://docs.world.org/world-id/idkit/credentials#selfie-check-beta |
+| World developer portal | https://developer.world.org |
+
+**Deliberately excluded: everything AgentKit.** That prize is Continuity-track only and we
+are Building from Scratch, so those docs are noise. If somebody adds them later, this line
+is why they should not.
+
+**Notebook trigger.** These stay out of the shared notebook until the gate passes, so it
+keeps answering Hedera and x402 questions rather than diluting. If it passes, add the four
+`docs.world.org` and `developer.world.org` rows and nothing else.
+
 ## Event
 
 | What | Where |

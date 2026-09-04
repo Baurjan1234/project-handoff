@@ -319,8 +319,10 @@ expert web app itself; custodial key management is a weeks-scale project.
   requester form; second-opinion audit; reject-rate reputation signal; budget/approval
   prompt before an agent spends.
 - **Tier 3 (stub/slide only, never build):** dispute m-of-n + UI; reject→RFQ fix
-  market; `execution` demo path; redline class; custodial web2 wrap; fiat rails; World;
-  token; general MCP↔MCP negotiation.
+  market; `execution` demo path; redline class; custodial web2 wrap; fiat rails;
+  token; general MCP↔MCP negotiation. **World ID is Tier 3 until the Sep 9 gate**, and
+  Tier 2 only if that gate passes — see
+  `decisions/2026-09-05-world-selfie-check-gated.md`.
 
 ## Demo arc
 
@@ -434,12 +436,14 @@ Closed on 2026-09-05 from the ETHGlobal dashboard and `team-seats.md`:
 5. ~~Video owner.~~ Nasaa.
 6. ~~Agent Kit required?~~ No. **x402 through Blocky402 is required instead.**
 
+7. ~~Someone presents at live judging round 2.~~ **Nasaa**, claimed 2026-09-05. v1
+   assumed judging was asynchronous throughout and planned no rehearsal; that happens in
+   the slack after the Sep 11 freeze.
+
 Still open:
 
 4. Ratify the demo price point (proposed: 200 HBAR, pending faucet check), and separately
    the x402 per-call fee.
-7. Someone presents at **live judging round 2**, Tue Sep 15. v1 assumed judging was
-   asynchronous throughout.
 
 Also closed on 2026-09-05: the ETHGlobal track is **Building from Scratch**, so the
 Continuity prize is not available to us, and the public repo required by the prize is

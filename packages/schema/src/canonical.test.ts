@@ -79,6 +79,38 @@ describe("canonicalize rejects the ambiguous", () => {
   });
 });
 
+describe("agreement with RFC 8785", () => {
+  // Every other test here checks that our canonicalization agrees with itself,
+  // which proves nothing about a second implementation producing the same hash.
+  // This one checks it against the published JSON Canonicalization Scheme
+  // example, which is the only external evidence we have that a verifier
+  // written by someone else would compute the same commitment.
+  it("reproduces the published example byte for byte", () => {
+    const input = {
+      "\u20ac": "Euro Sign",
+      "\r": "Carriage Return",
+      "\ufb33": "Hebrew Letter Dalet With Dagesh",
+      "1": "One",
+      "\ud83d\ude00": "Emoji: Grinning Face",
+      "\u0080": "Control",
+      "\u00e4": "Latin Small Letter A With Diaeresis",
+    };
+
+    expect(canonicalize(input)).toBe(
+      '{"\\r":"Carriage Return","1":"One","\u0080":"Control","\u00e4":"Latin Small Letter A With Diaeresis",' +
+        '"\u20ac":"Euro Sign","\ud83d\ude00":"Emoji: Grinning Face","\ufb33":"Hebrew Letter Dalet With Dagesh"}',
+    );
+  });
+
+  it("sorts by UTF-16 code unit, which puts the emoji before U+FB33", () => {
+    // A code-point sort would order these differently. The surrogate pair's
+    // first unit is D83D, which is below FB33.
+    expect(canonicalize({ "\ufb33": 1, "\ud83d\ude00": 2 })).toBe(
+      '{"\ud83d\ude00":2,"\ufb33":1}',
+    );
+  });
+});
+
 describe("sha256Hex", () => {
   it("matches the known empty-string vector", () => {
     expect(sha256Hex("")).toBe(
