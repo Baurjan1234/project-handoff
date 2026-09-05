@@ -50,9 +50,13 @@ export function configFromEnv(env: Env = process.env): ServiceConfig {
     throw new ConfigError(`X402_NETWORK is ${network}. This service is testnet only.`);
   }
 
-  const port = Number.parseInt(env["PORT"]?.trim() ?? "4021", 10);
-  if (!Number.isInteger(port) || port <= 0) {
-    throw new ConfigError(`PORT is ${env["PORT"]}, which is not a port.`);
+  // parseInt alone is not a validator: it reads "8080.5" as 8080 and "80abc"
+  // as 80, so a value that is not a port becomes one silently. Same class of
+  // bug as letting an amount through as a float.
+  const rawPort = env["PORT"]?.trim() ?? "4021";
+  const port = /^\d+$/.test(rawPort) ? Number.parseInt(rawPort, 10) : Number.NaN;
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new ConfigError(`PORT is ${JSON.stringify(env["PORT"])}, which is not a port.`);
   }
 
   return {

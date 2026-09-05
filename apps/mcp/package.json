@@ -5,14 +5,20 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "smoke": "bash scripts/smoke-402.sh",
+    "mcp": "tsx src/mcp/main.ts"
   },
   "dependencies": {
     "@handoff/schema": "workspace:*",
+    "@modelcontextprotocol/server": "2.0.0",
     "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "26.4.1",
+    "tsx": "^4.23.13",
     "typescript": "7.0.2",
     "vitest": "5.0.0"
   }
