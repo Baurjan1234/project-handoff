@@ -32,4 +32,5 @@ Newest last.
 - [No Gemini Notebook MCP server](2026-09-05-no-notebooklm-mcp.md)
 - [Hard rule 6 reworded: commit granularity is the eligibility requirement](2026-09-05-hard-rule-6-reworded.md) — amends the AI usage decision above
 - [World Selfie Check: option bought, build gated on x402](2026-09-05-world-selfie-check-gated.md) — amends the Tier 3 ladder
-- [The hosted Blocky402 testnet facilitator, not the scaffold's](2026-09-05-hosted-blocky402-not-the-scaffold-facilitator.md) — also settles that the gate covers order posting only
+- [The hosted Blocky402 testnet facilitator, not the scaffold's](2026-09-05-hosted-blocky402-not-the-scaffold-facilitator.md)
+- [The x402 gate covers order posting only](2026-09-05-gate-covers-order-posting-only.md) — closes the last open x402 question
