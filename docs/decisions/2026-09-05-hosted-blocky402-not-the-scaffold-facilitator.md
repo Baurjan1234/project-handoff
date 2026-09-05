@@ -32,8 +32,8 @@ authentication. Measurements and wire shapes are in
   `PAYMENT-RESPONSE`. `X-PAYMENT` is the version 1 name. Nothing in the design changes —
   we go through `@x402/core` and never hand-roll a header — but the brief and root
   `CLAUDE.md` describe step 3 with the version 1 name and should be corrected, so nobody
-  debugs a header that was never wrong. The two `apps/` lane files are fixed in this
-  branch.
+  debugs a header that was never wrong. `apps/mcp/CLAUDE.md` is fixed in this branch;
+  `apps/requester/CLAUDE.md` never named a header and needed no change.
 - `@x402/hedera` depends on `@hiero-ledger/sdk`, so the fee leg carries the Hedera SDK
   transitively without us importing it. Whether that satisfies "only `packages/chain`
   imports the Hedera SDK", or needs a written exception, is a rule-boundary question for

@@ -98,7 +98,7 @@ same content in the `PAYMENT-REQUIRED` header. An `accepts` array; the client ta
 
 ```json
 {"accepts":[{"scheme":"exact","network":"hedera:testnet","amount":"100000",
-  "payTo":"0.0.8011510","maxTimeoutSeconds":300,"asset":"0.0.0",
+  "payTo":"0.0.x — our x402 receiver","maxTimeoutSeconds":300,"asset":"0.0.0",
   "extra":{"feePayer":"0.0.7162784"}}]}
 ```
 
