@@ -1,5 +1,9 @@
 # x402 gates handoff_verify
 
+> **Amended** by `2026-09-05-hosted-blocky402-not-the-scaffold-facilitator.md`, which
+> verified the version 2 header names against the published `@x402/core` bundle. The
+> `X-PAYMENT` named below is the version 1 name. The decision itself stands.
+
 **Decision.** `handoff_verify` becomes an x402-gated service. The requester agent pays a
 per-call fee over x402, settled on `hedera:testnet` through the hosted Blocky402
 facilitator, before an order is posted. This is Tier 1 and it is the single
