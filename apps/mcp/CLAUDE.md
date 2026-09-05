@@ -14,7 +14,11 @@
 1. Client calls the tool. Server answers **HTTP 402** with payment requirements.
 2. Client builds a Hedera `TransferTransaction`, partially signs with its own **ECDSA**
    key, and pays no gas.
-3. Client retries with the base64 payload in the **`X-PAYMENT`** header.
+3. Client retries with the base64 payload in the **`PAYMENT-SIGNATURE`** header.
+   `X-PAYMENT` is the x402 version 1 name and appears in older documents; version 2 also
+   moves the 402 challenge into a `PAYMENT-REQUIRED` header and returns the settlement
+   receipt as `PAYMENT-RESPONSE`. Go through `@x402/core` and never hand-roll a header.
+   Verified names and shapes: `../../docs/research/x402-blocky402-wire-verified.md`.
 4. Server posts it to the facilitator's `/verify` and serves on success.
 5. Facilitator co-signs as designated fee payer and `/settle` submits it. Settlement is
    asynchronous and returns a Hedera receipt.
@@ -35,8 +39,12 @@ Facilitator is `https://api.testnet.blocky402.com`, network `hedera:testnet`. Ne
 
 A complete working x402 flow, including a facilitator, lives on the
 `templates/x402-pay-per-use` branch of `hedera-dev/scaffold-hbar`. Read
-`../../docs/research/x402-reference-implementations.md` first: it names the two
-adaptations we need and the one open question about whose facilitator that is.
+`../../docs/research/x402-reference-implementations.md` for the two adaptations we need,
+then `../../docs/research/x402-blocky402-wire-verified.md` for the verified wire.
+
+Its facilitator is **not** Blocky402 — it is a different program speaking the same
+protocol — so take the plumbing and point at the hosted testnet facilitator. Settled in
+`../../docs/decisions/2026-09-05-hosted-blocky402-not-the-scaffold-facilitator.md`.
 
 Hedera Agent Kit is optional here, not required. If it competes with the gate for your
 time, the gate wins.
