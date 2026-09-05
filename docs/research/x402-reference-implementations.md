@@ -43,16 +43,16 @@ packages/nextjs/scripts/x402-buy.ts          end-to-end buy script
 2. **Drop the Solidity.** The template is Hardhat plus a `FileRegistry` contract, and
    Handoff needs no contract. Take the x402 plumbing, leave the scaffold.
 
-## The open question, and it is prize-critical
+## The open question — answered 2026-09-05, they are not the same
 
 **The template self-hosts its facilitator. The prize requires settlement "through the
-Blocky402 facilitator."** These may be the same software: Blocky402 is MIT licensed and
-documented as self-hostable via Docker or Node, with a local default on port 3002, and
-the template ships a `facilitator/Dockerfile`.
+Blocky402 facilitator."**
 
-Resolve this before building on the template. If the template's facilitator is not
-Blocky402, point at the hosted testnet endpoint `https://api.testnet.blocky402.com`
-instead, which is the safe reading of the requirement either way.
+They are different programs. The template's `facilitator/package.json` names itself
+`x402-hedera-facilitator`, wrapping the `@x402/hedera` reference scheme. We point at the
+hosted testnet endpoint `https://api.testnet.blocky402.com` instead, and keep the
+template only as plumbing. Details, and the wire shapes both of them speak, are in
+`x402-blocky402-wire-verified.md`.
 
 ## Also worth knowing
 
