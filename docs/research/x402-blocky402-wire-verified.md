@@ -53,26 +53,48 @@ finding here.
 
 Node: the template pins Node 20.18.3+; our `.nvmrc` is 24.11.1, which is above the floor.
 
-## The header is not `X-PAYMENT` on the version 2 path
+## The headers are not what our documents say
 
-The brief, `CLAUDE.md` and both lane files say the client retries with the base64 payload
-in `X-PAYMENT`. That is the x402 version 1 name.
+Read out of the published `@x402/core@2.25.0` bundle, not inferred. Version 2 carries the
+whole exchange in headers and keeps the version 1 names as compatibility.
 
-- `@x402/core` version 2 encodes with `encodePaymentSignatureHeader()` and sends
-  **`PAYMENT-SIGNATURE`**.
-- The template's resource server reads `payment-signature` first and falls back to
-  `x-payment`, which it labels legacy.
-- Blocky402's `/verify` accepts three input shapes: a canonical `paymentPayload` object,
-  an `X-PAYMENT` header, or a legacy base64 `paymentHeader`.
+| Direction | Version 2 | Version 1 |
+|---|---|---|
+| Server states the price on the 402 | `PAYMENT-REQUIRED` header, plus `Cache-Control` | body only |
+| Client pays on the retry | `PAYMENT-SIGNATURE` | `X-PAYMENT` |
+| Server returns the settlement receipt | `PAYMENT-RESPONSE` | `X-PAYMENT-RESPONSE` |
 
-We own both ends of the header, so the practical rule is: **go through `@x402/core` and
-never hand-roll the header**, and have our resource server accept both names. Nothing in
-the design depends on which one wins, but a document that names only `X-PAYMENT` will
-send someone hunting for a bug that is not there.
+`encodePaymentSignatureHeader()` switches on `x402Version` and emits `PAYMENT-SIGNATURE`
+for 2, `X-PAYMENT` for 1, with the same encoder behind both.
+
+Three consequences that are easy to get wrong:
+
+- **The server's own extractor reads `payment-signature` only.** It does not fall back to
+  `x-payment`. The template's Next.js route adds that fallback itself. If we want a
+  version 1 client to work against us, that is our code to write, and this week nothing
+  needs it.
+- **The 402 challenge is a header first.** `getPaymentRequiredResponse(getHeader, body)`
+  prefers the `PAYMENT-REQUIRED` header and falls back to the body for version 1
+  compatibility. The `accepts` array in the body is the compatibility path, not the
+  canonical one.
+- **The settlement receipt reaches the client as `PAYMENT-RESPONSE`.** That is where the
+  fee leg's transaction ID arrives on the requester side, and it is what we thread
+  through and put on screen. Do not go looking for it in the response body.
+
+The brief, `CLAUDE.md` and both lane files describe step 3 as "retries with the base64
+payload in `X-PAYMENT`". That is the version 1 name. Nothing in the design changes — go
+through `@x402/core` and never hand-roll a header — but a document that names only
+`X-PAYMENT` sends someone hunting for a bug that is not there.
+
+Blocky402 sits behind all of this: its `/verify` accepts a canonical `paymentPayload`
+object, an `X-PAYMENT` header, or a legacy base64 `paymentHeader`. We send the canonical
+object, so the header question never reaches it.
 
 ## The shapes, field for field
 
-**402 response body.** An `accepts` array; the client takes `accepts[0]`.
+**402 response body**, which is the version 1 compatibility path — version 2 puts the
+same content in the `PAYMENT-REQUIRED` header. An `accepts` array; the client takes
+`accepts[0]`.
 
 ```json
 {"accepts":[{"scheme":"exact","network":"hedera:testnet","amount":"100000",
@@ -98,7 +120,9 @@ send someone hunting for a bug that is not there.
   "errorMessage":...,"transaction":"","network":...}`.
 
 `transaction` on a settle response is the Hedera transaction ID. That is the one to
-thread through and to put on screen; it is the only tx ID the fee leg produces.
+thread through and to put on screen; it is the only tx ID the fee leg produces. Our
+resource server gets it from the facilitator and passes it on in the `PAYMENT-RESPONSE`
+header, which is where the requester side reads it.
 
 ## Gotchas that will cost an evening
 
