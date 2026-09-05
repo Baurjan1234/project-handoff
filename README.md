@@ -12,12 +12,14 @@ Built for ETHOnline 2026, Hedera AI & Agentic Payments.
 
 ## What existed before the hackathon
 
-Three planning drafts, written before kick-off, iterating on the idea. **No code existed
-before the event.** The final draft was adopted unchanged into this repository as
-[`docs/project-brief-v1.md`](docs/project-brief-v1.md), and everything the round-2 audits
-changed is recorded in [`docs/project-brief-v2.md`](docs/project-brief-v2.md), which
-supersedes it. Every source file, test and configuration in this repository was written
-during the event, and the commit history is the record.
+Eight planning documents, written on 2026-09-04, the day before kick-off. They iterate on
+the idea, and include an earlier and broader scope covering physical errands which was cut
+during that planning, before any code was written. **Nothing else predates the event: no
+code, no designs, no assets.** The final planning document was adopted unchanged into this
+repository as [`docs/project-brief-v1.md`](docs/project-brief-v1.md), and
+[`docs/project-brief-v2.md`](docs/project-brief-v2.md) supersedes it with everything that
+changed during the build. Every source file, test and configuration here was written during
+the event, and the commit history is the record.
 
 ## The problem
 
