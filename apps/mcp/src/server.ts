@@ -88,7 +88,20 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
   }
 
   const gateDeps = { facilitator: deps.facilitator, config: deps.gateConfig };
-  const outcome = await gate(headerLookup(request.headers), "/orders", gateDeps);
+
+  let outcome;
+  try {
+    outcome = await gate(headerLookup(request.headers), "/orders", gateDeps);
+  } catch (error) {
+    // We settle through a facilitator we do not run, so its outage is a
+    // failure mode we own the presentation of. An unpriced 503 is honest:
+    // we cannot state a price we cannot have co-signed.
+    return {
+      status: 503,
+      headers: { ...json, "Retry-After": "30" },
+      body: { error: "the payment facilitator is unreachable", detail: (error as Error).message },
+    };
+  }
 
   if (outcome.kind === "payment-required") {
     return { status: outcome.status, headers: outcome.headers, body: outcome.body };
@@ -133,11 +146,25 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
     };
   }
 
-  const settled = await settle(outcome, gateDeps);
+  // Past this point the envelope is published and the funds are locked, so
+  // there is no failure worth hiding the order behind. A settlement that
+  // throws is reported the same way as one that comes back unsuccessful: the
+  // caller gets their order id either way, and we say the fee did not land.
+  let settled: Awaited<ReturnType<typeof settle>> | undefined;
+  let settleError: string | undefined;
+  try {
+    settled = await settle(outcome, gateDeps);
+  } catch (error) {
+    settleError = (error as Error).message;
+  }
+
+  const feeFailure = settleError ?? (settled?.receipt.success === false
+    ? settled.receipt.errorReason ?? settled.receipt.errorMessage ?? "settlement failed"
+    : undefined);
 
   return {
     status: 200,
-    headers: { ...json, ...settled.headers },
+    headers: { ...json, ...(settled?.headers ?? {}) },
     body: {
       order_id: posted.orderId,
       escrow_account_id: posted.escrowAccountId,
@@ -148,14 +175,12 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
       transaction_ids: {
         lock_funds: posted.transactionIds.lockFunds,
         submit_envelope: posted.transactionIds.submitEnvelope,
-        service_fee: settled.receipt.transaction,
+        service_fee: settled?.receipt.transaction ?? "",
       },
       service_fee: {
-        settled: settled.receipt.success,
-        payer: outcome.payer ?? settled.receipt.payer,
-        ...(settled.receipt.success
-          ? {}
-          : { error: settled.receipt.errorReason ?? settled.receipt.errorMessage }),
+        settled: feeFailure === undefined,
+        payer: outcome.payer ?? settled?.receipt.payer,
+        ...(feeFailure === undefined ? {} : { error: feeFailure }),
       },
     },
   };

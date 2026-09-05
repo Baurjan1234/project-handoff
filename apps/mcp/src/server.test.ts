@@ -206,6 +206,64 @@ describe("POST /orders", () => {
     expect(body["service_fee"]?.["error"]).toBe("transaction_failed");
   });
 
+  it("answers 503 when the facilitator is unreachable, rather than crashing", async () => {
+    const failing: FetchLike = async () => {
+      throw new TypeError("fetch failed");
+    };
+    const { deps, content } = harness();
+    const facilitator = new Facilitator({
+      baseUrl: "https://api.testnet.blocky402.com",
+      fetch: failing,
+    });
+
+    const response = await handle(post({}, orderBody()), { ...deps, facilitator });
+
+    expect(response.status).toBe(503);
+    expect(content.size).toBe(0);
+  });
+
+  it("still returns the order when the settlement call itself fails", async () => {
+    const { deps } = harness();
+    const impl: FetchLike = async (url) => {
+      const path = new URL(url).pathname;
+      if (path === "/settle") {
+        return new Response("upstream exploded", { status: 500 });
+      }
+      if (path === "/verify") {
+        return new Response(JSON.stringify({ isValid: true, payer: "0.0.10376659" }));
+      }
+      return new Response(
+        JSON.stringify({
+          kinds: [
+            {
+              x402Version: 2,
+              scheme: "exact",
+              network: "hedera:testnet",
+              extra: { feePayer: "0.0.7162784" },
+            },
+          ],
+        }),
+      );
+    };
+    const facilitator = new Facilitator({
+      baseUrl: "https://api.testnet.blocky402.com",
+      fetch: impl,
+    });
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      { ...deps, facilitator },
+    );
+
+    // The funds are locked and the envelope is published by now. Hiding that
+    // behind a failed fee call would lose the caller their order.
+    expect(response.status).toBe(200);
+    const body = response.body as Record<string, Record<string, unknown>>;
+    expect(body["order_id"]).toMatch(/^ord_/);
+    expect(body["service_fee"]?.["settled"]).toBe(false);
+    expect(String(body["service_fee"]?.["error"])).toMatch(/500/);
+  });
+
   it("answers anything else without touching the facilitator", async () => {
     const { deps, paths } = harness();
 
