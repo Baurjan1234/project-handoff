@@ -141,13 +141,13 @@ sequenceDiagram
     participant H as Hedera testnet
 
     C->>S: call handoff_verify
-    S-->>C: HTTP 402 with payment requirements
+    S-->>C: HTTP 402, price in a PAYMENT-REQUIRED header
     C->>C: build TransferTransaction, partially sign with its ECDSA key
-    C->>S: retry with base64 payload in the X-PAYMENT header
+    C->>S: retry with base64 payload in the PAYMENT-SIGNATURE header
     S->>F: POST /verify
     F-->>S: isValid
     S->>S: post the order, lock the escrow, publish the envelope
-    S-->>C: order id and transaction ids
+    S-->>C: order id and transaction ids, receipt in PAYMENT-RESPONSE
     F->>H: co-sign as designated fee payer, POST /settle
     H-->>F: receipt, settlement is asynchronous
 ```

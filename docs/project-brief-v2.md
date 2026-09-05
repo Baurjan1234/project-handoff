@@ -245,21 +245,32 @@ The service fee is what qualifies us for the prize. The order value is the produ
 
 **The flow, implement from this:**
 
+We speak **x402 version 2**. The header names below were read out of the published
+`@x402/core` bundle rather than inferred, and the implementation goes through that
+library rather than hand-rolling a header.
+
 1. The requester agent calls the `handoff_verify` endpoint.
-2. The resource server answers **HTTP 402** with the payment requirements.
+2. The resource server answers **HTTP 402**, stating the price in a **`PAYMENT-REQUIRED`**
+   header, with the body carried as the version 1 fallback.
 3. The client builds a Hedera `TransferTransaction` and partially signs it with its own
    ECDSA key. It does not pay gas.
-4. The client retries the call with the base64-encoded payload in the **`X-PAYMENT`**
-   header.
+4. The client retries the call with the base64-encoded payload in the
+   **`PAYMENT-SIGNATURE`** header. `X-PAYMENT` is the version 1 name and appears in
+   earlier drafts of this document.
 5. The resource server posts it to the facilitator's `/verify`, and on success serves
-   the resource, meaning the order is posted and funds lock as normal.
+   the resource, meaning the order is posted and funds lock as normal. Verification gates
+   serving and settlement happens last, so an order that fails to post leaves the
+   caller's money untouched.
 6. The facilitator co-signs as the designated fee payer, covers gas, and submits via
-   `/settle`. Settlement is asynchronous and returns a Hedera receipt.
+   `/settle`. The receipt reaches the client as **`PAYMENT-RESPONSE`**. Settlement is
+   asynchronous.
 
 **Facilitator:** the hosted Blocky402 testnet facilitator at
 `https://api.testnet.blocky402.com`, network identifier `hedera:testnet`, endpoints
 `/verify` and `/settle`. Blocky402 mainnet is not available yet and we would not use it
-if it were — hard rule 5 stands.
+if it were — hard rule 5 stands. The `extra.feePayer` account is discovered from
+`/supported` at startup and never hard-coded, because a rotated account fails
+verification silently. See `research/x402-blocky402-wire-verified.md`.
 
 **Operational constraints that will bite if ignored:**
 

@@ -133,16 +133,29 @@ the attestation signature.
 
 ## The x402 gate — implement from this, not from memory
 
-1. Client calls `handoff_verify`. Server answers **HTTP 402** with payment requirements.
+**We speak x402 version 2.** Header names below are read out of the published
+`@x402/core` bundle, not inferred. **Go through `@x402/core` and never hand-roll a
+header** — the names are here so nobody debugs one that was never wrong.
+
+1. Client calls `handoff_verify`. Server answers **HTTP 402**, stating the price in a
+   **`PAYMENT-REQUIRED`** header, with the body as the version 1 fallback.
 2. Client builds a Hedera `TransferTransaction`, partially signs with its own **ECDSA**
    key, and does not pay gas.
-3. Client retries with the base64 payload in the **`X-PAYMENT`** header.
-4. Server posts it to the facilitator's `/verify`, and serves on success.
-5. Facilitator co-signs as designated fee payer and `/settle` submits it. Settlement is
-   asynchronous and returns a Hedera receipt.
+3. Client retries with the base64 payload in the **`PAYMENT-SIGNATURE`** header.
+   `X-PAYMENT` is the version 1 name and appears in older documents.
+4. Server posts it to the facilitator's `/verify`, and serves on success. **Verification
+   gates serving and settlement happens last**, so an order that fails to post leaves the
+   caller's money untouched.
+5. Facilitator co-signs as designated fee payer and `/settle` submits it. The receipt
+   reaches the client as **`PAYMENT-RESPONSE`**. Settlement is asynchronous.
 
 Facilitator is `https://api.testnet.blocky402.com`, network id `hedera:testnet`. Never
-`api.blocky402.com` — that is mainnet and hard rule 5 forbids it.
+`api.blocky402.com` — that is mainnet and hard rule 5 forbids it. **`extra.feePayer` is
+discovered from `/supported` at startup, never hard-coded**, because a rotated account
+fails verification silently.
+
+Verified wire shapes and the measurements behind them:
+`docs/research/x402-blocky402-wire-verified.md`.
 
 Three things that will bite if ignored. The x402 signer must be an **ECDSA** account, so
 check the key type rather than assuming the portal default. **Pay in HBAR, not USDC**,
