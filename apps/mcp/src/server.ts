@@ -80,6 +80,13 @@ const OrderRequestBody = z.strictObject({
 const json = { "Content-Type": "application/json" } as const;
 
 export async function handle(request: HttpRequest, deps: ServerDeps): Promise<HttpResponse> {
+  // Deliberately free and deliberately not a payment surface. It says the
+  // process is up, nothing about the chain or the facilitator, so it cannot
+  // become a way to read anything the gate is supposed to charge for.
+  if (request.path === "/health") {
+    return { status: 200, headers: json, body: { status: "ok", network: deps.gateConfig.network } };
+  }
+
   if (request.path !== "/orders") {
     return { status: 404, headers: json, body: { error: "not found" } };
   }

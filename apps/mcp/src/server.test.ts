@@ -267,8 +267,20 @@ describe("POST /orders", () => {
   it("answers anything else without touching the facilitator", async () => {
     const { deps, paths } = harness();
 
-    expect((await handle({ ...post({}, ""), path: "/health" }, deps)).status).toBe(404);
+    expect((await handle({ ...post({}, ""), path: "/nope" }, deps)).status).toBe(404);
     expect((await handle({ ...post({}, ""), method: "GET" }, deps)).status).toBe(405);
+    expect(paths).toEqual([]);
+  });
+
+  it("serves health for free, and it says nothing worth paying for", async () => {
+    const { deps, paths } = harness();
+
+    const response = await handle({ ...post({}, ""), method: "GET", path: "/health" }, deps);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: "ok", network: "hedera:testnet" });
+    // A free endpoint that reached the chain or the facilitator would be a way
+    // around the gate. This one only says the process is up.
     expect(paths).toEqual([]);
   });
 });
