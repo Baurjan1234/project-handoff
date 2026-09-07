@@ -12,12 +12,15 @@
  * only its shape.
  */
 
-import { parseTinybars, tinybarsToDisplay } from "@handoff/schema";
+import { hbarToTinybars, parseTinybars, tinybarsToDisplay } from "@handoff/schema";
 import type { ChainMode } from "../chain/config";
 import { parseAccountId } from "./accountId";
 import { describePrivateKey, type KeyCurve, type KeyShape } from "./keyShape";
 import type { AccountLookup } from "./mirrorAccount";
-import { scrubHex, SecretUnavailable, type SecretKey } from "./secret";
+import { scrubHex, SecretKey, SecretUnavailable } from "./secret";
+
+/** Below this the submit fee is in doubt and the screen says so. Display and comparison only. */
+const LOW_BALANCE_TINYBARS = hbarToTinybars("1");
 
 export type ExpertKeyType = KeyCurve;
 
@@ -90,7 +93,7 @@ export function assessConnect(draft: ConnectDraft): ConnectAssessment {
 
   if (accountId !== null) {
     if (lookup === null) {
-      blockers.push("Waiting for the mirror node to confirm the account.");
+      blockers.push("Waiting for testnet's mirror node, its public read API, to confirm the account.");
     } else if (lookup.status === "not-found") {
       blockers.push(`Account ${accountId} is not on testnet. Check the id, and that the portal account is a testnet one.`);
     } else if (lookup.status === "unsupported-key") {
@@ -114,16 +117,25 @@ export function assessConnect(draft: ConnectDraft): ConnectAssessment {
     }
   } else if (lookup?.status === "unreachable") {
     if (shape.encoding === "der") {
-      warnings.push(`The mirror node did not answer (${lookup.reason}). You can still connect; the first signature will tell.`);
+      warnings.push(
+        `Testnet's mirror node did not answer (${lookup.reason}). You can still connect; if this key does not belong to the account, the first signature will fail and say so.`,
+      );
     } else {
       blockers.push(
-        `The mirror node did not answer (${lookup.reason}), and a raw key does not say which curve it is. Paste the DER form from the portal, which starts with 302e or 3030, or retry.`,
+        `Testnet's mirror node did not answer (${lookup.reason}), and a plain hex key does not say which type it is. Paste the DER form from the Hedera portal, which starts with 302e or 3030, or retry.`,
       );
     }
   }
 
-  if (lookup?.status === "found" && lookup.balanceTinybars === "0") {
-    warnings.push("This account has 0 HBAR. Publishing a verdict costs a small fee; top it up at the testnet faucet first.");
+  if (
+    lookup?.status === "found" &&
+    !lookup.deleted &&
+    lookup.balanceTinybars !== null &&
+    parseTinybars(lookup.balanceTinybars) < LOW_BALANCE_TINYBARS
+  ) {
+    warnings.push(
+      `This account has ${balanceWords(lookup)}. Publishing a verdict costs a small fee; get free test HBAR from the Hedera portal first.`,
+    );
   }
 
   const ready = blockers.length === 0 && keyType !== null;
@@ -133,6 +145,29 @@ export function assessConnect(draft: ConnectDraft): ConnectAssessment {
     blockers.push("The key's curve could not be determined. Paste the DER form from the portal.");
   }
   return { accountId, blockers, warnings, keyType, ready };
+}
+
+/**
+ * The connection the Connect button hands over, or null if the assessment
+ * does not allow one. `takeKey` reads the key field exactly once, and only
+ * on the testnet path: the mock member has nowhere to put a key, so on the
+ * mock the field is never read. Pure apart from that one read, so the
+ * table test covers what the click handler does with the key.
+ */
+export function buildConnection(
+  draft: { readonly mode: ChainMode; readonly assessment: ConnectAssessment; readonly lookup: AccountLookup | null },
+  takeKey: () => string,
+): ExpertConnection | null {
+  const { mode, assessment, lookup } = draft;
+  if (!assessment.ready || assessment.accountId === null) return null;
+  if (mode === "mock") return { mode: "mock", accountId: assessment.accountId };
+  if (assessment.keyType === null) return null;
+  return {
+    mode: "testnet",
+    accountId: assessment.accountId,
+    credential: { kind: "key", keyType: assessment.keyType, key: SecretKey.fromInput(takeKey()) },
+    accountPublicKey: lookup?.status === "found" ? lookup.publicKey : null,
+  };
 }
 
 /**

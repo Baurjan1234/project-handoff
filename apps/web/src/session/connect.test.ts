@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessConnect, balanceWords, describeConnectError, type ConnectDraft } from "./connect";
+import { assessConnect, balanceWords, buildConnection, describeConnectError, type ConnectDraft } from "./connect";
 import { describePrivateKey } from "./keyShape";
 import type { AccountLookup } from "./mirrorAccount";
 import { SecretKey } from "./secret";
@@ -16,7 +16,8 @@ const found = (keyType: "ECDSA_SECP256K1" | "ED25519", balanceTinybars: string |
   status: "found",
   accountId: ACCOUNT,
   keyType,
-  publicKey: `02${scalar}`,
+  // A different pattern from the private scalar, so "the key is not in here" can fail.
+  publicKey: `02${"ef".repeat(32)}`,
   balanceTinybars,
   deleted: false,
 });
@@ -45,7 +46,7 @@ describe("assessConnect on testnet", () => {
     const waiting = assessConnect(testnet({}));
     expect(waiting.ready).toBe(false);
     expect(waiting.blockers).toEqual([
-      "Waiting for the mirror node to confirm the account.",
+      "Waiting for testnet's mirror node, its public read API, to confirm the account.",
       "Paste the private key of the account above.",
     ]);
   });
@@ -71,7 +72,7 @@ describe("assessConnect on testnet", () => {
       testnet({ keyShape: raw, lookup: { status: "unreachable", accountId: ACCOUNT, reason: "HTTP 503" } }),
     );
     expect(unreachable.ready).toBe(false);
-    expect(unreachable.blockers[0]).toContain("raw key does not say which curve");
+    expect(unreachable.blockers[0]).toContain("plain hex key does not say which type");
   });
 
   it("lets a DER key through an unreachable mirror node with a warning, not a wall", () => {
@@ -80,15 +81,17 @@ describe("assessConnect on testnet", () => {
     );
     expect(a).toMatchObject({ ready: true, keyType: "ECDSA_SECP256K1" });
     expect(a.warnings[0]).toContain("no answer in 5 s");
+    expect(a.warnings[0]).toContain("the first signature will fail and say so");
   });
 
   it("blocks on an account that is missing, deleted or not singly keyed", () => {
     expect(assessConnect(testnet({ keyShape: derEcdsa, lookup: { status: "not-found", accountId: ACCOUNT } })).blockers[0]).toContain(
       "not on testnet",
     );
-    expect(
-      assessConnect(testnet({ keyShape: derEcdsa, lookup: { ...found("ECDSA_SECP256K1"), deleted: true } })).blockers[0],
-    ).toContain("deleted");
+    const deleted = assessConnect(testnet({ keyShape: derEcdsa, lookup: { ...found("ECDSA_SECP256K1", "0"), deleted: true } }));
+    expect(deleted.blockers[0]).toContain("deleted");
+    // Nothing to top up on a deleted account.
+    expect(deleted.warnings).toEqual([]);
     expect(
       assessConnect(
         testnet({ keyShape: derEcdsa, lookup: { status: "unsupported-key", accountId: ACCOUNT, reported: "ProtobufEncoded" } }),
@@ -96,11 +99,17 @@ describe("assessConnect on testnet", () => {
     ).toContain("ProtobufEncoded");
   });
 
-  it("warns about an empty account and says where to fill it", () => {
-    const a = assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", "0") }));
-    expect(a.ready).toBe(true);
-    expect(a.warnings[0]).toContain("0 HBAR");
-    expect(a.warnings[0]).toContain("faucet");
+  it("warns about an account that cannot pay a fee, and says where to get test HBAR", () => {
+    const empty = assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", "0") }));
+    expect(empty.ready).toBe(true);
+    expect(empty.warnings[0]).toContain("0 HBAR");
+    expect(empty.warnings[0]).toContain("Hedera portal");
+    // A few tinybars is not enough either; a whole HBAR is.
+    expect(assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", "1") })).warnings).toHaveLength(1);
+    expect(assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", "99999999") })).warnings).toHaveLength(1);
+    expect(assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", "100000000") })).warnings).toEqual([]);
+    // A balance the mirror node could not carry exactly is not a warning either way.
+    expect(assessConnect(testnet({ keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1", null) })).warnings).toEqual([]);
   });
 
   it("puts the key's own problem on the list, and nothing about the key itself", () => {
@@ -112,6 +121,52 @@ describe("assessConnect on testnet", () => {
     const a = assessConnect(testnet({ accountIdText: "nope", keyShape: derEcdsa, lookup: found("ECDSA_SECP256K1") }));
     expect(a.accountId).toBeNull();
     expect(a.blockers).toEqual(["An account id looks like 0.0.12345."]);
+  });
+});
+
+describe("buildConnection", () => {
+  const assess = (draft: ConnectDraft) => ({ mode: draft.mode, assessment: assessConnect(draft), lookup: draft.lookup });
+
+  it("on the mock, never reads the key field", () => {
+    let reads = 0;
+    const connection = buildConnection(assess({ mode: "mock", accountIdText: ACCOUNT, keyShape: null, lookup: null }), () => {
+      reads += 1;
+      return "never";
+    });
+    expect(connection).toEqual({ mode: "mock", accountId: ACCOUNT });
+    expect(reads).toBe(0);
+  });
+
+  it("on testnet, reads the key once, pins the curve, and carries the account's public key", () => {
+    let reads = 0;
+    const lookup = found("ED25519");
+    const connection = buildConnection(assess(testnet({ keyShape: raw, lookup })), () => {
+      reads += 1;
+      return ` ${scalar} `;
+    });
+    expect(reads).toBe(1);
+    if (connection === null || connection.mode !== "testnet") throw new Error("expected a testnet connection");
+    expect(connection.accountId).toBe(ACCOUNT);
+    expect(connection.credential.kind).toBe("key");
+    expect(connection.credential.keyType).toBe("ED25519");
+    expect(connection.accountPublicKey).toBe(lookup.publicKey);
+    expect(connection.credential.key.useOnce((text) => text)).toBe(scalar);
+    expect(JSON.stringify(connection)).not.toContain(scalar.slice(-16));
+  });
+
+  it("carries no public key when the mirror node did not answer, and nothing at all when not ready", () => {
+    const unreachable = { status: "unreachable", accountId: ACCOUNT, reason: "HTTP 503" } as const;
+    const connection = buildConnection(assess(testnet({ keyShape: derEcdsa, lookup: unreachable })), () => scalar);
+    expect(connection).toMatchObject({ mode: "testnet", accountPublicKey: null });
+
+    let reads = 0;
+    expect(
+      buildConnection(assess(testnet({ keyShape: null, lookup: found("ECDSA_SECP256K1") })), () => {
+        reads += 1;
+        return scalar;
+      }),
+    ).toBeNull();
+    expect(reads).toBe(0);
   });
 });
 
