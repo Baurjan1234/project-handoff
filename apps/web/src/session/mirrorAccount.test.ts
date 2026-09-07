@@ -56,10 +56,11 @@ describe("lookupAccount", () => {
     const failing = (async () => {
       throw new TypeError("Failed to fetch");
     }) as typeof fetch;
+    // The browser's own wording ("Failed to fetch", "Load failed") becomes one phrase.
     expect(await lookupAccount(ACCOUNT, { fetch: failing })).toEqual({
       status: "unreachable",
       accountId: ACCOUNT,
-      reason: "Failed to fetch",
+      reason: "network error",
     });
   });
 
@@ -92,8 +93,18 @@ describe("interpretAccountBody", () => {
     expect(interpretAccountBody(ACCOUNT, { ...found, balance: null })).toMatchObject({ balanceTinybars: null });
   });
 
-  it("treats a body that is not an account as unreachable, never as found", () => {
-    expect(interpretAccountBody(ACCOUNT, "<html>")).toMatchObject({ status: "unreachable" });
-    expect(interpretAccountBody(ACCOUNT, null)).toMatchObject({ status: "unreachable" });
+  it("only carries a balance string the money module accepts", () => {
+    const withBalance = (balance: unknown) => interpretAccountBody(ACCOUNT, { ...found, balance: { balance } });
+    expect(withBalance("100000000000")).toMatchObject({ balanceTinybars: "100000000000" });
+    expect(withBalance("0")).toMatchObject({ balanceTinybars: "0" });
+    for (const bad of ["007", "00", "99999999999999999999", "-5", "1.5", ""]) {
+      expect(withBalance(bad)).toMatchObject({ status: "found", balanceTinybars: null });
+    }
+  });
+
+  it("treats a body that is not an account as unreachable, never as found or as a key problem", () => {
+    for (const body of ["<html>", null, [], {}, { key: found.key }, { account: 42 }]) {
+      expect(interpretAccountBody(ACCOUNT, body)).toMatchObject({ status: "unreachable" });
+    }
   });
 });

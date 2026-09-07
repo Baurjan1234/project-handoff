@@ -16,6 +16,8 @@
  * Every outcome is a value, not a throw. The screen decides what blocks.
  */
 
+import { parseTinybars } from "@handoff/schema";
+
 export const MIRROR_TESTNET_BASE = "https://testnet.mirrornode.hedera.com";
 
 export const LOOKUP_TIMEOUT_MS = 5_000;
@@ -48,18 +50,37 @@ export function accountLookupUrl(accountId: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * A balance the money module will accept, or null. The mirror node sends a
+ * JSON integer; a string is tolerated only if it is exactly what
+ * `parseTinybars` takes, so the chip can never throw on what this returns.
+ */
 function tinybarsFrom(value: unknown): string | null {
-  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
-  if (typeof value === "string" && /^\d+$/.test(value)) return value;
-  return null;
+  const text =
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+      ? String(value)
+      : typeof value === "string"
+        ? value
+        : null;
+  if (text === null || text.startsWith("-")) return null;
+  try {
+    parseTinybars(text);
+  } catch {
+    return null;
+  }
+  return text;
 }
 
 /** Maps a decoded body to a result. Exported for the tests; the fetch is the thin part. */
 export function interpretAccountBody(accountId: string, body: unknown): AccountLookup {
-  if (!isRecord(body)) return { status: "unreachable", accountId, reason: "the mirror node answered with something that is not an account" };
+  // The mirror node always echoes the account it is describing. Anything
+  // else that came back with a 2xx is not the mirror node's answer.
+  if (!isRecord(body) || typeof body["account"] !== "string") {
+    return { status: "unreachable", accountId, reason: "the mirror node answered with something that is not an account" };
+  }
   const key = body["key"];
   if (!isRecord(key) || typeof key["_type"] !== "string" || typeof key["key"] !== "string") {
     return { status: "unsupported-key", accountId, reported: "no single key" };
@@ -95,12 +116,16 @@ export async function lookupAccount(accountId: string, deps: LookupDeps): Promis
     if (!response.ok) return { status: "unreachable", accountId, reason: `HTTP ${response.status}` };
     return interpretAccountBody(accountId, await response.json());
   } catch (error) {
+    // A thrown fetch is the browser's wording ("Failed to fetch", "Load
+    // failed"); the screen gets one phrase for all of them.
     const reason =
       controller.signal.aborted && controller.signal.reason instanceof Error
         ? controller.signal.reason.message
-        : error instanceof Error
-          ? error.message
-          : String(error);
+        : error instanceof TypeError
+          ? "network error"
+          : error instanceof Error
+            ? error.message
+            : String(error);
     return { status: "unreachable", accountId, reason };
   } finally {
     clearTimeout(timer);
