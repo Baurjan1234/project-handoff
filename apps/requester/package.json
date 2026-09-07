@@ -8,6 +8,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@handoff/chain": "workspace:*",
     "@handoff/schema": "workspace:*"
   },
   "devDependencies": {

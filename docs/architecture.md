@@ -179,6 +179,10 @@ requester plus platform, only after a mechanical schema failure.
 compromised backend has quorum. Two Node processes on one team are not two custodians.
 Decentralizing the verifier is the production roadmap.
 
+The escrow is one shared account this week, provisioned once; every order locks into it
+and per-order accounting is off-chain. One account per order is roadmap, decided in
+`docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`.
+
 ## Open: when the schedule is created
 
 P1's hour-one spike settles this. Hedera's Schedule Service normally wants a fully formed

@@ -9,6 +9,12 @@
 - HCS topics: creation, message submission, and the submit-key decision per topic.
 - Mirror-node reads for settlement state.
 - The real `ChainAdapter`, implementing the same interface as `MockChainAdapter`.
+- The **x402 payer signer**, `X402Signer`: builds the service-fee `TransferTransaction`
+  and partially signs it with the requester's ECDSA key. Exported beside `ChainAdapter`,
+  never inside it, so the treaty and the mock do not change. `@x402/hedera` is a
+  dependency of this package only. Tseegii authors the file, Khishgee reviews it; the
+  package owner does not change. See
+  `../../docs/decisions/2026-09-07-x402-signer-lives-in-packages-chain.md`.
 
 ## What this package must never do
 
