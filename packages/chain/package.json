@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@handoff/schema": "workspace:*",
-    "@hiero-ledger/sdk": "2.87.0"
+    "@hiero-ledger/sdk": "2.85.0",
+    "@x402/core": "2.25.0",
+    "@x402/hedera": "2.25.0"
   },
   "devDependencies": {
     "@types/node": "26.4.1",
