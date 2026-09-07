@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseCertTags, ConfigError } from "./config.js";
 import {
   clockTime,
+  deliveredReply,
   insufficientBalanceReply,
   postedReply,
   unknownTagReply,
@@ -139,5 +140,24 @@ describe("parseCertTags", () => {
 
   it("refuses a repeated code, because routing would be ambiguous", () => {
     expect(() => parseCertTags("cpa-us=One, cpa-us=Two")).toThrow(/repeats a code/);
+  });
+});
+
+describe("the close says only what was checked", () => {
+  it("never calls the signer certified, because nothing checked that", () => {
+    const reply = deliveredReply({ verdict: "reject", signedBy: "0.0.5", certTag: "cpa-us" });
+
+    // The attestations topic has no submit key, on purpose, and the registry
+    // that would verify a credential is not live. Any account can publish an
+    // attestation-shaped message naming somebody else's order.
+    expect(reply).not.toContain("certified reviewer");
+    expect(reply).toContain("Signed by account 0.0.5");
+    expect(reply).toContain("Credential claimed: cpa-us");
+    expect(reply).toContain("Not checked against a registry in this build.");
+  });
+
+  it("still says the credential is unchecked when the attestation names none", () => {
+    const reply = deliveredReply({ verdict: "approve", signedBy: "0.0.5" });
+    expect(reply).toContain("not checked against a registry");
   });
 });

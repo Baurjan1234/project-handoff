@@ -17,7 +17,15 @@
  * content store and are not read here.
  */
 
-import { decodeAttestation, decodeEnvelope, type Attestation, type ChainAdapter, type OrderEnvelope, type Verdict } from "@handoff/schema";
+import * as z from "zod";
+import {
+  Attestation as AttestationSchema,
+  decodeAttestation,
+  decodeEnvelope,
+  OrderEnvelope as OrderEnvelopeSchema,
+  Verdict as VerdictSchema,
+  type ChainAdapter,
+} from "@handoff/schema";
 
 /**
  * What we can prove about an order from the topics alone.
@@ -30,23 +38,41 @@ import { decodeAttestation, decodeEnvelope, type Attestation, type ChainAdapter,
  */
 export type ReadableOrderState = "POSTED" | "DELIVERED" | "UNKNOWN";
 
-export interface OrderStatus {
-  readonly orderId: string;
-  readonly state: ReadableOrderState;
-  readonly envelope?: OrderEnvelope;
+/**
+ * What a status read answers, as a parser first and a type second.
+ *
+ * One declaration, not two. The MCP tool reads this back over HTTP and puts
+ * the verdict straight in front of a requester, so the body is parsed rather
+ * than asserted — a cast would make a malformed or hostile response
+ * indistinguishable from a real one at exactly the point where the words carry
+ * the most weight.
+ */
+export const OrderStatusShape = z.object({
+  orderId: z.string().min(1),
+  state: z.enum(["POSTED", "DELIVERED", "UNKNOWN"]),
+  envelope: OrderEnvelopeSchema.optional(),
   /** The consensus timestamp the envelope landed at. Ordering truth. */
-  readonly postedAt?: string;
-  readonly attestation?: Attestation;
-  readonly verdict?: Verdict;
-  /** Who submitted the attestation. For an attestation this is the expert. */
-  readonly signedBy?: string;
-  readonly signedAt?: string;
+  postedAt: z.string().optional(),
+  attestation: AttestationSchema.optional(),
+  verdict: VerdictSchema.optional(),
+  /**
+   * The account that paid to submit the attestation.
+   *
+   * That is all this is. It is not proof the account holds the credential:
+   * the attestations topic carries no submit key on purpose, and the registry
+   * that would check one is not live. Copy built from this must not call the
+   * signer certified.
+   */
+  signedBy: z.string().optional(),
+  signedAt: z.string().optional(),
   /**
    * False until a claim message shape exists. When false, a caller must not
    * present "nobody has claimed this" — only "we cannot see claims yet".
    */
-  readonly claimReadable: boolean;
-}
+  claimReadable: z.boolean(),
+});
+
+export type OrderStatus = z.infer<typeof OrderStatusShape>;
 
 export interface StatusDeps {
   readonly chain: ChainAdapter;

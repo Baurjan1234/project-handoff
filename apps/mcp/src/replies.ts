@@ -116,6 +116,8 @@ export const CLAIM_NOT_READABLE =
 export interface DeliveredReply {
   readonly verdict: string;
   readonly signedBy: string;
+  /** The credential the attestation claims. Self-asserted, not checked. */
+  readonly certTag?: string;
 }
 
 /**
@@ -124,11 +126,28 @@ export interface DeliveredReply {
  * The full beat-10 close — defect codes inline, the reviewer's notes from the
  * content store, the money line — is NAS-37. This says the judgment exists and
  * who signed it, and points at the rest rather than pretending it is here.
+ *
+ * **It does not say "a certified reviewer", and the design system's line does.**
+ * That is a deliberate deviation and the reason is the honesty rule. The
+ * attestations topic carries no submit key on purpose, so any account can
+ * publish an attestation-shaped message naming somebody else's order id, and
+ * the registry that would tell us whether the signer holds the credential is
+ * not live (NAS-27). Nothing between that topic and this string checks
+ * certification, so calling the signer certified would be the product asserting
+ * something it did not verify, to the one person paying for it to be true.
+ *
+ * What is actually known is the account that paid to submit the message, and
+ * what the message claims about itself. Both are said, and the difference is
+ * named. The line goes back to the design system's wording the day the registry
+ * check exists.
  */
 export function deliveredReply(reply: DeliveredReply): string {
   return [
     `Verdict: ${reply.verdict}`,
-    `Signed by a certified reviewer, account ${reply.signedBy} · Published forever`,
+    `Signed by account ${reply.signedBy} · published forever`,
+    reply.certTag === undefined
+      ? "The signer's credential is not checked against a registry in this build."
+      : `Credential claimed: ${reply.certTag}. Not checked against a registry in this build.`,
   ].join("\n");
 }
 

@@ -17,7 +17,7 @@
 import type { PaymentRequired, PaymentRequirements } from "../x402/types.js";
 import { PAYMENT_REQUIRED_HEADER, PAYMENT_SIGNATURE_HEADER } from "../x402/gate.js";
 import type { CertTagOption } from "../config.js";
-import type { OrderStatus } from "../status.js";
+import { OrderStatusShape, type OrderStatus } from "../status.js";
 
 export class HandoffClientError extends Error {
   constructor(message: string) {
@@ -186,5 +186,8 @@ export async function fetchStatus(orderId: string, deps: ReadDeps): Promise<Orde
     `${base(deps.baseUrl)}/orders/${encodeURIComponent(orderId)}`,
     { method: "GET" },
   );
-  return (await finish(response)) as unknown as OrderStatus;
+  // Parsed, not asserted. The verdict in this body goes straight into copy a
+  // requester reads, so a malformed answer has to be a failure here rather
+  // than a sentence there.
+  return OrderStatusShape.parse(await finish(response));
 }

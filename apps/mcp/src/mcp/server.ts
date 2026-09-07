@@ -165,8 +165,8 @@ export function createMcpServer(deps: McpDeps): McpServer {
     {
       description:
         "Read back what happened to an order you posted: whether it is still open, and " +
-        "the signed verdict once a certified reviewer has published one. Free — this is a " +
-        "read, not a payment. Ask once when you want to know; it does not need polling.",
+        "the signed verdict once a reviewer has published one. Free — this is a read, not " +
+        "a payment. Ask once when you want to know; it does not need polling.",
       inputSchema: z.object({
         order_id: z.string().min(1).describe("The id handoff_verify returned."),
       }),
@@ -177,7 +177,14 @@ export function createMcpServer(deps: McpDeps): McpServer {
 
         const lines: string[] = [];
         if (status.state === "DELIVERED" && status.verdict !== undefined) {
-          lines.push(deliveredReply({ verdict: status.verdict, signedBy: status.signedBy ?? "unknown" }));
+          lines.push(
+            deliveredReply({
+              verdict: status.verdict,
+              signedBy: status.signedBy ?? "unknown",
+              // Self-asserted by the attestation, and said that way.
+              ...(status.attestation === undefined ? {} : { certTag: status.attestation.cert_tag }),
+            }),
+          );
         } else if (status.state === "POSTED" && status.envelope !== undefined) {
           lines.push(waitingReply(status.envelope.deadline));
         } else {
