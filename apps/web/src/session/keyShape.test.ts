@@ -13,7 +13,7 @@ describe("describePrivateKey", () => {
     expect(describePrivateKey(derEcdsa.toUpperCase())).toEqual({ ok: true, encoding: "der", curve: "ECDSA_SECP256K1" });
   });
 
-  it("accepts a raw scalar, with or without 0x, and leaves the curve to the adapter", () => {
+  it("accepts a raw scalar, with or without 0x, and leaves the curve to be taken from the account", () => {
     expect(describePrivateKey(scalar)).toEqual({ ok: true, encoding: "raw", curve: null });
     expect(describePrivateKey(`0x${scalar}`)).toEqual({ ok: true, encoding: "raw", curve: null });
     expect(describePrivateKey(`  ${scalar}\n`)).toEqual({ ok: true, encoding: "raw", curve: null });
@@ -30,11 +30,16 @@ describe("describePrivateKey", () => {
       ok: false,
       reason: expect.stringContaining("recovery phrase"),
     });
-    expect(describePrivateKey(`302a300506032b6570032100${scalar}`)).toMatchObject({
-      ok: false,
-      reason: expect.stringContaining("public key"),
-    });
-    expect(describePrivateKey("0x41bb7bf8263e66a49d7bee6796d836709ed24afc")).toMatchObject({
+    // Public keys in every DER form the portal and the SDK produce: ED25519, ECDSA, older ECDSA.
+    for (const publicKey of [
+      `302a300506032b6570032100${scalar}`,
+      `302d300706052b8104000a03220002${scalar}`,
+      `3036301006072a8648ce3d020106052b8104000a03220002${scalar}`,
+    ]) {
+      expect(describePrivateKey(publicKey)).toMatchObject({ ok: false, reason: expect.stringContaining("public key") });
+    }
+    // An EVM address, 40 hex. A pattern, not anyone's alias.
+    expect(describePrivateKey(`0x${"cd".repeat(20)}`)).toMatchObject({
       ok: false,
       reason: expect.stringContaining("This has 40"),
     });

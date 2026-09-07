@@ -7,7 +7,8 @@ describe("parseAccountId", () => {
   });
 
   it("names the two things people paste instead, without repeating them", () => {
-    const evm = "0x41bb7bf8263e66a49d7bee6796d836709ed24afc";
+    // 40 hex after 0x. A pattern, not anyone's alias.
+    const evm = `0x${"cd".repeat(20)}`;
     const evmCheck = parseAccountId(evm);
     expect(evmCheck).toMatchObject({ ok: false, reason: expect.stringContaining("EVM address") });
     expect(JSON.stringify(evmCheck)).not.toContain(evm.slice(2, 14));

@@ -63,9 +63,10 @@ export function describePrivateKey(text: string): KeyShape {
     return { ok: true, encoding: "raw", curve: null };
   }
 
-  // A public key from the portal is DER too, but longer (302a… / 3036…) and
-  // never carries the private scalar. Say so rather than "wrong length".
-  if (hex.startsWith("302a") || hex.startsWith("3036")) {
+  // A public key from the portal is DER too (302a… for ED25519, 302d… or
+  // the older 3036… for ECDSA) and never carries the private scalar. Say so
+  // rather than "wrong length".
+  if (hex.startsWith("302a") || hex.startsWith("302d") || hex.startsWith("3036")) {
     return { ok: false, reason: "That is a public key. The private key is the one the portal warns you to keep secret." };
   }
   return {
@@ -77,6 +78,6 @@ export function describePrivateKey(text: string): KeyShape {
 /** For the screen: what the shape says about the key, in words, never the key. */
 export function describeKeyShape(shape: KeyShape): string {
   if (!shape.ok) return shape.reason;
-  if (shape.encoding === "raw") return "Raw key. The curve is not in the text; the adapter decides.";
+  if (shape.encoding === "raw") return "Plain hex key. Its type is taken from the account above.";
   return shape.curve === "ECDSA_SECP256K1" ? "DER-encoded ECDSA key." : "DER-encoded ED25519 key.";
 }
