@@ -3,8 +3,12 @@
  *
  * Two things are deliberately absent. There is no private key of any kind:
  * anything prefixed `VITE_` is bundled into the browser build, so a key here
- * would be a key in a JavaScript file. And there is no mainnet: the mode type
- * has two members and neither is it.
+ * would be a key in a JavaScript file, and a variable whose name says it is
+ * one refuses to boot. And there is no mainnet: the mode type has two members
+ * and neither is it.
+ *
+ * Who signs is not configuration either. The account comes from the person at
+ * the connect screen; the environment may prefill the field and nothing more.
  *
  * The mock has its own block, because the things only the mock needs (whose
  * funds the seeded order locks, what it costs) must not exist as fields on a
@@ -12,12 +16,13 @@
  */
 
 import { assertPositive, hbarToTinybars } from "@handoff/schema";
+import { parseAccountId } from "../session/accountId";
 
 export type ChainMode = "mock" | "testnet";
 
 interface Common {
-  /** The expert's own account. The only account this app ever signs from. */
-  readonly expertAccountId: string;
+  /** Prefills the connect screen. Optional, and never the source of who signs. */
+  readonly expertAccountIdPrefill: string | null;
   /** Where orders are published and, until P1 says otherwise, attestations too. */
   readonly ordersTopicId: string;
 }
@@ -51,9 +56,13 @@ export class ConfigError extends Error {
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
-const ACCOUNT_ID = /^0\.0\.[1-9]\d*$/;
-
 const PROPOSED_DEMO_PRICE_HBAR = "200";
+
+/**
+ * Names that say "secret". Deliberately not KEY: a public anon key for the
+ * content store is a legitimate `VITE_` variable, a private key never is.
+ */
+const SECRET_NAME = /PRIVATE|SECRET|MNEMONIC|SEED/i;
 
 function required(env: Env, name: string): string {
   const value = env[name]?.trim();
@@ -63,12 +72,12 @@ function required(env: Env, name: string): string {
   return value;
 }
 
-function accountId(env: Env, name: string): string {
-  const value = required(env, name);
-  if (!ACCOUNT_ID.test(value)) {
-    throw new ConfigError(`${name} is ${value}, which is not an account id like 0.0.12345.`);
-  }
-  return value;
+function optionalAccountId(env: Env, name: string): string | null {
+  const value = env[name]?.trim();
+  if (value === undefined || value === "") return null;
+  const parsed = parseAccountId(value);
+  if (!parsed.ok) throw new ConfigError(`${name} is set but is not an account id like 0.0.12345. ${parsed.reason}`);
+  return parsed.accountId;
 }
 
 /** A price. Same rule as the envelope's: a real amount, and zero is not a price. */
@@ -82,19 +91,32 @@ function hbarAmount(env: Env, name: string, fallback: string): string {
   return value;
 }
 
+function refuseSecretNames(env: Env): void {
+  for (const name of Object.keys(env)) {
+    if (name.startsWith("VITE_") && SECRET_NAME.test(name)) {
+      // Hard rule 2, as a startup failure. The value is not read, let alone shown.
+      throw new ConfigError(
+        `${name} looks like a secret. Anything prefixed VITE_ is bundled into the browser build. Remove it.`,
+      );
+    }
+  }
+}
+
 export function configFromEnv(env: Env): WebChainConfig {
+  refuseSecretNames(env);
+
   const mode = env["VITE_CHAIN"]?.trim() ?? "mock";
   if (mode !== "mock" && mode !== "testnet") {
     // Hard rule 5. Refusing here means a misconfigured app never renders.
     throw new ConfigError(`VITE_CHAIN is ${mode}. This app runs against "mock" or "testnet" and nothing else.`);
   }
 
-  const expertAccountId = accountId(env, "VITE_EXPERT_ACCOUNT_ID");
+  const expertAccountIdPrefill = optionalAccountId(env, "VITE_EXPERT_ACCOUNT_ID");
 
   if (mode === "mock") {
     return {
       mode,
-      expertAccountId,
+      expertAccountIdPrefill,
       ordersTopicId: env["VITE_HANDOFF_ORDERS_TOPIC_ID"]?.trim() || "MOCK-topic-orders",
       mock: {
         requesterAccountId: env["VITE_MOCK_REQUESTER_ACCOUNT_ID"]?.trim() || "MOCK-requester",
@@ -105,7 +127,7 @@ export function configFromEnv(env: Env): WebChainConfig {
 
   return {
     mode,
-    expertAccountId,
+    expertAccountIdPrefill,
     ordersTopicId: required(env, "VITE_HANDOFF_ORDERS_TOPIC_ID"),
   };
 }
