@@ -17,6 +17,8 @@
 
 import { assertPositive, hbarToTinybars } from "@handoff/schema";
 import { parseAccountId } from "../session/accountId";
+import { describePrivateKey } from "../session/keyShape";
+import { looksLikeSecretName, secretNameMessage } from "./secretNames";
 
 export type ChainMode = "mock" | "testnet";
 
@@ -58,12 +60,6 @@ export type Env = Readonly<Record<string, string | undefined>>;
 
 const PROPOSED_DEMO_PRICE_HBAR = "200";
 
-/**
- * Names that say "secret". Deliberately not KEY: a public anon key for the
- * content store is a legitimate `VITE_` variable, a private key never is.
- */
-const SECRET_NAME = /PRIVATE|SECRET|MNEMONIC|SEED/i;
-
 function required(env: Env, name: string): string {
   const value = env[name]?.trim();
   if (value === undefined || value === "") {
@@ -91,19 +87,25 @@ function hbarAmount(env: Env, name: string, fallback: string): string {
   return value;
 }
 
-function refuseSecretNames(env: Env): void {
-  for (const name of Object.keys(env)) {
-    if (name.startsWith("VITE_") && SECRET_NAME.test(name)) {
-      // Hard rule 2, as a startup failure. The value is not read, let alone shown.
+/**
+ * Hard rule 2, as a startup failure. Two checks: a name that says secret,
+ * and a value shaped like a private key under any name. Neither message
+ * repeats the value.
+ */
+function refuseSecrets(env: Env): void {
+  for (const [name, value] of Object.entries(env)) {
+    if (!name.startsWith("VITE_")) continue;
+    if (looksLikeSecretName(name)) throw new ConfigError(secretNameMessage(name));
+    if (value !== undefined && describePrivateKey(value).ok) {
       throw new ConfigError(
-        `${name} looks like a secret. Anything prefixed VITE_ is bundled into the browser build. Remove it.`,
+        `${name} holds what looks like a private key. Anything prefixed VITE_ is bundled into the browser build. Remove it.`,
       );
     }
   }
 }
 
 export function configFromEnv(env: Env): WebChainConfig {
-  refuseSecretNames(env);
+  refuseSecrets(env);
 
   const mode = env["VITE_CHAIN"]?.trim() ?? "mock";
   if (mode !== "mock" && mode !== "testnet") {

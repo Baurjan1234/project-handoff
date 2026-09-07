@@ -23,7 +23,17 @@ describe("configFromEnv", () => {
   });
 
   it("refuses to boot with a VITE_ variable whose name says secret, without reading it", () => {
-    for (const name of ["VITE_PRIVATE_KEY", "VITE_EXPERT_SECRET", "VITE_MNEMONIC", "VITE_SEED_PHRASE", "VITE_operator_private"]) {
+    for (const name of [
+      "VITE_PRIVATE_KEY",
+      "VITE_EXPERT_SECRET",
+      "VITE_MNEMONIC",
+      "VITE_SEED_PHRASE",
+      "VITE_operator_private",
+      "VITE_SUPABASE_SERVICE_KEY",
+      "VITE_SUPABASE_SERVICE_ROLE",
+      "VITE_OPERATOR_ID",
+      "VITE_SIGNING_KEY",
+    ]) {
       let message = "";
       try {
         configFromEnv({ [name]: "302e0201003005" });
@@ -38,6 +48,25 @@ describe("configFromEnv", () => {
     expect(() => configFromEnv({ VITE_SUPABASE_ANON_KEY: "eyJ" })).not.toThrow();
     // Only VITE_ names are bundled; the rest never reach the browser.
     expect(() => configFromEnv({ OPERATOR_PRIVATE_KEY: "x" })).not.toThrow();
+  });
+
+  it("refuses a value shaped like a private key under any VITE_ name, without repeating it", () => {
+    // A fabricated key: a pattern behind the ECDSA DER prefix, not a key to anything.
+    const fixture = `3030020100300706052b8104000a04220420${"c7".repeat(32)}`;
+    for (const value of [fixture, "c7".repeat(32), `0x${"c7".repeat(32)}`]) {
+      let message = "";
+      try {
+        configFromEnv({ VITE_EXPERT_KEY: value });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toContain("VITE_EXPERT_KEY holds what looks like a private key");
+      expect(message).not.toContain("c7c7");
+    }
+    // Ids, topics and prices are not keys.
+    expect(() =>
+      configFromEnv({ VITE_EXPERT_ACCOUNT_ID: expert, VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242", VITE_MOCK_PRICE_HBAR: "200" }),
+    ).not.toThrow();
   });
 
   it("refuses any mode that is not mock or testnet", () => {
