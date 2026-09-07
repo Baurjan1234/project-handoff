@@ -7,3 +7,4 @@ export * from "./lifecycle.js";
 export * from "./mirror.js";
 export * from "./hedera-adapter.js";
 export * from "./claim-window.js";
+export * from "./x402-signer.js";
