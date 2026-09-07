@@ -319,3 +319,30 @@ describe("SignScreen, why the sign button is disabled", () => {
     expect(html).toContain('value="FN-3-TOTAL"');
   });
 });
+
+describe("SignScreen, the way out", () => {
+  const mockOrder = order("MOCK-escrow-ord_demo", "MOCK-topic-orders");
+
+  it("offers Disconnect beside the account, except while a sign is in flight", () => {
+    const idle: SignFlow = { ...noop, status: { kind: "idle" }, settlement: null };
+    const offered = renderToStaticMarkup(
+      <SignScreen mode="mock" expertAccountId={EXPERT} order={mockOrder} artifactText={null} flow={idle} onDisconnect={() => {}} />,
+    );
+    expect(offered).toMatch(/<button[^>]*>Disconnect<\/button>/);
+    expect(offered).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>Disconnect<\/button>/);
+
+    const signing: SignFlow = { ...noop, status: { kind: "signing" }, settlement: null };
+    const held = renderToStaticMarkup(
+      <SignScreen mode="mock" expertAccountId={EXPERT} order={mockOrder} artifactText={null} flow={signing} onDisconnect={() => {}} />,
+    );
+    expect(held).toMatch(/<button[^>]*\sdisabled=""[^>]*>Disconnect<\/button>/);
+  });
+
+  it("shows no Disconnect when nobody is listening for it", () => {
+    const idle: SignFlow = { ...noop, status: { kind: "idle" }, settlement: null };
+    const html = renderToStaticMarkup(
+      <SignScreen mode="mock" expertAccountId={EXPERT} order={mockOrder} artifactText={null} flow={idle} />,
+    );
+    expect(html).not.toContain("Disconnect");
+  });
+});

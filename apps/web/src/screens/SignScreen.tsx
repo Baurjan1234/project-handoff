@@ -57,6 +57,7 @@ export function SignScreen({
   order,
   artifactText,
   flow,
+  onDisconnect,
   initialDefectDraft = "",
 }: {
   mode: ChainMode;
@@ -64,6 +65,8 @@ export function SignScreen({
   order: OrderForSigning;
   artifactText: string | null;
   flow: SignFlow;
+  /** Drops the connection, and with it whatever the adapter holds. Not offered mid-sign. */
+  onDisconnect?: () => void;
   /** For tests: a defect code typed but not yet added. */
   initialDefectDraft?: string;
 }) {
@@ -129,6 +132,18 @@ export function SignScreen({
           <span>Signing as</span>
           <Mono>{expertAccountId}</Mono>
           <HashscanLink kind="account" id={expertAccountId} />
+          {onDisconnect !== undefined && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="text-muted-foreground"
+              onClick={onDisconnect}
+              disabled={flow.status.kind === "signing"}
+            >
+              Disconnect
+            </Button>
+          )}
         </div>
       </header>
 
