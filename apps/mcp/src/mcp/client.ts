@@ -16,6 +16,8 @@
 
 import type { PaymentRequired, PaymentRequirements } from "../x402/types.js";
 import { PAYMENT_REQUIRED_HEADER, PAYMENT_SIGNATURE_HEADER } from "../x402/gate.js";
+import type { CertTagOption } from "../config.js";
+import type { OrderStatus } from "../status.js";
 
 export class HandoffClientError extends Error {
   constructor(message: string) {
@@ -59,10 +61,18 @@ export interface OrderInput {
   readonly claimTimeoutSeconds: number;
 }
 
-export interface ClientDeps {
+/** What a free read needs: no signer, because nothing is being paid for. */
+export interface ReadDeps {
   readonly baseUrl: string;
-  readonly signer: PaymentSigner;
   readonly fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+export interface ClientDeps extends ReadDeps {
+  readonly signer: PaymentSigner;
+}
+
+function base(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "");
 }
 
 function body(input: OrderInput): string {
@@ -105,7 +115,7 @@ export async function postOrder(
   deps: ClientDeps,
 ): Promise<Record<string, unknown>> {
   const call = deps.fetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
-  const url = `${deps.baseUrl.replace(/\/+$/, "")}/orders`;
+  const url = `${base(deps.baseUrl)}/orders`;
   const payload = body(input);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
@@ -141,4 +151,40 @@ async function finish(response: Response): Promise<Record<string, unknown>> {
     );
   }
   return parsed;
+}
+
+/**
+ * The credential tags this service routes to.
+ *
+ * Fetched once at startup so the tool schema can enumerate them. The tag is
+ * the routing and there is no broadcast, so an agent that guesses a tag posts
+ * an order nobody can see — the list has to be in front of it before it picks.
+ */
+export async function fetchTags(deps: ReadDeps): Promise<readonly CertTagOption[]> {
+  const call = deps.fetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
+  const response = await call(`${base(deps.baseUrl)}/tags`, { method: "GET" });
+  const parsed = (await response.json()) as { tags?: readonly CertTagOption[] };
+
+  if (!response.ok || parsed.tags === undefined || parsed.tags.length === 0) {
+    throw new HandoffClientError(
+      `${deps.baseUrl} did not say which credentials it routes to, so no order can be posted.`,
+    );
+  }
+  return parsed.tags;
+}
+
+/**
+ * Read an order's state back.
+ *
+ * A query, not a poll. Free — reads are ungated by
+ * `../../../../docs/decisions/2026-09-05-gate-covers-order-posting-only.md` —
+ * so there is no 402 branch here and no signer involved.
+ */
+export async function fetchStatus(orderId: string, deps: ReadDeps): Promise<OrderStatus> {
+  const call = deps.fetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
+  const response = await call(
+    `${base(deps.baseUrl)}/orders/${encodeURIComponent(orderId)}`,
+    { method: "GET" },
+  );
+  return (await finish(response)) as unknown as OrderStatus;
 }

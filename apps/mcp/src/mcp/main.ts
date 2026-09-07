@@ -7,7 +7,7 @@
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpServer } from "./server.js";
-import { UnwiredSigner } from "./client.js";
+import { fetchTags, UnwiredSigner } from "./client.js";
 
 const baseUrl = process.env["HANDOFF_SERVICE_URL"]?.trim() ?? "http://localhost:4021";
 
@@ -17,4 +17,11 @@ console.error(
   "payment signer: none. Ordering will report the price and stop until the x402 client lands.",
 );
 
-serveStdio(() => createMcpServer({ baseUrl, signer: new UnwiredSigner() }));
+// The tag list has to be in hand before the tool schema exists, because the
+// schema enumerates it — that enumeration is what makes a wrong tag impossible
+// rather than merely discouraged. Failing to start is the right failure: a
+// server that cannot say what it routes to cannot take an order either.
+const certTags = await fetchTags({ baseUrl });
+console.error(`credentials: ${certTags.map((tag) => tag.code).join(", ")}`);
+
+serveStdio(() => createMcpServer({ baseUrl, signer: new UnwiredSigner(), certTags }));
