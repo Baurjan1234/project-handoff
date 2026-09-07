@@ -110,7 +110,16 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
     if (request.method !== "GET") {
       return { status: 405, headers: { ...json, Allow: "GET" }, body: { error: "use GET" } };
     }
-    const status = await readOrderStatus(decodeURIComponent(orderRead[1] ?? ""), {
+    let orderId: string;
+    try {
+      orderId = decodeURIComponent(orderRead[1] ?? "");
+    } catch {
+      // `decodeURIComponent("%")` throws. This route is unauthenticated, so a
+      // malformed id is an ordinary answer rather than something to raise.
+      return { status: 400, headers: json, body: { error: "that is not a usable order id" } };
+    }
+
+    const status = await readOrderStatus(orderId, {
       chain: deps.chain,
       ordersTopicId: deps.ordersTopicId,
       attestationsTopicId: deps.attestationsTopicId,

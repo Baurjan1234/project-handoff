@@ -42,9 +42,17 @@ export interface McpDeps {
 }
 
 function tagDescription(tags: readonly CertTagOption[]): string {
-  return `Which certification may claim this order. The tag is the routing: only reviewers holding it see the order, and there is no broadcast. ${tags
-    .map((tag) => `${tag.code} (${tag.label})`)
-    .join(", ")}`;
+  const preamble =
+    "Which certification may claim this order. The tag is the routing: only reviewers " +
+    "holding it see the order, and there is no broadcast.";
+
+  if (tags.length === 0) {
+    // Said rather than left blank. An agent picking blind should know it is
+    // picking blind, and that the service will refuse a wrong guess.
+    return `${preamble} The available tags could not be read at startup — call with your best guess and the service will name the real ones if it is wrong.`;
+  }
+
+  return `${preamble} ${tags.map((tag) => `${tag.code} (${tag.label})`).join(", ")}`;
 }
 
 function labelFor(tags: readonly CertTagOption[], code: string): string {
@@ -60,10 +68,16 @@ export function createMcpServer(deps: McpDeps): McpServer {
   const server = new McpServer({ name: "handoff", version: "0.1.0" });
 
   const certTagCodes = deps.certTags.map((tag) => tag.code);
+  // An empty list means the service would not say what it routes to at
+  // startup. Falling back to a free string keeps the tool usable; the server
+  // still refuses an unknown tag on the wire, which is the weaker of the two
+  // guarantees but the one that cannot be skipped.
   const certTag =
-    certTagCodes.length === 1 && certTagCodes[0] !== undefined
-      ? z.literal(certTagCodes[0])
-      : z.enum(certTagCodes as [string, ...string[]]);
+    certTagCodes.length === 0
+      ? z.string().min(1)
+      : certTagCodes.length === 1 && certTagCodes[0] !== undefined
+        ? z.literal(certTagCodes[0])
+        : z.enum(certTagCodes as [string, ...string[]]);
 
   const inputSchema = z.object({
     spec: z
