@@ -21,6 +21,9 @@ import type { ContentStore } from "./content.js";
 import { postReviewOrder } from "./order.js";
 import { gate, headerLookup, settle, type GateConfig } from "./x402/gate.js";
 import type { Facilitator } from "./x402/facilitator.js";
+import type { CertTagOption } from "./config.js";
+import { readOrderStatus } from "./status.js";
+import { unknownTagReply } from "./replies.js";
 
 export interface HttpRequest {
   readonly method: string;
@@ -41,7 +44,9 @@ export interface ServerDeps {
   readonly chain: ChainAdapter;
   readonly content: ContentStore;
   readonly ordersTopicId: string;
+  readonly attestationsTopicId: string;
   readonly requesterAccountId: string;
+  readonly certTags: readonly CertTagOption[];
 }
 
 /**
@@ -87,6 +92,32 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
     return { status: 200, headers: json, body: { status: "ok", network: deps.gateConfig.network } };
   }
 
+  // Free, like /health and for the same reason as every other read: the gate
+  // covers order posting only, and this list is what an agent needs before it
+  // can post a routable order at all.
+  if (request.path === "/tags") {
+    if (request.method !== "GET") {
+      return { status: 405, headers: { ...json, Allow: "GET" }, body: { error: "use GET" } };
+    }
+    return { status: 200, headers: json, body: { tags: deps.certTags } };
+  }
+
+  // Reads are ungated by decision. Everything returned here is already on a
+  // public topic that any mirror node serves without asking us, so there is
+  // nothing to charge for and nothing private to leak.
+  const orderRead = /^\/orders\/([^/]+)$/.exec(request.path);
+  if (orderRead !== null) {
+    if (request.method !== "GET") {
+      return { status: 405, headers: { ...json, Allow: "GET" }, body: { error: "use GET" } };
+    }
+    const status = await readOrderStatus(decodeURIComponent(orderRead[1] ?? ""), {
+      chain: deps.chain,
+      ordersTopicId: deps.ordersTopicId,
+      attestationsTopicId: deps.attestationsTopicId,
+    });
+    return { status: 200, headers: json, body: status };
+  }
+
   if (request.path !== "/orders") {
     return { status: 404, headers: json, body: { error: "not found" } };
   }
@@ -121,6 +152,21 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
       status: 400,
       headers: json,
       body: { error: "invalid order", detail: z.treeifyError(parsed.error) },
+    };
+  }
+
+  // The tag is the routing, so an unknown one is refused here — after verify,
+  // before settle, before anything is published. Nothing has been charged at
+  // this point and the reply says so.
+  if (!deps.certTags.some((tag) => tag.code === parsed.data.cert_tag)) {
+    return {
+      status: 400,
+      headers: json,
+      body: {
+        error: "unknown credential tag",
+        message: unknownTagReply(parsed.data.cert_tag, deps.certTags),
+        available: deps.certTags,
+      },
     };
   }
 
@@ -186,6 +232,9 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
       },
       service_fee: {
         settled: feeFailure === undefined,
+        // What we charged, stated by the side that set the price. The caller
+        // saw it in the 402, but the reply should not make them go back for it.
+        amount_tinybars: deps.gateConfig.feeTinybars,
         payer: outcome.payer ?? settled?.receipt.payer,
         ...(feeFailure === undefined ? {} : { error: feeFailure }),
       },
