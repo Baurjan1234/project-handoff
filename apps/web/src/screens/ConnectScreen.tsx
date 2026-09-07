@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ChevronRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -12,21 +12,38 @@ import { parseAccountId } from "../session/accountId";
 import {
   assessConnect,
   balanceWords,
+  buildConnection,
   keyTypeWords,
   type ConnectAssessment,
   type ExpertConnection,
 } from "../session/connect";
 import { describeKeyShape, describePrivateKey, type KeyShape } from "../session/keyShape";
 import { lookupAccount, type AccountLookup } from "../session/mirrorAccount";
-import { SecretKey } from "../session/secret";
 
 export type ConnectOutcome = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 export type LookupFn = (accountId: string, signal: AbortSignal) => Promise<AccountLookup>;
 
+/**
+ * How the key field hides what is typed. "masked" is a text field drawn as
+ * dots through CSS, which no password manager recognises as a credential, so
+ * nothing offers to save it. "password" is the fallback where that CSS is
+ * not supported; the browser then treats it as a password, and the
+ * recording profile has saving turned off.
+ */
+export type KeyFieldKind = "masked" | "password";
+
 const LOOKUP_DEBOUNCE_MS = 500;
 
+const PORTAL_URL = "https://portal.hedera.com";
+
 const defaultLookup: LookupFn = (accountId, signal) => lookupAccount(accountId, { fetch: (...args) => fetch(...args), signal });
+
+function keyFieldKind(): KeyFieldKind {
+  return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("-webkit-text-security", "disc")
+    ? "masked"
+    : "password";
+}
 
 /**
  * The first screen. The account comes from the person at the keyboard; on
@@ -35,9 +52,9 @@ const defaultLookup: LookupFn = (accountId, signal) => lookupAccount(accountId, 
  * this screen. On the mock there is no key field at all, because the mock
  * signs nothing.
  *
- * No `<form>`: a submitted form with a filled password field is what asks the
- * browser to save the password, and that prompt must never appear on camera.
- * Enter connects through a key handler instead.
+ * No `<form>`: a submitted form with a filled credential field is what asks
+ * the browser to save the password, and that prompt must never appear on
+ * camera. Enter connects through a key handler instead.
  */
 export function ConnectScreen({
   mode,
@@ -61,6 +78,7 @@ export function ConnectScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keyRef = useRef<HTMLInputElement | null>(null);
+  const keyField = useMemo(keyFieldKind, []);
 
   const parsed = parseAccountId(accountIdText);
   const accountId = parsed.ok ? parsed.accountId : null;
@@ -87,28 +105,20 @@ export function ConnectScreen({
   );
 
   async function connect() {
-    if (busy || !assessment.ready || assessment.accountId === null) return;
+    if (busy) return;
     setError(null);
 
-    let connection: ExpertConnection;
-    if (mode === "mock") {
-      connection = { mode: "mock", accountId: assessment.accountId };
-    } else {
-      if (assessment.keyType === null) return;
-      // Read the field once, blank it, and wrap the text. From here on the
-      // key exists only inside the holder, and after this call only inside
-      // the adapter, if one took it.
+    // Read the field once, blank it, and hand the text to the holder. From
+    // here on the key exists only inside the holder, and after the call
+    // below only inside the adapter, if one took it.
+    const connection = buildConnection({ mode, assessment, lookup: currentLookup }, () => {
       const field = keyRef.current;
       const text = field?.value ?? "";
       if (field !== null) field.value = "";
       setKeyShape(null);
-      connection = {
-        mode: "testnet",
-        accountId: assessment.accountId,
-        credential: { kind: "key", keyType: assessment.keyType, key: SecretKey.fromInput(text) },
-        accountPublicKey: currentLookup?.status === "found" ? currentLookup.publicKey : null,
-      };
-    }
+      return text;
+    });
+    if (connection === null) return;
 
     setBusy(true);
     try {
@@ -127,7 +137,8 @@ export function ConnectScreen({
       assessment={assessment}
       lookup={currentLookup}
       lookupPending={mode === "testnet" && accountId !== null && currentLookup === null}
-      keyWords={keyShape === null ? null : describeKeyShape(keyShape)}
+      keyShape={keyShape}
+      keyField={keyField}
       error={error}
       notice={notice}
       busy={busy}
@@ -143,8 +154,12 @@ export function ConnectScreen({
   );
 }
 
-function Helper({ children }: { children: ReactNode }) {
-  return <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>;
+function Helper({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p id={id} className="text-xs leading-relaxed text-muted-foreground">
+      {children}
+    </p>
+  );
 }
 
 function LookupChip({
@@ -166,11 +181,18 @@ function LookupChip({
   if (lookup === null) return null;
   switch (lookup.status) {
     case "found": {
+      if (lookup.deleted) {
+        return (
+          <Badge variant="outline" className="border-amber-300 text-amber-800 dark:text-amber-200">
+            Deleted on testnet
+          </Badge>
+        );
+      }
       const balance = balanceWords(lookup);
       return (
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="border-emerald-300 text-emerald-800 dark:text-emerald-200">
-            {lookup.deleted ? "Deleted on testnet" : "Found on testnet"}
+            Found on testnet
           </Badge>
           <span className="text-xs text-muted-foreground">
             {keyTypeWords(lookup.keyType)} key{balance === null ? "" : ` · ${balance}`}
@@ -187,7 +209,7 @@ function LookupChip({
       return (
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="border-amber-300 text-amber-800 dark:text-amber-200">
-            Mirror node unreachable
+            Testnet did not answer
           </Badge>
           <Button type="button" variant="ghost" size="xs" onClick={onRetry}>
             Retry
@@ -196,6 +218,8 @@ function LookupChip({
       );
   }
 }
+
+const MASKED: CSSProperties = { WebkitTextSecurity: "disc" } as CSSProperties;
 
 /**
  * The screen with every state as a prop, so each state can be rendered to
@@ -208,7 +232,8 @@ export function ConnectCard({
   assessment,
   lookup,
   lookupPending,
-  keyWords,
+  keyShape,
+  keyField,
   error,
   notice,
   busy,
@@ -223,8 +248,9 @@ export function ConnectCard({
   assessment: ConnectAssessment;
   lookup: AccountLookup | null;
   lookupPending: boolean;
-  /** What the key looks like, in words. Never the key. */
-  keyWords: string | null;
+  /** What the key looks like. Its words go on screen; the key never does. */
+  keyShape: KeyShape | null;
+  keyField: KeyFieldKind;
   error: string | null;
   notice: string | null;
   busy: boolean;
@@ -242,6 +268,9 @@ export function ConnectCard({
     }
   };
   const canConnect = assessment.ready && !busy;
+  const keyRejected = keyShape !== null && !keyShape.ok;
+  // A rejected shape is shown under the field, once, in red; not again below the button.
+  const blockers = keyRejected ? assessment.blockers.filter((blocker) => blocker !== keyShape.reason) : assessment.blockers;
 
   return (
     <div className="min-h-dvh bg-background">
@@ -266,8 +295,9 @@ export function ConnectCard({
               Connect your account
             </h2>
             <p className="text-sm text-muted-foreground">
-              Handoff pays you for signed verdicts. To sign, this app needs the Hedera testnet account you will be
-              paid to{testnet ? ", and the private key that proves it is yours." : "."}
+              {testnet
+                ? "Handoff pays you for signed verdicts. To sign, this app needs the Hedera testnet account you will be paid to, and the private key that proves it is yours."
+                : "Handoff pays you for signed verdicts. Enter the account id the demo signs as. On the mock chain nothing is real."}
             </p>
           </div>
 
@@ -280,14 +310,19 @@ export function ConnectCard({
               onKeyDown={onEnter}
               disabled={busy}
               placeholder="0.0.12345"
-              inputMode="numeric"
               autoComplete="off"
               spellCheck={false}
+              aria-describedby={testnet ? "connect-account-help connect-account-status" : "connect-account-help"}
               className="h-10 rounded-xl font-mono"
-              aria-label="Account id"
             />
-            <Helper>Like an account number. It is public: the portal and Hashscan both show it.</Helper>
-            {testnet && <LookupChip lookup={lookup} pending={lookupPending} onRetry={onRetryLookup} />}
+            <Helper id="connect-account-help">
+              Like an account number. It is public: the Hedera portal and Hashscan both show it.
+            </Helper>
+            {testnet && (
+              <div id="connect-account-status" role="status" className="min-h-5">
+                <LookupChip lookup={lookup} pending={lookupPending} onRetry={onRetryLookup} />
+              </div>
+            )}
           </div>
 
           {testnet ? (
@@ -296,21 +331,30 @@ export function ConnectCard({
               <Input
                 id="connect-private-key"
                 ref={keyRef}
-                type="password"
+                type={keyField === "masked" ? "text" : "password"}
+                style={keyField === "masked" ? MASKED : undefined}
                 onChange={(event) => onKeyChange(event.target.value)}
                 onKeyDown={onEnter}
                 disabled={busy}
                 placeholder="Paste the key. It shows as dots."
                 autoComplete="off"
                 autoCapitalize="off"
+                autoCorrect="off"
                 spellCheck={false}
                 data-1p-ignore
                 data-lpignore="true"
+                aria-invalid={keyRejected || undefined}
+                aria-describedby="connect-key-help connect-key-shape"
                 className="h-10 rounded-xl font-mono"
-                aria-label="Private key"
               />
-              {keyWords !== null && <p className="text-xs text-muted-foreground">{keyWords}</p>}
-              <Helper>
+              <p
+                id="connect-key-shape"
+                role="status"
+                className={`min-h-4 text-xs ${keyRejected ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {keyShape === null ? "" : describeKeyShape(keyShape)}
+              </p>
+              <Helper id="connect-key-help">
                 Your private key is your signature. It stays in this tab, in memory only: not saved, not sent
                 anywhere, never shown, forgotten when you disconnect or close the tab. It signs your verdict and
                 nothing else. It is never a schedule key, so it cannot touch the money in escrow.
@@ -330,15 +374,24 @@ export function ConnectCard({
                 Where do I find these?
               </summary>
               <p className="mt-2 leading-relaxed">
-                The Hedera developer portal lists your testnet account as a number like 0.0.12345 and, under it, a
-                private key: a long hexadecimal string it tells you to keep secret. Both forms it offers work here,
-                DER (starts with 302e or 3030) and plain hex. Paste it rather than typing it.
+                The{" "}
+                <a
+                  href={PORTAL_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-border underline-offset-4 hover:text-foreground"
+                >
+                  Hedera portal
+                </a>{" "}
+                lists your testnet account as a number like 0.0.12345 and, under it, a private key: a long
+                hexadecimal string it tells you to keep secret. Both forms it offers work here, DER (starts with
+                302e or 3030) and plain hex. Paste it rather than typing it. The same page gives out free test HBAR.
               </p>
             </details>
           )}
 
           {assessment.warnings.length > 0 && (
-            <ul className="grid gap-1 text-xs text-amber-700 dark:text-amber-300">
+            <ul aria-live="polite" className="grid gap-1 text-xs text-amber-700 dark:text-amber-300">
               {assessment.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
@@ -360,9 +413,9 @@ export function ConnectCard({
                   ? "Connect"
                   : `Connect as ${assessment.accountId}`}
             </Button>
-            {!busy && assessment.blockers.length > 0 && (
-              <ul className="grid gap-0.5 text-xs text-muted-foreground">
-                {assessment.blockers.map((blocker) => (
+            {!busy && blockers.length > 0 && (
+              <ul aria-live="polite" className="grid gap-0.5 text-xs text-muted-foreground">
+                {blockers.map((blocker) => (
                   <li key={blocker}>{blocker}</li>
                 ))}
               </ul>

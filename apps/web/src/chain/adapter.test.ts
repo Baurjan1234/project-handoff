@@ -56,6 +56,8 @@ describe("createWebChain", () => {
   });
 });
 
+// These assertions are checked by `pnpm typecheck` (tsc over the test files),
+// not by `vitest run`, which passes them regardless. CI runs typecheck first.
 describe("the shapes that hold the rules", () => {
   it("has no key slot on the mock connection", () => {
     expectTypeOf<Extract<ExpertConnection, { mode: "mock" }>>().not.toHaveProperty("credential");
