@@ -9,3 +9,5 @@ Written-up disclosure lives in the root AI-USAGE.md.
   reads designed for the six-second lag, a mock platform so the screen runs end to end
   before the cutover, 53 tests. Set up the local `.env`, the shell export for the
   hosted Hedera MCP server, and gitleaks for the pre-commit hook.
+
+- 2026-09-07 12:16 +08 — session `bf058176-2b9d-4d2d-b872-32f0a1629866` — touched: no working-tree changes
