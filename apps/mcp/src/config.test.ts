@@ -5,7 +5,9 @@ const COMPLETE: Env = {
   X402_RECEIVER_ACCOUNT_ID: "0.0.10376656",
   X402_FEE_TINYBARS: "100000",
   HANDOFF_ORDERS_TOPIC_ID: "0.0.999",
+  HANDOFF_ATTESTATIONS_TOPIC_ID: "0.0.1000",
   HANDOFF_REQUESTER_ACCOUNT_ID: "0.0.10376659",
+  HANDOFF_CERT_TAGS: "cpa-us=Licensed reviewer",
 };
 
 describe("configFromEnv", () => {
@@ -85,6 +87,8 @@ describe("configFromEnv", () => {
     });
 
     expect(Object.keys(config).sort()).toEqual([
+      "attestationsTopicId",
+      "certTags",
       "facilitatorUrl",
       "feeTinybars",
       "network",
