@@ -45,6 +45,9 @@ importers:
 
   apps/requester:
     dependencies:
+      '@handoff/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
       '@handoff/schema':
         specifier: workspace:*
         version: link:../../packages/schema

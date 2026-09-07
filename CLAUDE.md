@@ -347,4 +347,8 @@ as a subagent so the diff stays out of your session.
       `docs/architecture.md`, and the demo narration to match. Until this is settled, do
       not hard-code either shape.
 - [ ] **Who presents at live judging round 2**, Tue Sep 15. Not in `team-seats.md` yet.
-- [ ] **Does the x402 gate cover only order posting**, or reads as well?
+- [x] ~~**Does the x402 gate cover only order posting**, or reads as well?~~ Order
+      posting only, decided in `docs/decisions/2026-09-05-gate-covers-order-posting-only.md`.
+- [x] ~~**Where does the x402 payer's signing live?**~~ In `packages/chain` as
+      `X402Signer`, beside the adapter. Tseegii authors, Khishgee reviews. Decided in
+      `docs/decisions/2026-09-07-x402-signer-lives-in-packages-chain.md`.
