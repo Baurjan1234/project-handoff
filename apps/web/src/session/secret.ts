@@ -2,17 +2,21 @@
  * A private key, held so it cannot leak by accident.
  *
  * The threat this answers is incidental, not adversarial: a key that reaches
- * a `JSON.stringify` of state, an interpolated error message, a React
- * devtools panel, or a `console.log` on cutover night. A plain string spreads
- * into all of those. This holder keeps the text in a private field that
- * enumeration, spread, `structuredClone` and every stringification path miss,
- * and exposes it through exactly one call that spends the holder.
+ * a `JSON.stringify` of state, an interpolated error message, a devtools
+ * panel, or a `console.log` on cutover night. A plain string spreads into all
+ * of those. This holder keeps the text in a module-level WeakMap keyed by the
+ * instance, so the object itself has no fields at all: enumeration, spread,
+ * `structuredClone`, a browser console preview and every stringification
+ * path see an empty `SecretKey {}`. The text is exposed through exactly one
+ * call that spends the holder.
  *
  * What it does not do: zero memory. A JavaScript string cannot be wiped, so
  * the screen says "in memory only" and never says "erased".
  */
 
 const WITHHELD = "[private key withheld]";
+
+const texts = new WeakMap<SecretKey, string>();
 
 export class SecretUnavailable extends Error {
   constructor() {
@@ -22,10 +26,8 @@ export class SecretUnavailable extends Error {
 }
 
 export class SecretKey {
-  #text: string | null;
-
   private constructor(text: string) {
-    this.#text = text;
+    texts.set(this, text);
   }
 
   /** Wraps what was pasted. Trims whitespace and nothing else. */
@@ -39,19 +41,19 @@ export class SecretKey {
    * the callback does with it is the callback's responsibility.
    */
   useOnce<T>(fn: (key: string) => T): T {
-    const text = this.#text;
-    if (text === null) throw new SecretUnavailable();
-    this.#text = null;
+    const text = texts.get(this);
+    if (text === undefined) throw new SecretUnavailable();
+    texts.delete(this);
     return fn(text);
   }
 
   /** Drop the text without reading it. Idempotent. */
   dispose(): void {
-    this.#text = null;
+    texts.delete(this);
   }
 
   get spent(): boolean {
-    return this.#text === null;
+    return !texts.has(this);
   }
 
   toString(): string {

@@ -46,6 +46,9 @@ describe("SecretKey", () => {
       expect(rendering).not.toContain(TAIL);
     }
     expect(String(key)).toBe("[private key withheld]");
+    // No fields at all: a browser console preview shows `SecretKey {}`.
+    expect(Object.getOwnPropertyNames(key)).toEqual([]);
+    expect(Object.getOwnPropertySymbols(key)).toEqual([]);
     // Still intact after all of that.
     expect(key.useOnce((text) => text)).toBe(FIXTURE);
   });
