@@ -22,13 +22,8 @@
  * A failure at any step leaves nothing published.
  */
 
-import {
-  encodeAttestation,
-  type ChainAdapter,
-  type ReviewAttestation,
-  type ReviewOrder,
-  type Verdict,
-} from "@handoff/schema";
+import { encodeAttestation, type ReviewAttestation, type ReviewOrder, type Verdict } from "@handoff/schema";
+import type { ExpertChain } from "../chain/adapter";
 import type { ContentStore } from "../content";
 import { buildReviewAttestation } from "./attestation";
 import { hashNotes } from "./notes";
@@ -52,8 +47,11 @@ export interface SignInput {
 }
 
 export interface SignDeps {
-  /** Constructed with the expert's own account. Never a platform key. */
-  readonly chain: ChainAdapter;
+  /**
+   * Constructed with the expert's own account. Never a platform key, and by
+   * type never able to touch a schedule: the slice has no such methods.
+   */
+  readonly chain: ExpertChain;
   readonly content: ContentStore;
 }
 

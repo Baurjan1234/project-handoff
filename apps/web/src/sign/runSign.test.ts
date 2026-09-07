@@ -22,7 +22,8 @@ const order: OrderForSigning = { envelope, escrowAccountId: "MOCK-escrow", topic
 const request: SignRequest = { order, verdict: "approve", defects: [], notes: "All three footnotes foot." };
 
 function webChain(content: ContentStore = new InMemoryContentStore()): WebChain {
-  return { mode: "mock", chain: new MockChainAdapter(), content };
+  const mock = new MockChainAdapter();
+  return { mode: "mock", expertAccountId: "0.0.12345", chain: mock, mock, content, disconnect() {} };
 }
 
 function outcomes() {
