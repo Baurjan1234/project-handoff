@@ -5,7 +5,9 @@ the sync, because every other lane compiles against this package.
 
 ## What this package owns
 
-- The zod schemas for the order envelope and the attestation.
+- The zod schemas for the order envelope, the claim, and the attestation.
+- The claim rule, `resolveClaims`: who holds an order given every claim message on the
+  topic. Both ends call it, so the expert app and the status tool cannot disagree.
 - `SCHEMA_VERSION` and every bound: HCS message size, `defects[]` limits.
 - The money module. Tinybars as `bigint`, strings at every boundary.
 - Canonical serialization and hashing, so two implementations agree on a hash.
@@ -28,6 +30,10 @@ the sync, because every other lane compiles against this package.
   `artifact_hash_out`, plus `_in` when an input existed. This is a discriminated union
   with strict objects, so the wrong shape cannot be constructed or parsed.
 - An attestation must fit in a single HCS message. Check it, do not assume it.
+- A claim carries no claimant and no timestamp. The payer account of the topic message
+  is the claimant and the consensus timestamp is the claim time; a field in the body
+  would be a second source of truth. `publishClaim` on the adapter exists so the
+  claimant, not the platform, pays to submit.
 - Money never becomes a `number`. Not for display, not for comparison, not once.
 
 ## The cutover
