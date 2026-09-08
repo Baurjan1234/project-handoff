@@ -162,7 +162,10 @@ describe("submitFundLock refuses everything else", () => {
     await expect(chain.submitFundLock(params, built.transactionBytes)).rejects.toThrow(FundLockError);
 
     const escrow = await chain.submitFundLock(params, signFundLock(built.transactionBytes, REQUESTER));
-    // The first recorded transaction is the accepted one, not a burnt id from the refusal.
+    // The accepted lock is the *first* transaction this adapter ever issued.
+    // Asserting only that it succeeded would pass whether or not the refusal
+    // burnt an id, which is the thing the title claims to check.
+    expect(escrow.transactionId).toBe("MOCK-tx-1");
     expect(await chain.getTransaction(escrow.transactionId)).toMatchObject({ status: "SUCCESS" });
   });
 });
