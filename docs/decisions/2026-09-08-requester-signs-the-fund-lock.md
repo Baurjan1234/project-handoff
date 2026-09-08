@@ -79,9 +79,14 @@ re-challenges instead of burning a round trip on `TRANSACTION_EXPIRED`.
   them at the deadline, so demo deadlines must be hours rather than days.
 - `docs/project-brief-v2.md` Known limits keeps the platform-funded paragraph until this
   lands, and its last sentence changes from roadmap to shipped when it does. The
-  unguarded-drain sentence stays until the price cap, the operator-balance floor and the
-  short deadlines exist; **the service stays private until then**, whichever way this
-  goes.
+  **the service stays private until this lands.** It does not go out behind a price cap
+  and an operator-balance floor instead: those guard the platform-funded escrow, which
+  this decision deletes, so building them is work on a path with a week to live.
+- **A maximum deadline is the one bound that outlives this**, and it is needed more
+  afterwards rather than less. `TIMEOUT` is the only path that returns escrowed funds
+  and it fires at the deadline; once the money in escrow is the requester's own, an
+  unbounded deadline strands it. `deadline` is checked today only for being in the
+  future.
 - `docs/architecture.md` fund-lock arrow becomes two arrows and gains the signature.
 
 **Supersedes.** Nothing. It closes a gap
