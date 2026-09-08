@@ -87,10 +87,17 @@ export interface WatchOptions {
 /** What Hedera's tutorial waits. Copy, not control: the loop polls sooner. */
 export const MIRROR_EXPECTED_LAG_MS = 6_000;
 
+/**
+ * After this, Confirming becomes "Published · payment pending" and the loop
+ * stops. Never an endless pulse: the verdict stands, and the platform's
+ * payout is an idempotent retry that lands on recovery.
+ */
+export const PAYMENT_PENDING_AFTER_MS = 60_000;
+
 export const DEFAULT_WATCH_OPTIONS: WatchOptions = {
   intervalMs: 2_000,
   slowAfterMs: 20_000,
-  giveUpAfterMs: 90_000,
+  giveUpAfterMs: PAYMENT_PENDING_AFTER_MS,
   now: Date.now,
   sleep: abortableSleep,
 };
@@ -199,7 +206,7 @@ export async function watchSettlement(
                 ...next,
                 attestation: read.value,
                 phase: "failed",
-                failure: `the mirror node reports the attestation transaction as ${read.value.status}`,
+                failure: `the network reports the verdict transaction as ${read.value.status}`,
               };
       }
     }
@@ -229,7 +236,7 @@ export async function watchSettlement(
                   ...next,
                   payout: read.value,
                   phase: "failed",
-                  failure: `the mirror node reports the payout transaction as ${read.value.status}`,
+                  failure: `the network reports the payout transaction as ${read.value.status}`,
                 };
         }
       }

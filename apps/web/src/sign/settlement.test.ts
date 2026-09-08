@@ -117,7 +117,7 @@ describe("watchSettlement", () => {
     );
 
     expect(final.phase).toBe("failed");
-    expect(final.failure).toContain("attestation");
+    expect(final.failure).toContain("verdict");
     expect(final.failure).toContain("FAILED");
     expect(final.payoutTransactionId).toBeNull();
     expect(payout.calls).toBe(0);
