@@ -139,7 +139,7 @@ describe("WorkspaceScreen, after the sign", () => {
       payout: record("MOCK-tx-7"),
     });
     const html = render({ draft: READY, flow: signedFlow(state) });
-    expect(html).toContain("Paid · 200 HBAR");
+    expect(html).toContain("Paid · 100 HBAR");
     expect(html).toContain("to your account");
     expect(html).toContain("0.0.12345");
     expect(html).toContain("MOCK-tx-7");

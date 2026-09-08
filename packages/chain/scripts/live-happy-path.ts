@@ -24,9 +24,9 @@ async function main(): Promise<void> {
   // per run proves the mechanism and leaves nothing behind, which is not a demo — every
   // take would be a different escrow account on the ledger, and the platform keys would
   // exist only for the life of the process. Run provision-escrow.ts once instead.
-  const provisionedEscrow = process.env["HEDERA_ESCROW_ACCOUNT_ID"]?.trim();
-  const provisionedVerifier = process.env["HEDERA_VERIFIER_KEY"]?.trim();
-  const provisionedAdmin = process.env["HEDERA_SCHEDULE_ADMIN_KEY"]?.trim();
+  const provisionedEscrow = process.env["HANDOFF_ESCROW_ACCOUNT_ID"]?.trim();
+  const provisionedVerifier = process.env["HANDOFF_VERIFIER_KEY"]?.trim();
+  const provisionedAdmin = process.env["HANDOFF_SCHEDULE_ADMIN_KEY"]?.trim();
 
   let escrowAccountId: AccountId;
   let verifierKey: PrivateKey;

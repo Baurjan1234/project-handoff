@@ -3,10 +3,15 @@
  *
  * Two things are deliberately absent. There is no fee default: the per-call
  * price is ratified once and never changed on camera, and a default here would
- * be copied into a demo before anybody decided it. And there is no private key
- * of any kind — this process states a price, asks the facilitator and posts an
- * order; the payer's key lives in the requester and the platform keys live
- * server-side in the chain package.
+ * be copied into a demo before anybody decided it. And no key of any kind
+ * passes through this file, which is what the test at the bottom of
+ * config.test.ts asserts.
+ *
+ * That is a claim about this file, not about the process. On
+ * `HANDOFF_CHAIN=testnet` the composition root in index.ts does read the two
+ * vault-only platform keys and the operator key, and hands them straight to
+ * `createHederaChainAdapter` without logging them or putting them in this
+ * config object. The payer's key is not among them — it lives in the requester.
  */
 
 import type { X402Network } from "./x402/types.js";
@@ -67,6 +72,23 @@ export interface ServiceConfig {
   /** Whose funds the escrow locks. */
   readonly requesterAccountId: string;
   readonly port: number;
+}
+
+/**
+ * Which chain this process talks to.
+ *
+ * Parsed rather than compared inline so an unknown value is a refusal with a
+ * message, never a silent fall-through to the mock. A mock transaction id 404s
+ * on Hashscan, and one reaching a recording is the failure this project cannot
+ * afford.
+ */
+export type ChainMode = "mock" | "testnet";
+
+export function chainModeFromEnv(env: Env = process.env): ChainMode {
+  const mode = env["HANDOFF_CHAIN"]?.trim();
+  if (mode === undefined || mode === "" || mode === "mock") return "mock";
+  if (mode === "testnet") return "testnet";
+  throw new ConfigError(`HANDOFF_CHAIN is ${JSON.stringify(mode)}. Use "mock" or "testnet".`);
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;

@@ -35,9 +35,10 @@ export interface MockChainConfig extends Common {
     /** Whose funds the seeded demo order locks. */
     readonly requesterAccountId: string;
     /**
-     * The seeded order's price, in HBAR as a string. The default is the
-     * proposed demo price, which is still an open decision (200 HBAR pending
-     * a faucet check). Change it here, not in code, and never on camera.
+     * The seeded orders' price, in HBAR as a string. The default is the
+     * committed demo price, 100 HBAR, settled in
+     * docs/decisions/2026-09-06-demo-price-and-x402-fee.md because the
+     * faucet gives exactly that per call. Never changed on camera.
      */
     readonly priceHbar: string;
   };
@@ -58,7 +59,7 @@ export class ConfigError extends Error {
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
-const PROPOSED_DEMO_PRICE_HBAR = "200";
+const DEMO_PRICE_HBAR = "100";
 
 function required(env: Env, name: string): string {
   const value = env[name]?.trim();
@@ -122,7 +123,7 @@ export function configFromEnv(env: Env): WebChainConfig {
       ordersTopicId: env["VITE_HANDOFF_ORDERS_TOPIC_ID"]?.trim() || "MOCK-topic-orders",
       mock: {
         requesterAccountId: env["VITE_MOCK_REQUESTER_ACCOUNT_ID"]?.trim() || "MOCK-requester",
-        priceHbar: hbarAmount(env, "VITE_MOCK_PRICE_HBAR", PROPOSED_DEMO_PRICE_HBAR),
+        priceHbar: hbarAmount(env, "VITE_MOCK_PRICE_HBAR", DEMO_PRICE_HBAR),
       },
     };
   }

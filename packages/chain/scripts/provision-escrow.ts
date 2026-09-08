@@ -73,9 +73,9 @@ async function main(): Promise<void> {
       "# THE VAULT IS THESE KEYS' REAL HOME (CLAUDE.md: operator and service keys live",
       "# there and nowhere else). This .env copy is the local dev stand-in — put them in",
       "# the shared vault entry too, or the escrow is unrecoverable off this machine.",
-      `HEDERA_ESCROW_ACCOUNT_ID=${escrowAccountId}`,
-      `HEDERA_VERIFIER_KEY=${verifierKey.toStringDer()}`,
-      `HEDERA_SCHEDULE_ADMIN_KEY=${scheduleAdminKey.toStringDer()}`,
+      `HANDOFF_ESCROW_ACCOUNT_ID=${escrowAccountId}`,
+      `HANDOFF_VERIFIER_KEY=${verifierKey.toStringDer()}`,
+      `HANDOFF_SCHEDULE_ADMIN_KEY=${scheduleAdminKey.toStringDer()}`,
       "",
     ].join("\n"),
   );
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   console.log(`  KeyList 2-of-3: requester=${env.operatorId.toString()} (operator), verifier, schedule-admin`);
   console.log(`  create tx: ${escrow.transactionId}`);
   console.log(`\nplatform keys appended to .env — not printed here on purpose.`);
-  console.log(`\n>>> Put HEDERA_VERIFIER_KEY and HEDERA_SCHEDULE_ADMIN_KEY in the shared vault too. <<<`);
+  console.log(`\n>>> Put HANDOFF_VERIFIER_KEY and HANDOFF_SCHEDULE_ADMIN_KEY in the shared vault too. <<<`);
   console.log(`\nHashscan: https://hashscan.io/testnet/account/${escrowAccountId}`);
 
   client.close();

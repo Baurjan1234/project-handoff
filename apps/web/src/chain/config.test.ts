@@ -9,7 +9,7 @@ describe("configFromEnv", () => {
       mode: "mock",
       expertAccountIdPrefill: null,
       ordersTopicId: "MOCK-topic-orders",
-      mock: { requesterAccountId: "MOCK-requester", priceHbar: "200" },
+      mock: { requesterAccountId: "MOCK-requester", priceHbar: "100" },
     });
   });
 
@@ -65,7 +65,7 @@ describe("configFromEnv", () => {
     }
     // Ids, topics and prices are not keys.
     expect(() =>
-      configFromEnv({ VITE_EXPERT_ACCOUNT_ID: expert, VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242", VITE_MOCK_PRICE_HBAR: "200" }),
+      configFromEnv({ VITE_EXPERT_ACCOUNT_ID: expert, VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242", VITE_MOCK_PRICE_HBAR: "100" }),
     ).not.toThrow();
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configFromEnv, ConfigError, type Env } from "./config.js";
+import { chainModeFromEnv, configFromEnv, ConfigError, type Env } from "./config.js";
 
 const COMPLETE: Env = {
   X402_RECEIVER_ACCOUNT_ID: "0.0.10376656",
@@ -95,6 +95,25 @@ describe("configFromEnv", () => {
       expect(configFromEnv({ ...COMPLETE, HANDOFF_SERVICE_URL: "  " }).serviceUrl).toBe(
         "http://localhost:4021",
       );
+    });
+  });
+
+  describe("chainModeFromEnv", () => {
+    it("defaults to mock, so nothing posts to testnet by accident", () => {
+      expect(chainModeFromEnv({})).toBe("mock");
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: "  " })).toBe("mock");
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: "mock" })).toBe("mock");
+    });
+
+    it("reads testnet", () => {
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: " testnet " })).toBe("testnet");
+    });
+
+    it("refuses anything else rather than falling through to the mock", () => {
+      // A typo that silently ran on the mock would put MOCK-tx ids in front of
+      // a camera, and they 404 on Hashscan.
+      expect(() => chainModeFromEnv({ HANDOFF_CHAIN: "testent" })).toThrow(ConfigError);
+      expect(() => chainModeFromEnv({ HANDOFF_CHAIN: "mainnet" })).toThrow(/mock.*testnet/);
     });
   });
 
