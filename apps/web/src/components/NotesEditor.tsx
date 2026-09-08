@@ -1,15 +1,16 @@
 import { Textarea } from "@/components/ui/textarea";
-import { ShortHash } from "./Mono";
 
-/** The written review. Stored off-chain; only its hash is published. */
+/**
+ * The written review. Private: it goes to the content store and reaches the
+ * requester, and only its fingerprint is published. The fingerprint itself
+ * lives one click down on the Sign step, not here; here the expert writes.
+ */
 export function NotesEditor({
   notes,
-  notesHash,
   onChange,
   disabled,
 }: {
   notes: string;
-  notesHash: string | null;
   onChange: (notes: string) => void;
   disabled: boolean;
 }) {
@@ -19,17 +20,12 @@ export function NotesEditor({
         value={notes}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
-        rows={5}
-        className="min-h-28 rounded-xl text-sm leading-relaxed"
+        rows={6}
+        className="min-h-32 rounded-xl text-sm leading-relaxed"
         placeholder="What you checked, what you found, and why the verdict is what it is."
-        aria-label="Written notes"
+        aria-label="Your notes"
       />
-      <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-        <span>Only this hash goes on the ledger:</span>
-        <code className="font-mono">notes_hash</code>
-        <span>=</span>
-        {notesHash === null ? <span>…</span> : <ShortHash value={notesHash} />}
-      </p>
+      <p className="text-xs text-muted-foreground">Private. Delivered to the requester; never published.</p>
     </div>
   );
 }

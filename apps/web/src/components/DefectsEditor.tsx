@@ -1,17 +1,19 @@
 import { X } from "lucide-react";
-import { byteLength, DEFECT_CODE_MAX_BYTES, DEFECTS_MAX_ITEMS } from "@handoff/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { defectProblems } from "../sign/attestation";
+import { budgetWords, defectBudget, normalizeDefectCode } from "../sign/defects";
 
 /**
  * Short structured codes, bounded by the schema package. The bounds are
  * imported, never restated, so what this editor lets through is exactly what
  * the verifier lets through. The written reasoning goes in the notes, which
- * stay off-chain.
+ * stay private.
  *
- * The code being typed is owned by the screen, not by this component, so the
- * sign button can refuse to publish while a code sits uncommitted in the box.
+ * Free text this week, uppercase by convention, normalized rather than
+ * rejected. Over budget blocks with an instruction, not a code. The code
+ * being typed is owned by the screen, not by this component, so the sign
+ * step can refuse while a code sits uncommitted in the box.
  */
 export function DefectsEditor({
   defects,
@@ -26,12 +28,10 @@ export function DefectsEditor({
   onDraftChange: (draft: string) => void;
   disabled: boolean;
 }) {
-  const code = draft.trim();
-  const bytes = byteLength(code);
-  const full = defects.length >= DEFECTS_MAX_ITEMS;
-  const overBytes = bytes > DEFECT_CODE_MAX_BYTES;
+  const code = normalizeDefectCode(draft);
+  const budget = defectBudget(defects, draft);
   const duplicate = defects.includes(code);
-  const canAdd = !disabled && code.length > 0 && !full && !overBytes && !duplicate;
+  const canAdd = !disabled && code.length > 0 && !budget.full && !budget.over && !duplicate;
   const problems = defectProblems(defects);
 
   function add(): void {
@@ -43,9 +43,9 @@ export function DefectsEditor({
   return (
     <div className="grid gap-3">
       {defects.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-2" aria-label="Defect codes">
           {defects.map((defect, index) => (
-            <span
+            <li
               key={`${defect}-${index}`}
               className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pr-1.5 pl-3 font-mono text-xs"
             >
@@ -60,19 +60,21 @@ export function DefectsEditor({
                   <X className="size-3" aria-hidden />
                 </button>
               )}
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {!disabled ? (
         <div className="flex gap-2">
           <Input
             value={draft}
-            placeholder={defects.length === 0 ? "e.g. FN-2-DATE, or leave empty" : "Another code"}
+            placeholder={defects.length === 0 ? "e.g. NO_MONITORING, or leave empty" : "Another code"}
             aria-label="Defect code"
+            aria-invalid={budget.over || undefined}
             spellCheck={false}
-            className="h-10 rounded-xl font-mono"
+            autoCapitalize="characters"
+            className="h-10 rounded-xl font-mono uppercase"
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -80,7 +82,7 @@ export function DefectsEditor({
                 add();
               }
             }}
-            disabled={full}
+            disabled={budget.full}
           />
           <Button type="button" variant="secondary" className="h-10 rounded-xl" onClick={add} disabled={!canAdd}>
             Add
@@ -90,17 +92,12 @@ export function DefectsEditor({
         defects.length === 0 && <span className="text-sm text-muted-foreground">No defects listed.</span>
       )}
 
-      <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground tabular-nums">
-        <span>
-          {defects.length} of {DEFECTS_MAX_ITEMS} codes
-        </span>
-        {!disabled && (
-          <span className={overBytes ? "text-destructive" : ""}>
-            {bytes} of {DEFECT_CODE_MAX_BYTES} bytes
-            {duplicate && code.length > 0 ? " · already listed" : ""}
-          </span>
-        )}
-      </div>
+      {!disabled && (
+        <p className={`text-xs tabular-nums ${budget.over ? "text-destructive" : "text-muted-foreground"}`}>
+          {budgetWords(budget)}
+          {duplicate && code.length > 0 ? " · already listed" : ""}
+        </p>
+      )}
 
       {problems.length > 0 && (
         <ul className="text-xs text-destructive">
