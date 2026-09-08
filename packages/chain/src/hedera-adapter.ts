@@ -1,4 +1,4 @@
-import { AccountId, type Client, type PrivateKey, ScheduleId, TopicId } from "@hiero-ledger/sdk";
+import { AccountId, type Client, type PrivateKey, TopicId } from "@hiero-ledger/sdk";
 import type {
   ChainAdapter,
   ConsensusRef,
@@ -12,26 +12,29 @@ import type {
   TransactionRecord,
   TxRef,
 } from "@handoff/schema";
+import { executeDirectPayout } from "./direct-payout.js";
 import { fundEscrow } from "./escrow.js";
 import { submitTopicMessage } from "./hcs.js";
 import { fetchMirrorTopicMessages, fetchMirrorTransaction, toMirrorTransactionId } from "./mirror.js";
-import { createClaimSchedule, deleteSchedule as deleteScheduleImpl, signScheduleForEarlyExecute } from "./schedule.js";
+import { PendingPayoutStore } from "./pending-payout.js";
 
 /**
  * The real ChainAdapter, satisfying @handoff/schema's interface (the cutover seam
  * MockChainAdapter also satisfies). See packages/chain/CLAUDE.md.
  *
- * **Open question, flagged rather than silently decided** (same shape as the
- * x402/SDK-boundary question already sitting with Tseegii and the sync): this class
- * assumes ONE escrow account, provisioned once out of band (escrow.ts's
- * createEscrowAccount, run separately — not by this class), not a fresh account per
- * order. `lockFunds` only transfers into it and always returns the same
- * `escrowAccountId`. The alternative — a fresh escrow account per order, with the
- * real requester's own public key as the KeyList's requester role, looked up via a
- * mirror-node account-info read — is also implementable, but needs someone to decide
- * whether a per-order account is worth the extra AccountCreateTransaction cost and
- * the added trust surface of resolving a stranger's key at runtime. Don't build past
- * this assumption without that decision landing in docs/decisions/.
+ * **createSchedule/signSchedule/deleteSchedule do not touch Hedera's Schedule
+ * Service.** docs/research/schedule-create-keylist-blocker.md found
+ * ScheduleCreateTransaction cannot debit a KeyList-controlled account (8 isolated
+ * testnet tests, root cause unresolved). This adapter instead tracks the pending
+ * payout locally (pending-payout.ts) and fires a directly co-signed
+ * TransferTransaction the moment signSchedule is called (direct-payout.ts) — the
+ * external ChainAdapter contract is unchanged, only the internals. See
+ * docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md.
+ *
+ * **Open question, flagged rather than silently decided**: this class assumes ONE
+ * escrow account, provisioned once out of band (escrow.ts's createEscrowAccount, run
+ * separately — not by this class), not a fresh account per order. `lockFunds` only
+ * transfers into it and always returns the same `escrowAccountId`.
  *
  * `lockFunds`'s transfer is signed by whatever the constructor's `client` is
  * authorized as. If that's meant to be the requester's own signature, the caller
@@ -48,6 +51,7 @@ export interface HederaChainAdapterConfig {
 
 export class HederaChainAdapter implements ChainAdapter {
   readonly network = "testnet" as const;
+  readonly #pendingPayouts = new PendingPayoutStore();
 
   constructor(private readonly config: HederaChainAdapterConfig) {}
 
@@ -87,42 +91,69 @@ export class HederaChainAdapter implements ChainAdapter {
     return { transactionId: result.transactionId, escrowAccountId: this.config.escrowAccountId.toString() };
   }
 
+  /** Tracks the payout locally — no Hedera schedule is created. See module doc above. */
   async createSchedule(params: CreateScheduleParams): Promise<ScheduleRef> {
-    const result = await createClaimSchedule(this.config.client, {
-      escrowAccountId: AccountId.fromString(params.escrowAccountId),
-      payeeAccountId: AccountId.fromString(params.payeeAccountId),
-      amountTinybars: params.amountTinybars,
-      scheduleAdminKey: this.config.scheduleAdminKey,
-      memo: params.orderId,
-      expirationTime: new Date(params.expiresAt),
-    });
+    // No real transaction happens here, so there's no transaction ID of our own to
+    // report — the caller gets one the moment money actually moves, at signSchedule.
+    // A synthetic ID keeps TxRef honest about what this step actually did (nothing
+    // on-chain yet) while still returning something.
+    const placeholderTransactionId = `pending@${Date.now()}`;
 
-    return {
-      transactionId: result.transactionId,
-      scheduleId: result.result.scheduleId.toString(),
-      alreadyExisted: result.result.alreadyExisted,
-    };
+    const { id, alreadyExisted } = this.#pendingPayouts.create(
+      {
+        orderId: params.orderId,
+        escrowAccountId: params.escrowAccountId,
+        payeeAccountId: params.payeeAccountId,
+        amountTinybars: params.amountTinybars,
+        expiresAt: params.expiresAt,
+      },
+      placeholderTransactionId,
+    );
+
+    return { transactionId: placeholderTransactionId, scheduleId: id, alreadyExisted };
   }
 
   /**
    * The interface takes only a scheduleId — it deliberately hides that early-execute
-   * is two signatures. Both platform keys (verifier, schedule-admin) co-sign here in
-   * one call; ScheduleSignTransaction is safe to retry, so signing an
-   * already-executed schedule is success, not an error.
+   * needs two signatures. Both platform keys co-sign the SAME TransferTransaction in
+   * one call (direct-payout.ts), not two separate ScheduleSign calls over time.
+   * Idempotent: signing an already-executed payout returns success without
+   * re-submitting anything.
    */
   async signSchedule(scheduleId: string): Promise<SignScheduleResult> {
-    const id = ScheduleId.fromString(scheduleId);
+    const record = this.#pendingPayouts.get(scheduleId);
 
-    const verifierResult = await signScheduleForEarlyExecute(this.config.client, id, this.config.verifierKey);
-    const adminResult = await signScheduleForEarlyExecute(this.config.client, id, this.config.scheduleAdminKey);
+    if (record.deleted) {
+      throw new Error(`payout ${scheduleId} was cancelled and cannot be signed`);
+    }
 
-    const executed = await this.hasExecuted(scheduleId);
-    return { transactionId: adminResult.transactionId ?? verifierResult.transactionId, executed };
+    if (record.executed) {
+      return { transactionId: record.executedTransactionId ?? record.createdTransactionId, executed: true };
+    }
+
+    const result = await executeDirectPayout(this.config.client, {
+      escrowAccountId: AccountId.fromString(record.escrowAccountId),
+      payeeAccountId: AccountId.fromString(record.payeeAccountId),
+      amountTinybars: record.amountTinybars,
+      verifierKey: this.config.verifierKey,
+      scheduleAdminKey: this.config.scheduleAdminKey,
+    });
+
+    this.#pendingPayouts.markExecuted(scheduleId, result.transactionId);
+    return { transactionId: result.transactionId, executed: true };
   }
 
+  /**
+   * Cancels the local record only — there is no Hedera schedule to delete. No new
+   * on-chain fact is created by cancelling; the transaction ID returned is the one
+   * that established the payout being cancelled, not a new one. Not on today's
+   * demo path (that's the happy path: POSTED -> CLAIMED -> DELIVERED -> SETTLED);
+   * revisit if CLAIM_TIMEOUT/VIOLATION need their own on-chain audit trail later.
+   */
   async deleteSchedule(scheduleId: string): Promise<TxRef> {
-    const result = await deleteScheduleImpl(this.config.client, ScheduleId.fromString(scheduleId), this.config.scheduleAdminKey);
-    return { transactionId: result.transactionId };
+    const record = this.#pendingPayouts.get(scheduleId);
+    this.#pendingPayouts.markDeleted(scheduleId);
+    return { transactionId: record.createdTransactionId };
   }
 
   async getTransaction(transactionId: string): Promise<TransactionRecord | null> {
@@ -134,19 +165,6 @@ export class HederaChainAdapter implements ChainAdapter {
       status: tx.result === "SUCCESS" ? "SUCCESS" : "FAILED",
       consensusTimestamp: tx.consensus_timestamp,
     };
-  }
-
-  /**
-   * Not part of ChainAdapter — a mirror-node check for whether a schedule has fired,
-   * since unlike MockChainAdapter's in-memory `hasExecuted`, the real adapter has no
-   * local state to ask. Used internally by `signSchedule`.
-   */
-  private async hasExecuted(scheduleId: string): Promise<boolean> {
-    const url = `${this.config.mirrorNodeUrl}/schedules/${scheduleId}`;
-    const response = await fetch(url);
-    if (!response.ok) return false;
-    const body = (await response.json()) as { executed_timestamp: string | null };
-    return body.executed_timestamp !== null;
   }
 }
 
