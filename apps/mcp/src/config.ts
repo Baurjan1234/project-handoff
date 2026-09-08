@@ -69,6 +69,23 @@ export interface ServiceConfig {
   readonly port: number;
 }
 
+/**
+ * Which chain this process talks to.
+ *
+ * Parsed rather than compared inline so an unknown value is a refusal with a
+ * message, never a silent fall-through to the mock. A mock transaction id 404s
+ * on Hashscan, and one reaching a recording is the failure this project cannot
+ * afford.
+ */
+export type ChainMode = "mock" | "testnet";
+
+export function chainModeFromEnv(env: Env = process.env): ChainMode {
+  const mode = env["HANDOFF_CHAIN"]?.trim();
+  if (mode === undefined || mode === "" || mode === "mock") return "mock";
+  if (mode === "testnet") return "testnet";
+  throw new ConfigError(`HANDOFF_CHAIN is ${JSON.stringify(mode)}. Use "mock" or "testnet".`);
+}
+
 export type Env = Readonly<Record<string, string | undefined>>;
 
 function required(env: Env, name: string): string {
