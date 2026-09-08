@@ -65,10 +65,35 @@ export interface X402SignerStrings {
   readonly maxAmountTinybars: string;
 }
 
+/**
+ * Parse an x402 payer key, choosing the curve rather than guessing it.
+ *
+ * A DER key names its own curve, so it is parsed as it stands. A **raw** key
+ * is 64 hex characters and says nothing about the curve — and the generic
+ * `PrivateKey.fromString` reads that as ED25519, which is wrong here every
+ * time: this signer is ECDSA-only by contract, so ECDSA is the only reading
+ * that can be correct.
+ *
+ * Measured, not assumed: a raw key for a live `ECDSA_SECP256K1` account was
+ * refused by the key-type guard on 2026-09-08 because the generic parser had
+ * already made it ED25519. The account was right and the key was right.
+ */
+function parsePayerKey(text: string): PrivateKey {
+  const trimmed = text.trim();
+  const hex = trimmed.startsWith("0x") || trimmed.startsWith("0X") ? trimmed.slice(2) : trimmed;
+
+  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
+    return PrivateKey.fromStringECDSA(hex);
+  }
+  // DER, or something the SDK will reject with its own message. Either way the
+  // text carries its own curve and there is nothing here to decide.
+  return PrivateKey.fromStringDer(hex);
+}
+
 export function createX402Signer(config: X402SignerStrings): X402Signer {
   return new X402Signer({
     accountId: config.accountId,
-    privateKey: PrivateKey.fromString(config.privateKey),
+    privateKey: parsePayerKey(config.privateKey),
     resourceUrl: config.resourceUrl,
     maxAmountTinybars: config.maxAmountTinybars,
   });
