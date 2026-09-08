@@ -1,4 +1,12 @@
-import { type Client, type PrivateKey, TopicCreateTransaction, type TopicId, TopicMessageSubmitTransaction } from "@hiero-ledger/sdk";
+import {
+  type AccountId,
+  type Client,
+  type PrivateKey,
+  TopicCreateTransaction,
+  type TopicId,
+  TopicMessageSubmitTransaction,
+  TransactionId,
+} from "@hiero-ledger/sdk";
 import { byteLength, canonicalize } from "@handoff/schema";
 import type { TxResult } from "./escrow.js";
 
@@ -86,6 +94,52 @@ export async function submitTopicMessage(
   if (submitKey) {
     tx = await tx.freezeWith(client).sign(submitKey);
   }
+
+  const response = await tx.execute(client);
+  const record = await response.getRecord(client);
+  if (record.receipt.topicSequenceNumber === null) {
+    throw new Error(`TopicMessageSubmitTransaction returned no topicSequenceNumber (tx ${response.transactionId.toString()})`);
+  }
+  if (!record.consensusTimestamp) {
+    throw new Error(`TopicMessageSubmitTransaction returned no consensusTimestamp (tx ${response.transactionId.toString()})`);
+  }
+
+  return {
+    transactionId: response.transactionId.toString(),
+    result: {
+      topicSequenceNumber: record.receipt.topicSequenceNumber.toString(),
+      consensusTimestamp: `${record.consensusTimestamp.seconds.toString()}.${String(record.consensusTimestamp.nanos).padStart(9, "0")}`,
+    },
+  };
+}
+
+/**
+ * Submits a topic message paid for by a SPECIFIC account, not the client's operator.
+ *
+ * This exists because readers take the author of a claim or an attestation from the
+ * topic message's **payer account**, never from its body (schema's `adapter.ts` says
+ * so for `publishClaim`). Making the payer somebody else means generating the
+ * transaction id against their account and signing with their key — a signature from
+ * the operator alone would put the operator's account on the message and quietly
+ * reassign authorship.
+ */
+export async function submitTopicMessageAsPayer(
+  client: Client,
+  topicId: TopicId,
+  payerAccountId: AccountId,
+  payerKey: PrivateKey,
+  payload: unknown,
+): Promise<TxResult<{ topicSequenceNumber: string; consensusTimestamp: string }>> {
+  const canonical = assertWithinHcsMessageLimit(payload);
+
+  const tx = await new TopicMessageSubmitTransaction()
+    .setTopicId(topicId)
+    .setMessage(canonical)
+    // The payer is the author. Generating the id against their account is what makes
+    // the mirror node report them as `payer_account_id`.
+    .setTransactionId(TransactionId.generate(payerAccountId))
+    .freezeWith(client)
+    .sign(payerKey);
 
   const response = await tx.execute(client);
   const record = await response.getRecord(client);

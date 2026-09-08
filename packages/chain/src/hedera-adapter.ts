@@ -14,7 +14,7 @@ import type {
 } from "@handoff/schema";
 import { executeDirectPayout } from "./direct-payout.js";
 import { fundEscrow } from "./escrow.js";
-import { submitTopicMessage } from "./hcs.js";
+import { submitTopicMessage, submitTopicMessageAsPayer } from "./hcs.js";
 import { fetchMirrorTopicMessages, fetchMirrorTransaction, toMirrorTransactionId } from "./mirror.js";
 import { PendingPayoutStore } from "./pending-payout.js";
 
@@ -51,6 +51,18 @@ export interface HederaChainAdapterConfig {
   escrowAccountId: AccountId;
   verifierKey: PrivateKey;
   scheduleAdminKey: PrivateKey;
+  /**
+   * Resolves a claimant's own signing key, for `publishClaim` only.
+   *
+   * **The platform does not hold expert keys, by design** — an expert signs from
+   * their own account, and this adapter has no business knowing that key. So this
+   * is optional and normally absent: a server-side adapter left without it refuses
+   * to publish a claim rather than quietly signing as itself and reassigning
+   * authorship. Provide it only where the claimant genuinely is the process doing
+   * the signing (the expert app holding its own connection), or for a deliberately
+   * staged demo expert — and say which, out loud, if a judge asks who signed.
+   */
+  resolveClaimantKey?: (claimantAccountId: string) => PrivateKey | undefined;
 }
 
 export class HederaChainAdapter implements ChainAdapter {
@@ -61,6 +73,43 @@ export class HederaChainAdapter implements ChainAdapter {
 
   async submitMessage(topicId: string, contents: string): Promise<ConsensusRef> {
     const result = await submitTopicMessage(this.config.client, TopicId.fromString(topicId), contents);
+    return {
+      transactionId: result.transactionId,
+      consensusTimestamp: result.result.consensusTimestamp,
+      sequenceNumber: Number(result.result.topicSequenceNumber),
+    };
+  }
+
+  /**
+   * A claim is published from the CLAIMANT's account, not this adapter's operator —
+   * readers take the claimant from the topic message's payer account, never from the
+   * body, so signing as anyone else silently reassigns authorship.
+   *
+   * That means this needs the claimant's own key, which the platform deliberately
+   * does not hold. Without a `resolveClaimantKey` that returns one for this account,
+   * this refuses rather than falling back to `submitMessage` and putting the
+   * operator's account on someone else's claim.
+   */
+  async publishClaim(topicId: string, claimantAccountId: string, contents: string): Promise<ConsensusRef> {
+    const claimantKey = this.config.resolveClaimantKey?.(claimantAccountId);
+    if (!claimantKey) {
+      throw new Error(
+        `cannot publish a claim for ${claimantAccountId}: no signing key for that account. ` +
+          `A claim is paid for and signed by the claimant, because the payer account IS the ` +
+          `claimant on the topic. This adapter does not hold expert keys by design — publish ` +
+          `the claim from the claimant's own client, or construct the adapter with ` +
+          `resolveClaimantKey if this process legitimately holds that key.`,
+      );
+    }
+
+    const result = await submitTopicMessageAsPayer(
+      this.config.client,
+      TopicId.fromString(topicId),
+      AccountId.fromString(claimantAccountId),
+      claimantKey,
+      contents,
+    );
+
     return {
       transactionId: result.transactionId,
       consensusTimestamp: result.result.consensusTimestamp,
