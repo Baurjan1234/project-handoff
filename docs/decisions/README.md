@@ -39,3 +39,7 @@ Newest last.
 ### 2026-09-06
 
 - [The two prices, committed](2026-09-06-demo-price-and-x402-fee.md)
+
+### 2026-09-08
+
+- [P1 signs off on @hiero-ledger/sdk 2.85.0](2026-09-08-p1-signs-off-on-hiero-sdk-2.85.0.md)
