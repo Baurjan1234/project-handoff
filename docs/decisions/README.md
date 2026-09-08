@@ -54,3 +54,4 @@ Newest last.
 - [Requester copy claims no check that did not run; NAS-36 closes with its scope moved](2026-09-08-copy-claims-no-check-that-did-not-run.md) — amends the MCP replies in the design system
 - [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
 - [Platform-key env names live in the app, chain exports a string-taking factory](2026-09-08-platform-key-env-names-live-in-the-app.md) — closes the layout-rule gap the cutover hit
+- [The requester signs the fund lock; the platform stops funding the escrow](2026-09-08-requester-signs-the-fund-lock.md) — closes a gap the one-shared-escrow decision left open, **breaking change to `ChainAdapter`**
