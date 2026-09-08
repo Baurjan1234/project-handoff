@@ -38,7 +38,9 @@ const deps: ServerDeps = {
   chain: new MockChainAdapter(),
   content: new InMemoryContentStore(),
   ordersTopicId: "0.0.orders",
+  attestationsTopicId: "0.0.attestations",
   requesterAccountId: "0.0.10376659",
+  certTags: [{ code: "cpa-us", label: "Licensed reviewer" }],
 };
 
 let server: Server;
