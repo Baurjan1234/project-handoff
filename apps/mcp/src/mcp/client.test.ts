@@ -19,6 +19,7 @@ const GATE_CONFIG: GateConfig = {
   network: "hedera:testnet",
   receiverAccountId: "0.0.10376656",
   feeTinybars: "100000",
+  serviceUrl: "http://localhost:4021",
 };
 
 const REQUIREMENTS = buildRequirements(GATE_CONFIG, "0.0.7162784");
@@ -40,7 +41,7 @@ interface Call {
 /** 402 first, then whatever the second answer is told to be. */
 function gatedService(second: { status: number; body: unknown }) {
   const calls: Call[] = [];
-  const challenge = paymentRequired(REQUIREMENTS, "/orders");
+  const challenge = paymentRequired(REQUIREMENTS, { url: "http://localhost:4021/orders" });
 
   const fetchImpl = async (_url: string, init?: RequestInit): Promise<Response> => {
     calls.push({
@@ -139,7 +140,7 @@ describe("the handoff_verify client", () => {
   it("surfaces a rejected payment as the facilitator's reason", async () => {
     const { fetchImpl } = gatedService({
       status: 402,
-      body: { ...paymentRequired(REQUIREMENTS, "/orders", "InvalidSignature") },
+      body: { ...paymentRequired(REQUIREMENTS, { url: "http://localhost:4021/orders" }, "InvalidSignature") },
     });
 
     await expect(

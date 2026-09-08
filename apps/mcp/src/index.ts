@@ -45,6 +45,7 @@ function main(): void {
         network: config.network,
         receiverAccountId: config.receiverAccountId,
         feeTinybars: config.feeTinybars,
+        serviceUrl: config.serviceUrl,
       },
       chain: chainFromEnv(),
       content: new InMemoryContentStore(),
@@ -61,6 +62,7 @@ function main(): void {
     console.log(`  facilitator  ${config.facilitatorUrl} (${config.network})`);
     console.log(`  fee          ${config.feeTinybars} tinybars to ${config.receiverAccountId}`);
     console.log(`  orders topic ${config.ordersTopicId}`);
+    console.log(`  resource     ${config.serviceUrl}`);
   });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {

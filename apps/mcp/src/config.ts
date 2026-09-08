@@ -38,6 +38,11 @@ export interface ServiceConfig {
   readonly receiverAccountId: string;
   /** The per-call service fee, in tinybars. */
   readonly feeTinybars: string;
+  /**
+   * This service's own base URL, which the 402 uses to name what it charges
+   * for. The payer echoes it back, so a path would name no service at all.
+   */
+  readonly serviceUrl: string;
   /** The HCS topic order envelopes are published to. */
   readonly ordersTopicId: string;
   /**
@@ -94,6 +99,10 @@ export function configFromEnv(env: Env = process.env): ServiceConfig {
   return {
     facilitatorUrl: env["X402_FACILITATOR_URL"]?.trim() ?? "https://api.testnet.blocky402.com",
     network,
+    // Defaults to this process's own address, which is right for local work
+    // and wrong the moment it is behind a hostname. Same default as the MCP
+    // client half in mcp/main.ts, so one variable moves both.
+    serviceUrl: env["HANDOFF_SERVICE_URL"]?.trim() || `http://localhost:${port}`,
     receiverAccountId: required(env, "X402_RECEIVER_ACCOUNT_ID"),
     feeTinybars: required(env, "X402_FEE_TINYBARS"),
     ordersTopicId: required(env, "HANDOFF_ORDERS_TOPIC_ID"),

@@ -97,18 +97,35 @@ same content in the `PAYMENT-REQUIRED` header. An `accepts` array; the client ta
 `accepts[0]`.
 
 ```json
-{"accepts":[{"scheme":"exact","network":"hedera:testnet","amount":"100000",
+{"x402Version":2,"resource":{"url":"https://our-service/orders"},
+ "accepts":[{"scheme":"exact","network":"hedera:testnet","amount":"100000",
   "payTo":"0.0.x — our x402 receiver","maxTimeoutSeconds":300,"asset":"0.0.0",
   "extra":{"feePayer":"0.0.7162784"}}]}
 ```
 
-**Payment payload**, JSON then base64 into the header:
+`resource` is **an object and it is required**, not the bare URL string version 1 used.
+`PaymentRequiredV2Schema` types it as `{url, description?, mimeType?, serviceName?,
+tags?, iconUrl?}` with a non-empty `url`, and a v2 client parsing a 402 whose `resource`
+is a string fails with `resource: Expected object, received string` before it builds any
+payment at all.
+
+**Payment payload**, JSON then base64 into the header. **Four keys, and `scheme` and
+`network` are not among them** — they live inside `accepted`:
 
 ```json
-{"x402Version":2,"scheme":"exact","network":"hedera:testnet",
- "accepted":{...the requirements object...},
+{"x402Version":2,
+ "resource":{"url":"https://our-service/orders"},
+ "accepted":{...the requirements object, echoed verbatim...},
  "payload":{"transaction":"<base64 TransferTransaction bytes>"}}
 ```
+
+An earlier revision of this file showed `scheme` and `network` at the top level here.
+That is the **version 1** payload shape, and copying it into a resource server makes it
+reject its own signer's payment. Corrected 2026-09-08 against two sources that agree:
+`PaymentPayloadV2Schema` in the published `@x402/core` 2.25.0 bundle, whose object has
+exactly `x402Version`, `resource`, `accepted` and `payload`; and a payload captured by
+signing a quote offline with our own `X402Signer`, whose decoded top-level keys are the
+same four.
 
 **`POST /verify` and `POST /settle`** take the same body:
 `{"x402Version":2,"paymentPayload":{...},"paymentRequirements":{...}}`.
