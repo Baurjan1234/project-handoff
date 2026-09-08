@@ -101,7 +101,6 @@ async function main(): Promise<void> {
       content: contentFromEnv(mode),
       ordersTopicId: config.ordersTopicId,
       attestationsTopicId: config.attestationsTopicId,
-      requesterAccountId: config.requesterAccountId,
       certTags: config.certTags,
     },
     { log: (line) => console.log(line) },
