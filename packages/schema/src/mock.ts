@@ -31,7 +31,7 @@ import type {
   TxRef,
   UnsignedFundLock,
 } from "./adapter.js";
-import { parseTinybars } from "./money.js";
+import { formatTinybars, parseTinybars } from "./money.js";
 
 /**
  * Hedera's default transaction validity is 120 seconds and its maximum is 180.
@@ -42,13 +42,31 @@ import { parseTinybars } from "./money.js";
  */
 export const FUND_LOCK_VALID_SECONDS = 180;
 
-/** The mock's stand-in for a frozen `TransferTransaction`. Never protobuf. */
+/**
+ * One hbar leg, the way a real `TransferTransaction` carries them.
+ *
+ * Signed tinybars: negative debits an account, positive credits one, and the
+ * legs of a transfer net to zero. The money module already parses a leading
+ * minus and `MIN_TINYBARS` is negative, so direction needs no field of its own.
+ */
+interface FakeHbarTransfer {
+  readonly accountId: string;
+  readonly amountTinybars: string;
+}
+
+/**
+ * The mock's stand-in for a frozen `TransferTransaction`. Never protobuf.
+ *
+ * **A list, not a from/to pair.** A single pair cannot express the tamper this
+ * whitelist exists for: a second credit riding along to an account of the
+ * caller's choosing, with the debit inflated to keep the legs netting to zero.
+ * While the shape was a pair, `extra-transfers` was a rejection reason nothing
+ * could produce, and a payload carrying extra legs validated and submitted.
+ */
 interface FakeTransfer {
   readonly kind: string;
   readonly feePayer: string;
-  readonly from: string;
-  readonly to: string;
-  readonly amountTinybars: string;
+  readonly transfers: readonly FakeHbarTransfer[];
   readonly validUntil: string;
   readonly signedBy: readonly string[];
 }
@@ -61,15 +79,20 @@ function encodeFakeTransfer(transfer: FakeTransfer): string {
   return btoa(JSON.stringify(transfer));
 }
 
+function isHbarTransfer(value: unknown): value is FakeHbarTransfer {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate["accountId"] === "string" && typeof candidate["amountTinybars"] === "string";
+}
+
 function isFakeTransfer(value: unknown): value is FakeTransfer {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate["kind"] === "string" &&
     typeof candidate["feePayer"] === "string" &&
-    typeof candidate["from"] === "string" &&
-    typeof candidate["to"] === "string" &&
-    typeof candidate["amountTinybars"] === "string" &&
+    Array.isArray(candidate["transfers"]) &&
+    candidate["transfers"].every(isHbarTransfer) &&
     typeof candidate["validUntil"] === "string" &&
     Array.isArray(candidate["signedBy"]) &&
     candidate["signedBy"].every((entry) => typeof entry === "string")
@@ -135,10 +158,41 @@ function assertFundLockMatches(
   if (transfer.kind !== "transfer") {
     throw new FundLockError("not-a-transfer", `expected a transfer, got ${transfer.kind}`);
   }
-  if (transfer.from !== expected.requesterAccountId) {
+
+  // Parse every leg before classifying any of them. `expected` is ours, so it
+  // parses or the caller has a bug. The legs came back over the wire and are
+  // strings only — "abc", "1e9", "010000000000" and a 20-digit value all
+  // satisfy `isFakeTransfer` and all make the money module throw. A MoneyError
+  // escaping here reaches a handler as an unmapped 500 with no reason on it,
+  // which is exactly the case this whitelist exists to name.
+  const legs = transfer.transfers.map((leg) => ({
+    accountId: leg.accountId,
+    amount: claimedTinybars(leg.amountTinybars),
+  }));
+
+  // The count check comes first, because a third leg is the tamper and every
+  // check below reads "the" debit and "the" credit as though there is one of
+  // each. A lock we issued has exactly two: the requester debited, the escrow
+  // credited.
+  const debits = legs.filter((leg) => leg.amount < 0n);
+  const credits = legs.filter((leg) => leg.amount > 0n);
+  if (legs.length !== 2 || debits.length !== 1 || credits.length !== 1) {
+    throw new FundLockError(
+      "extra-transfers",
+      `a fund lock is one debit and one credit; this moves ${legs.length} legs ` +
+        `(${legs.map((leg) => `${leg.accountId} ${leg.amount.toString()}`).join(", ")})`,
+    );
+  }
+
+  // Non-null: the length checks above prove there is exactly one of each.
+  const debit = debits[0] as { accountId: string; amount: bigint };
+  const credit = credits[0] as { accountId: string; amount: bigint };
+  const price = parseTinybars(expected.amountTinybars);
+
+  if (debit.accountId !== expected.requesterAccountId) {
     throw new FundLockError(
       "wrong-debited-account",
-      `the debited account is ${transfer.from}, not the requester ${expected.requesterAccountId}`,
+      `the debited account is ${debit.accountId}, not the requester ${expected.requesterAccountId}`,
     );
   }
   if (transfer.feePayer !== expected.requesterAccountId) {
@@ -147,22 +201,20 @@ function assertFundLockMatches(
       `the fee payer is ${transfer.feePayer}, not the requester ${expected.requesterAccountId}`,
     );
   }
-  if (transfer.to !== escrowAccountId) {
+  if (credit.accountId !== escrowAccountId) {
     throw new FundLockError(
       "wrong-escrow-account",
-      `the credited account is ${transfer.to}, not the escrow ${escrowAccountId}`,
+      `the credited account is ${credit.accountId}, not the escrow ${escrowAccountId}`,
     );
   }
-  // `expected` is ours, so it parses or the caller has a bug. The transfer's
-  // figure came back over the wire and is a string only — "abc", "1e9",
-  // "010000000000" and a 20-digit value all satisfy `isFakeTransfer` and all
-  // make the money module throw. A MoneyError escaping here is a tamper that
-  // reaches a handler as an unmapped 500 with no reason on it, which is
-  // exactly the case this whitelist exists to name.
-  if (claimedTinybars(transfer.amountTinybars) !== parseTinybars(expected.amountTinybars)) {
+  // Both sides, not just the credit. A lock that credits the escrow correctly
+  // while debiting more than the order is priced at is still the caller losing
+  // money they did not agree to lose.
+  if (credit.amount !== price || debit.amount !== -price) {
     throw new FundLockError(
       "wrong-amount",
-      `the transfer moves ${transfer.amountTinybars} tinybars, not the ${expected.amountTinybars} the order is priced at`,
+      `the transfer debits ${debit.amount.toString()} and credits ${credit.amount.toString()} ` +
+        `tinybars, not the ${expected.amountTinybars} the order is priced at`,
     );
   }
   if (transfer.signedBy.length === 0) {
@@ -319,9 +371,13 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
       transactionBytes: encodeFakeTransfer({
         kind: "transfer",
         feePayer: params.requesterAccountId,
-        from: params.requesterAccountId,
-        to: escrowAccountId,
-        amountTinybars: params.amountTinybars,
+        transfers: [
+          {
+            accountId: params.requesterAccountId,
+            amountTinybars: formatTinybars(-parseTinybars(params.amountTinybars)),
+          },
+          { accountId: escrowAccountId, amountTinybars: params.amountTinybars },
+        ],
         validUntil,
         signedBy: [],
       }),

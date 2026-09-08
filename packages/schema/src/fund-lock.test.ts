@@ -34,6 +34,22 @@ function tamper(transactionBytes: string, changes: Record<string, unknown>): str
   return btoa(JSON.stringify({ ...(decoded as Record<string, unknown>), ...changes }));
 }
 
+interface Leg {
+  accountId: string;
+  amountTinybars: string;
+}
+
+function legsOf(transactionBytes: string): Leg[] {
+  return (JSON.parse(atob(transactionBytes)) as { transfers: Leg[] }).transfers;
+}
+
+/** The debit is leg 0 and the credit is leg 1, as `buildFundLock` writes them. */
+function tamperLeg(transactionBytes: string, index: number, changes: Partial<Leg>): string {
+  const transfers = legsOf(transactionBytes);
+  transfers[index] = { ...(transfers[index] as Leg), ...changes };
+  return tamper(transactionBytes, { transfers });
+}
+
 async function build() {
   return chain.buildFundLock(params);
 }
@@ -43,10 +59,20 @@ describe("buildFundLock", () => {
     const built = await build();
     const decoded = JSON.parse(atob(built.transactionBytes));
 
-    expect(decoded.from).toBe(REQUESTER);
     expect(decoded.feePayer).toBe(REQUESTER);
-    expect(decoded.to).toBe(built.escrowAccountId);
-    expect(decoded.amountTinybars).toBe(params.amountTinybars);
+    expect(decoded.transfers).toEqual([
+      { accountId: REQUESTER, amountTinybars: `-${params.amountTinybars}` },
+      { accountId: built.escrowAccountId, amountTinybars: params.amountTinybars },
+    ]);
+  });
+
+  it("writes legs that net to zero, the way a transfer has to", async () => {
+    const built = await build();
+    const total = legsOf(built.transactionBytes).reduce(
+      (sum, leg) => sum + BigInt(leg.amountTinybars),
+      0n,
+    );
+    expect(total).toBe(0n);
   });
 
   it("hands back nothing signed — the server never signs the requester's transfer", async () => {
@@ -100,7 +126,17 @@ describe("submitFundLock refuses everything else", () => {
 
   it("refuses an edited amount — the caller cannot lock less than the order is priced at", async () => {
     const built = await build();
-    await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { amountTinybars: "1" }), "wrong-amount");
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 1, { amountTinybars: "1" }), "wrong-amount");
+  });
+
+  it("refuses an inflated debit even when the escrow is credited correctly", async () => {
+    // Checking the credit alone would let a caller be debited more than the
+    // order is priced at, which is their money going somewhere they did not
+    // agree to. Both legs are matched.
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 0, { amountTinybars: "-99999999999" }), "wrong-amount");
   });
 
   it("refuses an amount that is not a figure, as a FundLockError and not a MoneyError", async () => {
@@ -111,18 +147,52 @@ describe("submitFundLock refuses everything else", () => {
     const signed = signFundLock(built.transactionBytes, REQUESTER);
 
     for (const amountTinybars of ["abc", "1e9", "010000000000", "99999999999999999999", ""]) {
-      await rejects(tamper(signed, { amountTinybars }), "wrong-amount");
+      await rejects(tamperLeg(signed, 1, { amountTinybars }), "wrong-amount");
     }
   });
 
   it("refuses a redirected credit — the caller cannot pay themselves instead of the escrow", async () => {
     const built = await build();
-    await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { to: "0.0.9999" }), "wrong-escrow-account");
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 1, { accountId: "0.0.9999" }), "wrong-escrow-account");
   });
 
   it("refuses a substituted debited account — the caller cannot spend somebody else's balance", async () => {
     const built = await build();
-    await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { from: "0.0.9999" }), "wrong-debited-account");
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 0, { accountId: "0.0.9999" }), "wrong-debited-account");
+  });
+
+  it("refuses a third leg — the attack a from/to pair could not even express", async () => {
+    // The escrow is credited correctly and the legs still net to zero. The
+    // caller has simply added themselves a credit and inflated the debit to
+    // pay for it. This is what `extra-transfers` is for, and while the mock
+    // modelled one from/to pair nothing could produce that reason at all.
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    const [debit, credit] = legsOf(signed) as [Leg, Leg];
+
+    const withRider = tamper(signed, {
+      transfers: [
+        { accountId: debit.accountId, amountTinybars: `${BigInt(debit.amountTinybars) - 500n}` },
+        credit,
+        { accountId: "0.0.9999", amountTinybars: "500" },
+      ],
+    });
+
+    await rejects(withRider, "extra-transfers");
+  });
+
+  it("refuses a lock with a leg missing", async () => {
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamper(signed, { transfers: [legsOf(signed)[1]] }), "extra-transfers");
+  });
+
+  it("refuses a zero leg, which is neither a debit nor a credit", async () => {
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 0, { amountTinybars: "0" }), "extra-transfers");
   });
 
   it("refuses a substituted fee payer, which is how the platform would end up paying again", async () => {
@@ -144,10 +214,8 @@ describe("submitFundLock refuses everything else", () => {
     // The two used to share one reason, which left a client unable to know
     // whether to rebuild the transfer or re-sign it.
     const built = await build();
-    await rejects(
-      tamper(signFundLock(built.transactionBytes, REQUESTER), { from: "0.0.9999" }),
-      "wrong-debited-account",
-    );
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamperLeg(signed, 0, { accountId: "0.0.9999" }), "wrong-debited-account");
     await rejects(signFundLock(built.transactionBytes, "0.0.9999"), "wrong-signer");
   });
 
