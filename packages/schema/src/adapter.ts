@@ -143,6 +143,16 @@ export interface ChainAdapter {
  * it, a bad signature fails at consensus, and by then nothing has moved and
  * the x402 fee is still unsettled — the same verify-gates-serving,
  * settle-last ordering the payment gate already relies on.
+ *
+ * **What "validated against `expected`" does and does not cover.** The amount,
+ * the escrow account, the debited account, the fee payer and the signer are
+ * each matched against a value the server holds. The validity window is not
+ * among them: `LockFundsParams` carries no window, so there is nothing to
+ * match it to. It is bounded instead — the instant has to fall inside the
+ * window this build would have issued — and beyond that it is the signature
+ * and the network that refuse a forged one, with `TRANSACTION_EXPIRED` at
+ * precheck. Say it this way round rather than claiming a check that cannot
+ * exist.
  */
 export interface RequesterFundedEscrow {
   buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock>;
@@ -185,7 +195,19 @@ export type FundLockRejection =
   | "wrong-fee-payer"
   | "extra-transfers"
   | "unsigned"
-  | "expired";
+  /** The window has already closed. Rebuild; nothing is wrong with the caller. */
+  | "expired"
+  /**
+   * The window claims to be longer than the server issues.
+   *
+   * `LockFundsParams` carries no window, so this field is the one thing a
+   * validator cannot match against `expected`. It is bounded instead: the
+   * instant must fall inside the window this build would have issued. In the
+   * real adapter the signature covers the field and a forged one dies at
+   * consensus, so this is a cheaper refusal of the same tamper — not the only
+   * thing standing between it and the escrow.
+   */
+  | "window-too-long";
 
 export class FundLockError extends Error {
   constructor(readonly reason: FundLockRejection, message: string) {

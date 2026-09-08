@@ -174,10 +174,31 @@ function assertFundLockMatches(
       `the fund lock is signed by ${transfer.signedBy.join(", ")}, not by the requester ${expected.requesterAccountId}`,
     );
   }
-  if (Date.parse(transfer.validUntil) <= nowMillis) {
+  // The window is the one field with nothing in `expected` to compare against,
+  // so it is bounded rather than matched: it must lie inside the window this
+  // adapter would have issued had it built the lock now. Reading the claim and
+  // only asking "has it passed?" accepts a forged `validUntil` of the year
+  // 3000 — in the real adapter the signature covers the field and the network
+  // refuses it, but this fixture is what P1 implements from and a mock that
+  // waves the tamper through teaches the wrong contract.
+  const claimedValidUntil = Date.parse(transfer.validUntil);
+  if (Number.isNaN(claimedValidUntil)) {
+    throw new FundLockError(
+      "unparseable",
+      `the fund lock's validity window ${JSON.stringify(transfer.validUntil)} is not an instant`,
+    );
+  }
+  if (claimedValidUntil <= nowMillis) {
     throw new FundLockError(
       "expired",
       `the fund lock stopped being submittable at ${transfer.validUntil}`,
+    );
+  }
+  if (claimedValidUntil > nowMillis + FUND_LOCK_VALID_SECONDS * 1000) {
+    throw new FundLockError(
+      "window-too-long",
+      `the fund lock claims to stay submittable until ${transfer.validUntil}, which is ` +
+        `longer than the ${FUND_LOCK_VALID_SECONDS}s this adapter issues`,
     );
   }
 }

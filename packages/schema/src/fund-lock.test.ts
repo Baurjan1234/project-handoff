@@ -159,6 +159,30 @@ describe("submitFundLock refuses everything else", () => {
     await rejects(signed, "expired");
   });
 
+  it("refuses a forged window, which is the tamper an expiry-only check waves through", async () => {
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+
+    await rejects(tamper(signed, { validUntil: "3000-01-01T00:00:00Z" }), "window-too-long");
+  });
+
+  it("refuses a window that is not an instant, rather than reading NaN as in range", async () => {
+    // `NaN <= now` and `NaN > upper` are both false, so an unguarded pair of
+    // comparisons accepts anything unparseable.
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+
+    await rejects(tamper(signed, { validUntil: "whenever" }), "unparseable");
+  });
+
+  it("calls an honestly stale build expired, not a forgery", async () => {
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    clock = START + (FUND_LOCK_VALID_SECONDS + 20) * 1000;
+
+    await rejects(signed, "expired");
+  });
+
   it("still accepts one second before the window closes", async () => {
     const built = await build();
     const signed = signFundLock(built.transactionBytes, REQUESTER);

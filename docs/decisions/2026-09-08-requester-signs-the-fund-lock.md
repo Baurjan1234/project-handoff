@@ -42,8 +42,15 @@ Three properties of the shape, each chosen against an alternative:
   expiry sweep, no sticky sessions, and the validator is a pure function and therefore a
   unit-test target, which the money-path rule requires anyway.
 - **Whitelist, not blacklist.** The bytes have crossed the wire. Amount, escrow account,
-  debited account, fee payer, signed-by and the validity window are each checked against
-  the expected parameters and never against what the bytes claim.
+  debited account, fee payer and signed-by are each checked against the expected
+  parameters and never against what the bytes claim.
+- **The validity window is bounded, not matched.** `LockFundsParams` carries no window,
+  so there is nothing in the expected parameters to compare it to — an earlier draft of
+  this file claimed it was matched, and that check cannot exist. It is bounded instead:
+  the instant has to fall inside the window the server would have issued had it built
+  the lock now, which refuses a forged `validUntil` without needing state. Past that it
+  is the signature that protects the field, and the network refuses a doctored one with
+  `TRANSACTION_EXPIRED` at precheck.
 
 Signature *validity* is deliberately not checked. The network checks it, a bad signature
 fails at consensus with nothing moved and the x402 fee still unsettled — the same
