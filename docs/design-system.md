@@ -308,7 +308,7 @@ The agent’s UI is this copy. Keep it short enough to read on camera. Same dict
 
 **Beat 1 — the ask.** The agent declares the credential tag, the task, the price and the
 deadline. **The tag is the routing.** There is no broadcast: the order sits on the public
-topic and only certified inboxes holding that tag see it. Enumerate the available tags in
+topic and only inboxes subscribed to that tag see it. Enumerate the available tags in
 the tool description so the agent picks from a list, and reject an unknown tag at post
 time — the wrong tag must be impossible, not merely discouraged. State consent once, in
 the tool description: “Your agent pays the service fee and locks the order value
