@@ -306,6 +306,11 @@ expert web app itself; custodial key management is a weeks-scale project.
   service must be awake for money to move) and for schema adjudication (false clawback
   is possible; auditable via the open-source check script + the expert's HCS proof).
   Verifier + admin keys are both ours: custodial, admitted, decentralization roadmap.
+- **The escrow is one shared account this week.** Every order locks into the same
+  2-of-3 account and per-order accounting is off-chain; the requester slot in the
+  KeyList is the demo requester's session key. One escrow account per order, holding
+  the requester's own key, is the production shape and is roadmap
+  (`docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`).
 - **Execution class is schema + architecture**, demoed as roadmap; its proofs need an
   oracle story presented honestly as a trusted-verifier stub.
 - **Content availability is centralized** (Supabase). Signed URLs are access control —

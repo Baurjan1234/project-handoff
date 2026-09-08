@@ -49,7 +49,9 @@ function main(): void {
       chain: chainFromEnv(),
       content: new InMemoryContentStore(),
       ordersTopicId: config.ordersTopicId,
+      attestationsTopicId: config.attestationsTopicId,
       requesterAccountId: config.requesterAccountId,
+      certTags: config.certTags,
     },
     { log: (line) => console.log(line) },
   );
