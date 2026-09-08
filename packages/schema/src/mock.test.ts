@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { encodeAttestation } from "./attestation.js";
+import { encodeClaim, tryDecodeClaim } from "./claim.js";
 import { SCHEMA_VERSION } from "./constants.js";
 import { encodeEnvelope } from "./envelope.js";
 import { MockChainAdapter, MockChainError } from "./mock.js";
@@ -57,6 +58,18 @@ describe("topics", () => {
     for (const c of ["a", "b", "c"]) await chain.submitMessage("topic-1", c);
     const tail = await chain.readMessages("topic-1", { afterSequenceNumber: 1 });
     expect(tail.map((m) => m.contents)).toEqual(["b", "c"]);
+  });
+
+  it("records the claimant as the payer of a claim, which is where readers take it from", async () => {
+    const body = encodeClaim({ kind: "claim", order_id: "order-1", cert_tag: "cpa-us", schema_version: SCHEMA_VERSION });
+    await chain.submitMessage("orders", "an order");
+    const ref = await chain.publishClaim("orders", "0.0.5005", body);
+
+    const messages = await chain.readMessages("orders");
+    expect(messages.map((m) => m.payerAccountId)).toEqual(["MOCK-payer", "0.0.5005"]);
+    expect(ref.sequenceNumber).toBe(2);
+    expect(tryDecodeClaim(messages[0]?.contents ?? "")).toBeNull();
+    expect(tryDecodeClaim(messages[1]?.contents ?? "")?.order_id).toBe("order-1");
   });
 
   it("carries a real envelope and a real attestation without complaint", async () => {
