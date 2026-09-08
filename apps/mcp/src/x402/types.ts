@@ -24,6 +24,21 @@ export type X402Network = "hedera:testnet";
  */
 export const HBAR_ASSET = "0.0.0";
 
+/**
+ * What a 402 says it is charging for, and what the payer echoes back.
+ *
+ * Version 2 made this an object. Version 1 had a bare URL string, and sending
+ * that string is what a v2 client rejects before it ever builds a payment —
+ * measured against `PaymentRequiredV2Schema` in the published `@x402/core`
+ * bundle, which types `resource` as this object and requires it.
+ */
+export interface ResourceInfo {
+  /** Absolute, because the payer stores it and it has to name one service. */
+  readonly url: string;
+  readonly description?: string;
+  readonly mimeType?: string;
+}
+
 export interface PaymentRequirements {
   readonly scheme: "exact";
   readonly network: X402Network;
@@ -40,16 +55,26 @@ export interface PaymentRequirements {
 export interface PaymentRequired {
   readonly x402Version: typeof X402_VERSION;
   readonly accepts: readonly PaymentRequirements[];
-  readonly resource?: string;
+  readonly resource: ResourceInfo;
   /** Present when a payment was offered and rejected. */
   readonly error?: string;
 }
 
-/** What the client sends back, base64-encoded, in `PAYMENT-SIGNATURE`. */
+/**
+ * What the client sends back, base64-encoded, in `PAYMENT-SIGNATURE`.
+ *
+ * **`scheme` and `network` live in `accepted`, not at the top level.** Version
+ * 1 put them at the top and version 2 did not, and an earlier shape here
+ * carried the v1 fields — which meant this service rejected its own signer's
+ * payload before the facilitator ever saw it. `PaymentPayloadV2Schema` in the
+ * published `@x402/core` bundle has exactly four keys, and a payload captured
+ * from our own `X402Signer` has the same four.
+ */
 export interface PaymentPayload {
   readonly x402Version: number;
-  readonly scheme: string;
-  readonly network: string;
+  /** Echoed from the 402. Optional in the schema, so it is optional here. */
+  readonly resource?: ResourceInfo;
+  /** The quote being paid, verbatim. This is where scheme and network live. */
   readonly accepted: PaymentRequirements;
   readonly payload: { readonly transaction: string };
 }

@@ -16,6 +16,7 @@ const GATE_CONFIG: GateConfig = {
   network: "hedera:testnet",
   receiverAccountId: "0.0.10376656",
   feeTinybars: "100000",
+  serviceUrl: "http://localhost:4021",
 };
 
 const SETTLE_TX = "0.0.7162784@1757000000.000000000";
@@ -63,8 +64,7 @@ function harness(options: { verify?: unknown; settle?: unknown } = {}) {
 function paidHeader(): string {
   const payload: PaymentPayload = {
     x402Version: 2,
-    scheme: "exact",
-    network: "hedera:testnet",
+    resource: { url: "http://localhost:4021/orders" },
     accepted: buildRequirements(GATE_CONFIG, "0.0.7162784"),
     payload: { transaction: "AAAA" },
   };

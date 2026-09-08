@@ -38,6 +38,28 @@ Build from `docs/ux-philosophy.md` and `docs/design-system.md`. Copy dictionary 
 two money treatments are binding on camera. Do not add a wallet, seed phrase, or
 requester UI.
 
+## Who signs, and how the key gets here
+
+- The account and, on testnet, the private key come from the **connect screen**, not
+  the environment. `VITE_EXPERT_ACCOUNT_ID` is an optional prefill and nothing more.
+- The key is pasted into a masked field that no password manager treats as a credential
+  (a password field where the masking CSS is missing), wrapped in `SecretKey`
+  (`src/session/secret.ts`), read exactly once by `createWebChain`, and handed to the
+  adapter as a plain string. The holder never enters React state, `localStorage`, an
+  error message, or a log. `scrubHex` redacts anything the adapter says back on the
+  connect path. The adapter P1 returns must keep the key the same way: in a closure or
+  a WeakMap, never as an own property, because the adapter itself does sit in state.
+- Mock mode has no key field. The mock signs nothing, and the mock member of
+  `ExpertConnection` has no key slot, so a key in mock mode cannot be constructed.
+- `ExpertChain` is the slice of `ChainAdapter` the sign path may call: no
+  `signSchedule`, `createSchedule`, `deleteSchedule`, `lockFunds`. Only the mock
+  member of `WebChain` carries the whole adapter, under `mock`, for the stand-ins.
+- Before the key is typed, the app reads `GET /api/v1/accounts/{id}` on the **testnet**
+  mirror node to confirm the account and its curve. Never in mock mode.
+- `vite build` and `vite dev` refuse a `VITE_` variable whose name says secret or whose
+  value is shaped like a private key, before any bundle exists (`vite.config.ts`,
+  `src/chain/secretNames.ts`). The runtime check in `config.ts` is the second line.
+
 ## Sitemap — a funnel, not a dashboard
 
 One spine per order. The failure mode is building an "app" (sidebar, settings, profile,

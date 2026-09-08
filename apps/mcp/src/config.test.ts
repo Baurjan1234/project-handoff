@@ -76,6 +76,28 @@ describe("configFromEnv", () => {
     }
   });
 
+  describe("serviceUrl", () => {
+    it("falls back to this process's own port, which is right for local work", () => {
+      expect(configFromEnv({ ...COMPLETE, PORT: "4099" }).serviceUrl).toBe(
+        "http://localhost:4099",
+      );
+    });
+
+    it("takes HANDOFF_SERVICE_URL when the service is behind a hostname", () => {
+      expect(
+        configFromEnv({ ...COMPLETE, HANDOFF_SERVICE_URL: "https://handoff.example/" })
+          .serviceUrl,
+      ).toBe("https://handoff.example/");
+    });
+
+    it("treats an empty value as unset rather than as an empty URL", () => {
+      // A 402 whose resource is "" names nothing, and the payer echoes it.
+      expect(configFromEnv({ ...COMPLETE, HANDOFF_SERVICE_URL: "  " }).serviceUrl).toBe(
+        "http://localhost:4021",
+      );
+    });
+  });
+
   it("takes no key of any kind out of the environment", () => {
     // This process states a price, asks the facilitator and posts an order.
     // The payer's key lives in the requester and the platform keys live in the
@@ -96,6 +118,7 @@ describe("configFromEnv", () => {
       "port",
       "receiverAccountId",
       "requesterAccountId",
+      "serviceUrl",
     ]);
     expect(JSON.stringify(config)).not.toContain("deadbeef");
   });
