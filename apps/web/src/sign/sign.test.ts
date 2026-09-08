@@ -52,6 +52,7 @@ function harness() {
       log.push("store");
       return store.put(hash, bytes);
     },
+    get: (hash) => store.get(hash),
   };
 
   return { chain, store, content, log };
@@ -84,7 +85,7 @@ describe("signAndPublish", () => {
 
     expect(signed.body).not.toContain("does not foot");
     expect(signed.body).toContain(signed.attestation.notes_hash);
-    expect(new TextDecoder().decode(h.store.get(signed.attestation.notes_hash))).toBe(NOTES);
+    expect(new TextDecoder().decode((await h.store.get(signed.attestation.notes_hash)) ?? undefined)).toBe(NOTES);
     expect(signed.notesRef).toBe(`memory://${signed.attestation.notes_hash}`);
   });
 
@@ -109,6 +110,9 @@ describe("signAndPublish", () => {
     const failing: ContentStore = {
       async put() {
         throw new Error("store down");
+      },
+      async get() {
+        return null;
       },
     };
     await expect(

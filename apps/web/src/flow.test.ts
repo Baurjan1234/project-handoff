@@ -66,6 +66,6 @@ describe("post, claim, sign, settle", () => {
     expect(final.attestation?.transactionId).toBe(signed.transactionId);
     expect(final.payoutTransactionId).toBe(payout.payoutTransactionId);
     expect(final.elapsedMs).toBeGreaterThanOrEqual(6_000);
-    expect(content.get(signed.attestation.notes_hash)).toBeDefined();
+    expect(await content.get(signed.attestation.notes_hash)).not.toBeNull();
   });
 });

@@ -48,6 +48,9 @@ describe("runSign", () => {
       async put() {
         throw new Error("store down");
       },
+      async get() {
+        return null;
+      },
     };
     const chain = webChain(failing);
     const o = outcomes();
