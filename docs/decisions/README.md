@@ -50,3 +50,4 @@ Newest last.
 
 - [P1 signs off on @hiero-ledger/sdk 2.85.0](2026-09-08-p1-signs-off-on-hiero-sdk-2.85.0.md)
 - [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
+- [Platform-key env names live in the app, chain exports a string-taking factory](2026-09-08-platform-key-env-names-live-in-the-app.md) — closes the layout-rule gap the cutover hit
