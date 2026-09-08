@@ -158,6 +158,17 @@ export interface RequesterFundedEscrow {
   buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock>;
 
   /**
+   * Validate the returned bytes, then submit them.
+   *
+   * Resolves only when the escrow is funded. It throws `FundLockError` for
+   * anything the whitelist refuses before submitting, and
+   * `FundLockSubmitError` when the network refuses what was submitted —
+   * `INVALID_SIGNATURE` for a doctored lock, `DUPLICATE_TRANSACTION` for a
+   * replay, and the latter carries the id of the submission that did land.
+   * Without those two being distinguishable a caller cannot tell "escrow
+   * funded" from "submitted and rejected at precheck", which is the difference
+   * between an order to post and an order to refuse.
+   *
    * @param expected what the server asked for, so the validator has something
    * to compare the returned bytes against. Never taken from the bytes.
    * @param signedTransactionBytes base64, as returned by the requester.
@@ -240,5 +251,36 @@ export class FundLockError extends Error {
   constructor(readonly reason: FundLockRejection, message: string) {
     super(message);
     this.name = "FundLockError";
+  }
+}
+
+/**
+ * The lock passed the whitelist and the network refused it anyway.
+ *
+ * Every `FundLockRejection` is decided before submission. This is the other
+ * half, and it has to exist as its own type because the design deliberately
+ * leans on the network for two guarantees the validator cannot provide:
+ *
+ * - **Signature validity.** Not checked locally, on purpose; a doctored lock
+ *   comes back `INVALID_SIGNATURE` with nothing moved.
+ * - **Replay.** Nothing above remembers an in-flight transaction, so the same
+ *   signed bytes submitted twice are refused as `DUPLICATE_TRANSACTION` —
+ *   within the 180-second receipt period, which is why the window is not
+ *   longer than it is.
+ *
+ * `transactionId` is the id the *first* submission got, when the status names
+ * one. On a duplicate that id is the escrow already being funded, so a caller
+ * retrying a paid request can read it back rather than treating the refusal as
+ * a failure. Payout is an idempotent retry and so is this: never double-lock.
+ */
+export class FundLockSubmitError extends Error {
+  constructor(
+    /** The network's response code, verbatim. Never interpreted into a boolean. */
+    readonly status: string,
+    readonly transactionId: string | undefined,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FundLockSubmitError";
   }
 }

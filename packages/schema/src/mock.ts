@@ -15,7 +15,7 @@
  * them and that logic has to be exercised.
  */
 
-import { FundLockError } from "./adapter.js";
+import { FundLockError, FundLockSubmitError } from "./adapter.js";
 import type {
   ChainAdapter,
   ConsensusRef,
@@ -314,6 +314,8 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
   readonly #schedules = new Map<string, MockSchedule>();
   readonly #scheduleKeys = new Map<string, string>();
   readonly #transactions = new Map<string, TransactionRecord>();
+  /** Signed fund-lock bytes to the id they were submitted as. Replay, as the network sees it. */
+  readonly #fundLocks = new Map<string, string>();
 
   constructor(options: MockChainAdapterOptions = {}) {
     this.#now = options.now ?? Date.now;
@@ -421,7 +423,27 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
 
     assertFundLockMatches(transfer, expected, escrowAccountId, this.#now());
 
+    // Nothing above remembers an in-flight transaction — that is the point of
+    // the stateless shape — so replay is the network's to refuse, and it does:
+    // a transaction id resubmitted inside the 180-second receipt period comes
+    // back DUPLICATE_TRANSACTION. Modelled here so a caller written against
+    // this interface meets the case before testnet does.
+    //
+    // Keyed on the signed bytes. Real Hedera keys on payer plus validStart;
+    // `signFundLock` is idempotent, so for the replay this guards the two
+    // agree.
+    const alreadySubmitted = this.#fundLocks.get(signedTransactionBytes);
+    if (alreadySubmitted !== undefined) {
+      throw new FundLockSubmitError(
+        "DUPLICATE_TRANSACTION",
+        alreadySubmitted,
+        `this fund lock was already submitted as ${alreadySubmitted}; the escrow is ` +
+          `funded and locking again would take the requester's money twice`,
+      );
+    }
+
     const transactionId = this.#nextTxId();
+    this.#fundLocks.set(signedTransactionBytes, transactionId);
     this.#record(transactionId, this.#timestamp());
     return { transactionId, escrowAccountId };
   }

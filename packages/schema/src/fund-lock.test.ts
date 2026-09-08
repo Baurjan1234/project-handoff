@@ -111,6 +111,23 @@ describe("submitFundLock accepts exactly one thing", () => {
     expect(await chain.getTransaction(escrow.transactionId)).toMatchObject({ status: "SUCCESS" });
   });
 
+  it("refuses a replay as the network does, and names the id that did land", async () => {
+    // The stateless shape keeps no in-flight map, so replay is the network's
+    // to refuse. A caller retrying a paid request has to be able to tell
+    // "escrow already funded" from "this failed" — the id is how.
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    const first = await chain.submitFundLock(params, signed);
+
+    await expect(chain.submitFundLock(params, signed)).rejects.toMatchObject({
+      name: "FundLockSubmitError",
+      status: "DUPLICATE_TRANSACTION",
+      transactionId: first.transactionId,
+    });
+
+    expect(await chain.getTransaction(first.transactionId)).toMatchObject({ status: "SUCCESS" });
+  });
+
   it("is a no-op to sign twice, so a retrying client cannot corrupt its own bytes", async () => {
     const built = await build();
     const once = signFundLock(built.transactionBytes, REQUESTER);
