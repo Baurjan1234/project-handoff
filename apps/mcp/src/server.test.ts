@@ -53,6 +53,8 @@ function harness(options: { verify?: unknown; settle?: unknown } = {}) {
     chain: new MockChainAdapter(),
     content,
     ordersTopicId: "0.0.orders",
+    attestationsTopicId: "0.0.9002",
+    certTags: [{ code: "cpa-us", label: "Licensed reviewer" }],
     requesterAccountId: "0.0.10376659",
   };
   return { deps, paths, content };
@@ -282,5 +284,110 @@ describe("POST /orders", () => {
     // A free endpoint that reached the chain or the facilitator would be a way
     // around the gate. This one only says the process is up.
     expect(paths).toEqual([]);
+  });
+});
+
+describe("free read paths", () => {
+  it("lists the credential tags without asking for payment", async () => {
+    const { deps, paths } = harness();
+
+    const response = await handle({ method: "GET", path: "/tags", headers: {}, body: "" }, deps);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ tags: [{ code: "cpa-us", label: "Licensed reviewer" }] });
+    // Reads are ungated, so nothing about a payment happened.
+    expect(paths).not.toContain("/verify");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("reads an order back after it posts, still without payment", async () => {
+    const { deps } = harness();
+
+    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+    const orderId = (posted.body as { order_id: string }).order_id;
+
+    const read = await handle(
+      { method: "GET", path: `/orders/${orderId}`, headers: {}, body: "" },
+      deps,
+    );
+
+    expect(read.status).toBe(200);
+    const status = read.body as { state: string; claimReadable: boolean; envelope?: unknown };
+    expect(status.state).toBe("POSTED");
+    expect(status.envelope).toBeDefined();
+    // No claim message shape exists yet, and the reader says so rather than
+    // letting "POSTED" be read as "nobody has taken it".
+    expect(status.claimReadable).toBe(false);
+  });
+
+  it("answers UNKNOWN for an id nothing on the topics matches", async () => {
+    const { deps } = harness();
+
+    const read = await handle(
+      { method: "GET", path: "/orders/ord_nothing", headers: {}, body: "" },
+      deps,
+    );
+
+    expect(read.status).toBe(200);
+    expect((read.body as { state: string }).state).toBe("UNKNOWN");
+  });
+
+  it("returns nothing the topics do not already make public", async () => {
+    const { deps } = harness();
+    const spec = "Review the attached report for arithmetic defects.";
+    const artifact = "FAKE report. Total 11,900.";
+
+    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+    const orderId = (posted.body as { order_id: string }).order_id;
+    const read = await handle(
+      { method: "GET", path: `/orders/${orderId}`, headers: {}, body: "" },
+      deps,
+    );
+
+    // Hard rule 1, on a path that is deliberately unauthenticated.
+    const serialized = JSON.stringify(read.body);
+    expect(serialized).not.toContain(spec);
+    expect(serialized).not.toContain(artifact);
+  });
+});
+
+describe("credential tag routing", () => {
+  it("refuses an unknown tag before the fee settles", async () => {
+    const { deps, paths } = harness();
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ cert_tag: "not-a-tag" })),
+      deps,
+    );
+
+    expect(response.status).toBe(400);
+    const body = response.body as { message: string };
+    expect(body.message).toContain('No reviewer holds the credential "not-a-tag"');
+    expect(body.message).toContain("Available: Licensed reviewer");
+    // The promise the copy makes has to be true: verify ran, settle did not.
+    expect(body.message).toContain("Nothing was charged.");
+    expect(paths).toContain("/verify");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("does not publish an envelope for an unknown tag", async () => {
+    const { deps, content } = harness();
+
+    await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ cert_tag: "not-a-tag" })),
+      deps,
+    );
+
+    expect(content.size).toBe(0);
+  });
+
+  it("states what it charged, so the reply need not send anyone back for it", async () => {
+    const { deps } = harness();
+
+    const response = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+
+    expect((response.body as { service_fee: { amount_tinybars: string } }).service_fee.amount_tinybars).toBe(
+      GATE_CONFIG.feeTinybars,
+    );
   });
 });

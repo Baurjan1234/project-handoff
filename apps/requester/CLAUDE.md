@@ -15,7 +15,10 @@
   programmatic and the key is an ECDSA testnet account.
 - **Never appear in a recording using `MockChainAdapter`.** Mock transaction IDs 404 on
   Hashscan. Real testnet or explicitly labelled a simulation.
-- **Never import the Hedera SDK.** Go through `@handoff/chain`.
+- **Never import the Hedera SDK, and never import `@x402/hedera`.** Go through
+  `@handoff/chain`. The x402 payment is built and partially signed by its `X402Signer`,
+  which this app plugs into the `PaymentSigner` port. Decided in
+  `../../docs/decisions/2026-09-07-x402-signer-lives-in-packages-chain.md`.
 
 Hedera Agent Kit is on the build path here because it pairs naturally with x402, not
 because the prize requires it.
