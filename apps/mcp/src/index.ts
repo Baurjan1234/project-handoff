@@ -8,7 +8,12 @@
  */
 
 import { MockChainAdapter, type ChainAdapter } from "@handoff/schema";
-import { createHederaChainAdapter, loadChainEnv } from "@handoff/chain";
+import {
+  assertOperatorKeyMatches,
+  createHederaChainAdapter,
+  loadChainEnv,
+  type ChainEnv,
+} from "@handoff/chain";
 import { SupabaseContentAdapter, type ContentStoreAdapter } from "@handoff/content";
 import { chainModeFromEnv, configFromEnv, type ChainMode } from "./config.js";
 import { InMemoryContentStore, contentStore, type ContentStore } from "./content.js";
@@ -23,8 +28,8 @@ function required(name: string): string {
   return value;
 }
 
-function chainFromEnv(mode: ChainMode): ChainAdapter {
-  if (mode === "mock") {
+function chainFromEnv(mode: ChainMode, env: ChainEnv | undefined): ChainAdapter {
+  if (mode === "mock" || env === undefined) {
     // Loud on purpose. Mock transaction ids look like MOCK-tx-1 and 404 on
     // Hashscan, and the one failure this project cannot afford is one of them
     // reaching a recording unnoticed.
@@ -44,7 +49,7 @@ function chainFromEnv(mode: ChainMode): ChainAdapter {
   // The factory takes strings so this file needs no Hedera SDK import, which is
   // the repo layout rule. It also leaves `resolveClaimantKey` unset, so this
   // server refuses to publish a claim rather than signing as an expert.
-  return createHederaChainAdapter(loadChainEnv(), {
+  return createHederaChainAdapter(env, {
     escrowAccountId: required("HANDOFF_ESCROW_ACCOUNT_ID"),
     verifierKey: required("HANDOFF_VERIFIER_KEY"),
     scheduleAdminKey: required("HANDOFF_SCHEDULE_ADMIN_KEY"),
@@ -68,11 +73,20 @@ function contentFromEnv(mode: ChainMode): ContentStore {
   return contentStore(adapter);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const config = configFromEnv();
   // Read once. Two reads is how "mock chain with a real content store" happens
   // the day one branch drifts from the other.
   const mode = chainModeFromEnv();
+
+  // Before anything listens. A raw hex key carries no curve, so it is read as
+  // ECDSA by default, and a wrong choice is a valid key for a different
+  // account — every transaction then fails INVALID_SIGNATURE, which names the
+  // signature and nothing else. Cheaper to refuse to start.
+  const env = mode === "testnet" ? loadChainEnv() : undefined;
+  if (env !== undefined) {
+    await assertOperatorKeyMatches(env);
+  }
 
   const server = createHttpServer(
     {
@@ -83,7 +97,7 @@ function main(): void {
         feeTinybars: config.feeTinybars,
         serviceUrl: config.serviceUrl,
       },
-      chain: chainFromEnv(mode),
+      chain: chainFromEnv(mode, env),
       content: contentFromEnv(mode),
       ordersTopicId: config.ordersTopicId,
       attestationsTopicId: config.attestationsTopicId,
@@ -109,4 +123,4 @@ function main(): void {
   }
 }
 
-main();
+await main();

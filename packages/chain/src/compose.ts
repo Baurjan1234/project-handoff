@@ -98,3 +98,52 @@ export function createX402Signer(config: X402SignerStrings): X402Signer {
     maxAmountTinybars: config.maxAmountTinybars,
   });
 }
+
+/**
+ * Prove the operator key actually controls the operator account.
+ *
+ * A raw hex key names no curve, so `parseOperatorKey` has to choose one, and a
+ * wrong choice produces a valid key for a different account. Every transaction
+ * then fails `INVALID_SIGNATURE` — an error that names the signature, never the
+ * curve, the variable or the file. Both directions of that mistake are silent,
+ * and this is what makes them loud.
+ *
+ * Compares the derived public key with the one the mirror node reports. A
+ * mismatch is provable and throws with the fix in the message. An unreachable
+ * mirror node does **not** throw: being unable to check is not evidence of a
+ * problem, and refusing to start on a mirror outage would be a worse failure
+ * than the one this prevents.
+ */
+export async function assertOperatorKeyMatches(
+  env: ChainEnv,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const url = `${env.mirrorNodeUrl.replace(/\/+$/, "")}/accounts/${env.operatorId.toString()}?transactions=false`;
+
+  let onChain: string | undefined;
+  try {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(5_000) });
+    if (!response.ok) return;
+    const body = (await response.json()) as { key?: { key?: unknown; _type?: unknown } };
+    onChain = typeof body.key?.key === "string" ? body.key.key : undefined;
+  } catch {
+    return;
+  }
+
+  // A threshold or KeyList account reports ProtobufEncoded rather than a bare
+  // public key. Nothing to compare, and an operator with a complex key is
+  // somebody who knows what they are doing.
+  if (onChain === undefined) return;
+
+  const derived = env.operatorKey.publicKey.toStringRaw();
+  if (derived === onChain) return;
+
+  throw new Error(
+    `HEDERA_PRIVATE_KEY does not control HEDERA_ACCOUNT_ID ${env.operatorId.toString()}.\n` +
+      `  the account's key on chain: ${onChain}\n` +
+      `  this key derives:           ${derived}\n` +
+      `A raw hex key carries no curve and is read as ECDSA by default. If this account ` +
+      `was made with the portal's default, set HEDERA_KEY_TYPE=ED25519. If the key ` +
+      `simply belongs to another account, fix the pair — nothing will sign until you do.`,
+  );
+}
