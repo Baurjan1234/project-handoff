@@ -25,8 +25,7 @@ const REQUIREMENTS: PaymentRequirements = {
 
 const PAYLOAD: PaymentPayload = {
   x402Version: 2,
-  scheme: "exact",
-  network: "hedera:testnet",
+  resource: { url: "http://localhost:4021/orders" },
   accepted: REQUIREMENTS,
   payload: { transaction: "AAAA" },
 };
