@@ -3,10 +3,15 @@
  *
  * Two things are deliberately absent. There is no fee default: the per-call
  * price is ratified once and never changed on camera, and a default here would
- * be copied into a demo before anybody decided it. And there is no private key
- * of any kind — this process states a price, asks the facilitator and posts an
- * order; the payer's key lives in the requester and the platform keys live
- * server-side in the chain package.
+ * be copied into a demo before anybody decided it. And no key of any kind
+ * passes through this file, which is what the test at the bottom of
+ * config.test.ts asserts.
+ *
+ * That is a claim about this file, not about the process. On
+ * `HANDOFF_CHAIN=testnet` the composition root in index.ts does read the two
+ * vault-only platform keys and the operator key, and hands them straight to
+ * `createHederaChainAdapter` without logging them or putting them in this
+ * config object. The payer's key is not among them — it lives in the requester.
  */
 
 import type { X402Network } from "./x402/types.js";
