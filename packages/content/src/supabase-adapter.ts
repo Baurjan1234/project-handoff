@@ -44,6 +44,16 @@ export class SupabaseContentAdapter implements ContentStoreAdapter {
     return { contentHash: hash, storageKey: hash };
   }
 
+  async get(storageKey: string): Promise<Buffer> {
+    const { data, error } = await this.client.storage.from(this.config.bucket).download(storageKey);
+
+    if (error || !data) {
+      throw new ContentStoreError(`Supabase download failed for ${storageKey}: ${error?.message ?? "no data returned"}`);
+    }
+
+    return Buffer.from(await data.arrayBuffer());
+  }
+
   async getSignedUrl(storageKey: string, ttlSeconds: number): Promise<string> {
     const { data, error } = await this.client.storage.from(this.config.bucket).createSignedUrl(storageKey, ttlSeconds);
 

@@ -10,6 +10,12 @@ export interface ContentStoreAdapter {
   /** Stores content, returns its hash (the value that goes on-chain) and a storage key. */
   put(content: Buffer): Promise<{ contentHash: string; storageKey: string }>;
   /**
+   * The raw bytes back. Prefer `readVerifiedByHash` over calling this directly for
+   * anything whose hash is published on-chain — it's the primitive, not the read a
+   * caller should reach for.
+   */
+  get(storageKey: string): Promise<Buffer>;
+  /**
    * A signed, time-limited URL for reading the content back. TTL must exceed
    * claim-timeout + review time — enforce that at the call site with
    * assertSignedUrlTtlSufficient below, since this interface doesn't know the
@@ -23,6 +29,45 @@ export class ContentStoreError extends Error {
     super(message);
     this.name = "ContentStoreError";
   }
+}
+
+/** The stored bytes don't hash to the hash they were asked for. Never return them anyway. */
+export class ContentHashMismatchError extends ContentStoreError {
+  constructor(
+    readonly expectedHash: string,
+    readonly actualHash: string,
+  ) {
+    super(
+      `content does not match its hash: asked for ${expectedHash}, stored bytes hash to ${actualHash}. ` +
+        `Refusing to return content that doesn't match the on-chain commitment.`,
+    );
+    this.name = "ContentHashMismatchError";
+  }
+}
+
+/**
+ * The hash-verified read (NAS-37, decided in
+ * ../../../docs/decisions/2026-09-07-notes-read-lives-in-content-package.md): fetch by
+ * the hash that was published on-chain, recompute it from the bytes that came back,
+ * and hand those bytes over only if the two agree.
+ *
+ * Returns bytes, not a signed URL — the close reply inlines the expert's notes, and
+ * notes are small. Signed URLs stay for artifacts.
+ *
+ * This is a free function rather than an adapter method on purpose: the verification
+ * is not something a caller can forget or an adapter can implement slightly
+ * differently. Hashing itself lives in `@handoff/schema` so two implementations
+ * agree; this only verifies with it.
+ */
+export async function readVerifiedByHash(adapter: ContentStoreAdapter, expectedHash: string): Promise<Buffer> {
+  const bytes = await adapter.get(expectedHash);
+  const actualHash = sha256Hex(bytes);
+
+  if (actualHash !== expectedHash) {
+    throw new ContentHashMismatchError(expectedHash, actualHash);
+  }
+
+  return bytes;
 }
 
 /**
@@ -54,6 +99,14 @@ export class LocalDevContentAdapter implements ContentStoreAdapter {
     return { contentHash: hash, storageKey: hash };
   }
 
+  async get(storageKey: string): Promise<Buffer> {
+    try {
+      return await readFile(join(this.rootDir, storageKey));
+    } catch {
+      throw new ContentStoreError(`no content stored under key ${storageKey}`);
+    }
+  }
+
   async getSignedUrl(storageKey: string): Promise<string> {
     const filePath = join(this.rootDir, storageKey);
     await readFile(filePath); // throws if missing, mirroring a real adapter's 404
@@ -76,11 +129,24 @@ export class InMemoryContentAdapter implements ContentStoreAdapter {
     return { contentHash: hash, storageKey: hash };
   }
 
+  async get(storageKey: string): Promise<Buffer> {
+    const bytes = this.#store.get(storageKey);
+    if (!bytes) {
+      throw new ContentStoreError(`no content stored under key ${storageKey}`);
+    }
+    return bytes;
+  }
+
   async getSignedUrl(storageKey: string): Promise<string> {
     if (!this.#store.has(storageKey)) {
       throw new ContentStoreError(`no content stored under key ${storageKey}`);
     }
     return `memory://${storageKey}`;
+  }
+
+  /** Test-only: plant bytes under a key they do NOT hash to, so the verified read's refusal can be tested. */
+  putRaw(storageKey: string, content: Buffer): void {
+    this.#store.set(storageKey, content);
   }
 
   /** Test-only escape hatch — reads the bytes back directly, no signed-URL indirection. */

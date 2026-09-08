@@ -2,7 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSignedUrlTtlSufficient, ContentStoreError, InMemoryContentAdapter, LocalDevContentAdapter } from "./adapter.js";
+import {
+  assertSignedUrlTtlSufficient,
+  ContentHashMismatchError,
+  ContentStoreError,
+  InMemoryContentAdapter,
+  LocalDevContentAdapter,
+  readVerifiedByHash,
+} from "./adapter.js";
 
 describe("LocalDevContentAdapter", () => {
   it("round-trips put -> signed URL -> read, hash is bare hex", async () => {
@@ -77,5 +84,40 @@ describe("assertSignedUrlTtlSufficient", () => {
   it("throws exactly at the boundary minus one second", () => {
     expect(() => assertSignedUrlTtlSufficient(2699, 900, 1800)).toThrow(ContentStoreError);
     expect(() => assertSignedUrlTtlSufficient(2700, 900, 1800)).not.toThrow();
+  });
+});
+
+describe("readVerifiedByHash", () => {
+  it("returns the bytes when the stored content hashes to the hash asked for", async () => {
+    const adapter = new InMemoryContentAdapter();
+    const notes = Buffer.from("The filing is missing the 2024 annex. Otherwise sound.");
+    const { contentHash } = await adapter.put(notes);
+
+    const verified = await readVerifiedByHash(adapter, contentHash);
+    expect(verified).toEqual(notes);
+  });
+
+  it("refuses when the stored bytes do not hash to the hash asked for", async () => {
+    const adapter = new InMemoryContentAdapter();
+    const honest = Buffer.from("what the expert actually wrote");
+    const { contentHash } = await adapter.put(honest);
+
+    // Someone swapped the bytes behind the hash that went on-chain.
+    adapter.putRaw(contentHash, Buffer.from("tampered notes"));
+
+    await expect(readVerifiedByHash(adapter, contentHash)).rejects.toThrow(ContentHashMismatchError);
+  });
+
+  it("names both hashes in the mismatch error, so a debugger can see which is which", async () => {
+    const adapter = new InMemoryContentAdapter();
+    const { contentHash } = await adapter.put(Buffer.from("original"));
+    adapter.putRaw(contentHash, Buffer.from("swapped"));
+
+    await expect(readVerifiedByHash(adapter, contentHash)).rejects.toThrow(/asked for [0-9a-f]{64}, stored bytes hash to [0-9a-f]{64}/);
+  });
+
+  it("propagates a missing-content error rather than reporting a hash mismatch", async () => {
+    const adapter = new InMemoryContentAdapter();
+    await expect(readVerifiedByHash(adapter, "0".repeat(64))).rejects.toThrow(/no content stored/);
   });
 });
