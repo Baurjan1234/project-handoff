@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { FundLockError, type LockFundsParams } from "./adapter.js";
+import { formatTinybars, parseTinybars } from "./money.js";
 import {
   FUND_LOCK_VALID_SECONDS,
   MOCK_ESCROW_ACCOUNT_ID,
@@ -81,10 +82,31 @@ describe("buildFundLock", () => {
     expect(other.memo).toBe("order-2");
   });
 
+  it("refuses to build a lock whose order id will not fit the memo", async () => {
+    // Byte length, not string length: `String.length` counts UTF-16 code
+    // units, so a memo of 60 multi-byte characters passes a naive check and
+    // fails at precheck as MEMO_TOO_LONG.
+    await expect(chain.buildFundLock({ ...params, orderId: "a".repeat(101) })).rejects.toMatchObject({
+      name: "FundLockError",
+      reason: "wrong-order",
+    });
+    await expect(chain.buildFundLock({ ...params, orderId: "ө".repeat(60) })).rejects.toMatchObject({
+      reason: "wrong-order",
+    });
+
+    // 100 bytes exactly is the bound, not one under it.
+    await expect(chain.buildFundLock({ ...params, orderId: "a".repeat(100) })).resolves.toMatchObject({
+      memo: "a".repeat(100),
+    });
+  });
+
   it("writes legs that net to zero, the way a transfer has to", async () => {
     const built = await build();
+    // `parseTinybars`, not `BigInt`. The money module is the only thing that
+    // converts, and a test that hand-rolls the conversion is a test that can
+    // agree with a bug the module would have refused.
     const total = legsOf(built.transactionBytes).reduce(
-      (sum, leg) => sum + BigInt(leg.amountTinybars),
+      (sum, leg) => sum + parseTinybars(leg.amountTinybars),
       0n,
     );
     expect(total).toBe(0n);
@@ -219,7 +241,10 @@ describe("submitFundLock refuses everything else", () => {
 
     const withRider = tamper(signed, {
       transfers: [
-        { accountId: debit.accountId, amountTinybars: `${BigInt(debit.amountTinybars) - 500n}` },
+        {
+          accountId: debit.accountId,
+          amountTinybars: formatTinybars(parseTinybars(debit.amountTinybars) - 500n),
+        },
         credit,
         { accountId: "0.0.9999", amountTinybars: "500" },
       ],
