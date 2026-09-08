@@ -1,0 +1,18 @@
+FAKE DOCUMENT — fabricated for the Handoff demo. No real company, no real
+contract, no real opinion. FAKE.
+
+Clause 7.2 (FAKE) — Service credits
+  If monthly availability falls below 99.5%, the Vendor issues a credit
+  of 5% of the monthly fee for each full percentage point below target,
+  capped at 25%.
+
+Clause 7.3 (FAKE) — Measurement
+  Availability is measured by the Vendor's own monitoring. The Customer
+  has no right to audit the measurement.
+
+Clause 7.4 (FAKE) — Exclusions
+  Scheduled maintenance, third-party outages, and "events reasonably
+  outside the Vendor's control" are excluded from the calculation.
+
+Note (FAKE): clause 7.3 exists so a reviewer has something to find. This
+document exists only for a demo recording.

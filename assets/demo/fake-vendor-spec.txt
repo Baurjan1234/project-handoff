@@ -1,0 +1,7 @@
+FAKE — demo fixture for the Handoff project, not a real engagement.
+
+Task (FAKE): review the attached FAKE service-credit clauses (7.2 to 7.4)
+and say whether the customer can actually collect a credit under them.
+Return a verdict with defect codes and written notes.
+
+No real company, no real contract, no real opinion. FAKE.
