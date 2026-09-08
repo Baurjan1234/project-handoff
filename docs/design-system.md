@@ -135,6 +135,16 @@ caught each one leaking: “attestation” (say *verdict published*), “consens
 (say *the network’s clock decides*), “mirror node” (say *waiting for the network to
 confirm*), “schema” (say *format check*), “bytes” (say *characters*), “fresh schedule.”
 
+**Two rules that override any string above.** First, **copy claims no check that did not
+run.** “Certified” is banned on the requester’s surface until a registry check exists
+(NAS-27): the attestations topic has no submit key on purpose, the expert signs from
+their own account, and the registry is not live, so any account can publish an
+attestation-shaped message naming someone else’s order. Say what was claimed and what
+was checked, never that a credential was verified. The strings return to “certified”
+the day the check runs, and not before. Second, **every time carries a zone.** The
+requester is not promised to be in UTC, so MCP replies render “18:00 UTC”; the expert
+app may render local time, with the zone shown once on the screen.
+
 ---
 
 ## Proof row (component)
@@ -170,7 +180,7 @@ One primary action. Build the exits even if they are not filmed.
 **Need:** “Here is paid work I am qualified for.”
 
 - Row: what the work is (title), one line of what the requester is asking, **100 HBAR**
-  (escrow treatment), **two clocks side by side** — “Open until 18:00” and “30 min to sign
+  (escrow treatment), **two clocks side by side** — “Open until 18:00 UTC” and “30 min to sign
   after you claim” — document length, cert tag as a plain pill (“Licensed reviewer”),
   status sentence. A reviewer decides on three facts: what it is, how big it is, how long
   they have. Give all three before Claim.
@@ -309,7 +319,7 @@ automatically from the configured account.”
 ```
 To post this order there is a service fee of 0.5 HBAR.
 That fee is a charge to place the order, not the price of the review.
-The review itself holds 100 HBAR in escrow until a certified reviewer signs.
+The review itself holds 100 HBAR in escrow until a reviewer signs.
 ```
 
 After pay: **proof row for the fee** — “Service fee settled · 0.5 HBAR” — one of the four
@@ -329,7 +339,7 @@ No reviewer holds the credential “X”. Available: Licensed reviewer. Nothing 
 ```
 Order posted · #{order_id}
 100 HBAR locked in escrow for the review.
-It pays the reviewer when they sign, whatever the verdict. If nobody claims it by 18:00, it returns to you.
+It pays the reviewer when they sign, whatever the verdict. If nobody claims it by 18:00 UTC, it returns to you.
 Visible to reviewers holding: Licensed reviewer. Cannot be cancelled once posted.
 ```
 
@@ -344,12 +354,16 @@ reads are ungated. An open loop with no way to close it is exactly what makes pe
 the agent (Zeigarnik).
 
 ```
-Posted · waiting for a certified reviewer. Open until 18:00.
+Posted · waiting for a Licensed reviewer. Open until 18:00 UTC.
 ```
 then, once claimed:
 ```
-Claimed by a certified reviewer (account 0.0.x) · under review · sign by 18:12.
+Claimed by account 0.0.x · under review · sign by 18:12 UTC.
 ```
+
+The claimed line needs an on-wire claim message, which the schema does not have yet.
+Until the claim envelope ships (P4, tracked on the board), status goes from Posted to
+Signed and must not invent the middle state.
 
 **Beat 10 — close.** The reasons come first, the money second, the slogan last where it
 has earned its place. Without the reasons, “you bought a judgment” reads as “no refunds”
@@ -359,9 +373,14 @@ at the exact moment the requester is least receptive.
 Verdict: Reject
 Defects: NO_MONITORING, TOKEN_ROTATION_UNDOC
 Reviewer’s notes: [inline text from the content store]
-Signed by a Licensed reviewer, account 0.0.x · Published forever
+Signed by account 0.0.x · published forever
+Credential claimed: Licensed reviewer. Not checked against a registry in this build.
 The 100 HBAR held in escrow was paid to the reviewer. A reject is a delivered judgment.
 ```
+
+The two signer lines are the honest form while the registry is not live (see the two
+rules under the copy dictionary). When NAS-27 ships a real check, they collapse back to
+“Signed by a Licensed reviewer, account 0.0.x · published forever”.
 
 “The 100 HBAR held in escrow was paid” — never “was paid 100 HBAR” — or the close reads as
 a second 100 leaving. Proof row for settlement.
