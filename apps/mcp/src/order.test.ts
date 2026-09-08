@@ -47,6 +47,11 @@ class RecordingAdapter implements ChainAdapter {
     return this.inner.readMessages(...args);
   }
 
+  async publishClaim(...args: Parameters<ChainAdapter["publishClaim"]>) {
+    this.calls.push("publishClaim");
+    return this.inner.publishClaim(...args);
+  }
+
   async lockFunds(params: LockFundsParams): Promise<EscrowRef> {
     this.calls.push("lockFunds");
     return this.inner.lockFunds(params);
