@@ -9,7 +9,12 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { FundLockError, type LockFundsParams } from "./adapter.js";
-import { FUND_LOCK_VALID_SECONDS, MockChainAdapter, signFundLock } from "./mock.js";
+import {
+  FUND_LOCK_VALID_SECONDS,
+  MOCK_ESCROW_ACCOUNT_ID,
+  MockChainAdapter,
+  signFundLock,
+} from "./mock.js";
 
 const REQUESTER = "0.0.4004";
 const START = 1_757_000_000_000;
@@ -64,6 +69,16 @@ describe("buildFundLock", () => {
       { accountId: REQUESTER, amountTinybars: `-${params.amountTinybars}` },
       { accountId: built.escrowAccountId, amountTinybars: params.amountTinybars },
     ]);
+  });
+
+  it("credits the one shared escrow and binds the lock with the memo instead", async () => {
+    const built = await build();
+    const other = await chain.buildFundLock({ ...params, orderId: "order-2" });
+
+    expect(built.escrowAccountId).toBe(MOCK_ESCROW_ACCOUNT_ID);
+    expect(other.escrowAccountId).toBe(built.escrowAccountId);
+    expect(built.memo).toBe(params.orderId);
+    expect(other.memo).toBe("order-2");
   });
 
   it("writes legs that net to zero, the way a transfer has to", async () => {
@@ -161,6 +176,19 @@ describe("submitFundLock refuses everything else", () => {
     const built = await build();
     const signed = signFundLock(built.transactionBytes, REQUESTER);
     await rejects(tamperLeg(signed, 0, { accountId: "0.0.9999" }), "wrong-debited-account");
+  });
+
+  it("refuses a lock built for a different order, which one shared escrow makes possible", async () => {
+    // Same requester, same price, one escrow — so without the memo these bytes
+    // are indistinguishable from the ones this order asked for.
+    const built = await chain.buildFundLock({ ...params, orderId: "order-2" });
+    await rejects(signFundLock(built.transactionBytes, REQUESTER), "wrong-order");
+  });
+
+  it("refuses a re-memoed lock, so the binding is not just advisory", async () => {
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+    await rejects(tamper(signed, { memo: "order-2" }), "wrong-order");
   });
 
   it("refuses a third leg — the attack a from/to pair could not even express", async () => {

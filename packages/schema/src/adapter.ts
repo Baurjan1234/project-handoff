@@ -170,6 +170,25 @@ export interface UnsignedFundLock {
   /** base64 protobuf of the frozen, unsigned transfer. */
   readonly transactionBytes: string;
   /**
+   * The transaction memo, which carries `order_id` and is what binds this lock
+   * to one order.
+   *
+   * Without it the whitelist collapses to (requester, price, the one shared
+   * escrow) — see
+   * `docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md` — and
+   * two orders at the same price from the same requester are satisfied by the
+   * same bytes. The memo is inside the signed body, so a caller cannot move it
+   * to another order without invalidating the signature.
+   *
+   * **This settles the open `orderId` question in favour of minting the id on
+   * the first POST and echoing it through the 402.** `buildFundLock` cannot
+   * take an optional order id and still bind anything.
+   *
+   * Hedera caps a transaction memo at 100 bytes (`MEMO_TOO_LONG`); an
+   * `ord_`-prefixed uuid is 36, so this fits with room to spare.
+   */
+  readonly memo: string;
+  /**
    * UTC instant, second precision, `Z` only. A frozen Hedera transaction stops
    * being submittable at `validStart + validDuration`, so the server can hand
    * back a fresh challenge instead of burning a round trip on
@@ -194,6 +213,14 @@ export type FundLockRejection =
   | "wrong-signer"
   | "wrong-fee-payer"
   | "extra-transfers"
+  /**
+   * The memo does not carry this order's id.
+   *
+   * The escrow is one shared account, so without this nothing binds a lock to
+   * an order: two orders at the same price from the same requester are
+   * satisfied by the same bytes. See `UnsignedFundLock.memo`.
+   */
+  | "wrong-order"
   | "unsigned"
   /** The window has already closed. Rebuild; nothing is wrong with the caller. */
   | "expired"

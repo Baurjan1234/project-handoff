@@ -77,10 +77,18 @@ re-challenges instead of burning a round trip on `TRANSACTION_EXPIRED`.
   stamp every order with one configured requester; the paid retry asserts the x402 payer
   equals the body's requester. Preflight's balance check includes the order value, not
   just the fee. The MCP client signs the returned bytes.
-- **An open question the accepted shape has to close.** `buildFundLock` takes
+- **~~An open question the accepted shape has to close.~~ Closed: the id is minted on the
+  first POST and echoed through the 402 extension.** `buildFundLock` takes
   `LockFundsParams`, which requires an `orderId` that does not exist at 402 time —
-  `apps/mcp/src/order.ts` mints it on the paid call. Either the id is minted on the first
-  POST and echoed through the 402 extension, or the build params drop it.
+  `apps/mcp/src/order.ts` mints it on the paid call. Dropping it from the build params
+  was the alternative, and it is not available: the escrow is **one shared account**
+  (`2026-09-07-one-shared-escrow-account-this-week.md`), so the credited account binds a
+  lock to nothing, and without the order id the whitelist reduces to (requester, price,
+  that one escrow) — two orders at the same price from the same requester are then
+  satisfied by the same bytes. The binding is the **transaction memo**, which carries
+  `order_id` and sits inside the signed body, so it cannot be moved to another order
+  without invalidating the signature. Hedera caps a memo at 100 bytes; an
+  `ord_`-prefixed uuid is 36.
 - **The "locked but not posted" window moves, it does not close.** If the envelope fails
   after the lock lands, the requester has funds in escrow and no order. `TIMEOUT` returns
   them at the deadline, so demo deadlines must be hours rather than days.

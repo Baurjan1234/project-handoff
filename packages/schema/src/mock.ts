@@ -67,9 +67,23 @@ interface FakeTransfer {
   readonly kind: string;
   readonly feePayer: string;
   readonly transfers: readonly FakeHbarTransfer[];
+  /** Carries `order_id`. The only thing binding a lock to one order. */
+  readonly memo: string;
   readonly validUntil: string;
   readonly signedBy: readonly string[];
 }
+
+/**
+ * The one escrow account, as decided in
+ * `docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`.
+ *
+ * A per-order account was easier to write and made the whitelist look
+ * stronger than it is: `to` matching `MOCK-escrow-${orderId}` bound the lock
+ * to an order for free, and the real adapter credits one constant account, so
+ * that binding does not exist there. The memo does it instead, here and in the
+ * real adapter both.
+ */
+export const MOCK_ESCROW_ACCOUNT_ID = "MOCK-escrow-shared";
 
 function utcSecondsFrom(epochMillis: number): string {
   return `${new Date(Math.floor(epochMillis / 1000) * 1000).toISOString().slice(0, 19)}Z`;
@@ -93,6 +107,7 @@ function isFakeTransfer(value: unknown): value is FakeTransfer {
     typeof candidate["feePayer"] === "string" &&
     Array.isArray(candidate["transfers"]) &&
     candidate["transfers"].every(isHbarTransfer) &&
+    typeof candidate["memo"] === "string" &&
     typeof candidate["validUntil"] === "string" &&
     Array.isArray(candidate["signedBy"]) &&
     candidate["signedBy"].every((entry) => typeof entry === "string")
@@ -157,6 +172,16 @@ function assertFundLockMatches(
 ): void {
   if (transfer.kind !== "transfer") {
     throw new FundLockError("not-a-transfer", `expected a transfer, got ${transfer.kind}`);
+  }
+
+  // Before the money checks, because the escrow is one shared account: without
+  // this, (requester, price, escrow) is the whole whitelist and a lock built
+  // for one order satisfies any other order at the same price.
+  if (transfer.memo !== expected.orderId) {
+    throw new FundLockError(
+      "wrong-order",
+      `the fund lock is memoed ${JSON.stringify(transfer.memo)}, not order ${expected.orderId}`,
+    );
   }
 
   // Parse every leg before classifying any of them. `expected` is ours, so it
@@ -364,10 +389,11 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
    */
   async buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock> {
     const validUntil = utcSecondsFrom(this.#now() + FUND_LOCK_VALID_SECONDS * 1000);
-    const escrowAccountId = `MOCK-escrow-${params.orderId}`;
+    const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
 
     return {
       escrowAccountId,
+      memo: params.orderId,
       transactionBytes: encodeFakeTransfer({
         kind: "transfer",
         feePayer: params.requesterAccountId,
@@ -378,6 +404,7 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
           },
           { accountId: escrowAccountId, amountTinybars: params.amountTinybars },
         ],
+        memo: params.orderId,
         validUntil,
         signedBy: [],
       }),
@@ -389,7 +416,7 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
     expected: LockFundsParams,
     signedTransactionBytes: string,
   ): Promise<EscrowRef> {
-    const escrowAccountId = `MOCK-escrow-${expected.orderId}`;
+    const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
     const transfer = decodeFakeTransfer(signedTransactionBytes);
 
     assertFundLockMatches(transfer, expected, escrowAccountId, this.#now());
