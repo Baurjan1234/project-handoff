@@ -101,6 +101,25 @@ export function signFundLock(transactionBytes: string, signerAccountId: string):
 }
 
 /**
+ * A tinybar figure read out of the returned bytes.
+ *
+ * The money module is right to throw on a string that is not a tinybar
+ * integer, but a `MoneyError` out of the whitelist is a tamper that arrives at
+ * the caller as something other than a `FundLockError` — no `reason`, nothing
+ * to map to a 400. Untrusted input gets the refusal it earned instead.
+ */
+function claimedTinybars(value: string): bigint {
+  try {
+    return parseTinybars(value);
+  } catch {
+    throw new FundLockError(
+      "wrong-amount",
+      `the transfer's amount ${JSON.stringify(value)} is not a tinybar figure`,
+    );
+  }
+}
+
+/**
  * The whitelist. Everything the returned bytes are allowed to be, checked
  * against what the server asked for — never against what the bytes claim.
  *
@@ -134,7 +153,13 @@ function assertFundLockMatches(
       `the credited account is ${transfer.to}, not the escrow ${escrowAccountId}`,
     );
   }
-  if (parseTinybars(transfer.amountTinybars) !== parseTinybars(expected.amountTinybars)) {
+  // `expected` is ours, so it parses or the caller has a bug. The transfer's
+  // figure came back over the wire and is a string only — "abc", "1e9",
+  // "010000000000" and a 20-digit value all satisfy `isFakeTransfer` and all
+  // make the money module throw. A MoneyError escaping here is a tamper that
+  // reaches a handler as an unmapped 500 with no reason on it, which is
+  // exactly the case this whitelist exists to name.
+  if (claimedTinybars(transfer.amountTinybars) !== parseTinybars(expected.amountTinybars)) {
     throw new FundLockError(
       "wrong-amount",
       `the transfer moves ${transfer.amountTinybars} tinybars, not the ${expected.amountTinybars} the order is priced at`,

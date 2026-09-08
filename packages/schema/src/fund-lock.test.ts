@@ -103,6 +103,18 @@ describe("submitFundLock refuses everything else", () => {
     await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { amountTinybars: "1" }), "wrong-amount");
   });
 
+  it("refuses an amount that is not a figure, as a FundLockError and not a MoneyError", async () => {
+    // Each of these is a string, so it satisfies the shape check and reaches
+    // the money module. Escaping as a MoneyError would leave a handler with
+    // no `reason` to map, for exactly the tamper the whitelist is here for.
+    const built = await build();
+    const signed = signFundLock(built.transactionBytes, REQUESTER);
+
+    for (const amountTinybars of ["abc", "1e9", "010000000000", "99999999999999999999", ""]) {
+      await rejects(tamper(signed, { amountTinybars }), "wrong-amount");
+    }
+  });
+
   it("refuses a redirected credit — the caller cannot pay themselves instead of the escrow", async () => {
     const built = await build();
     await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { to: "0.0.9999" }), "wrong-escrow-account");
