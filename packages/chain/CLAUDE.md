@@ -5,7 +5,8 @@
 ## What this package owns
 
 - The escrow account and its 2-of-3 threshold key.
-- `ScheduleCreate`, `ScheduleSign`, `ScheduleDelete`, and the early-execute path.
+- The early-execute payout path — **not** via `ScheduleCreate`/`ScheduleSign`/
+  `ScheduleDelete` as of 2026-09-08; see the callout below.
 - HCS topics: creation, message submission, and the submit-key decision per topic.
 - Mirror-node reads for settlement state.
 - The real `ChainAdapter`, implementing the same interface as `MockChainAdapter`.
@@ -21,19 +22,42 @@
 - **Never touch mainnet.** Not an endpoint, not an account ID, not in a comment.
 - Never let a platform key reach a browser build. This package is server-side only.
 
-## Settled facts, verified, do not re-derive
+## `ScheduleCreate` does not work for this escrow — read before touching payout
 
-- **`ScheduleCreate` needs a fully formed inner transaction**, so the payee must be
-  known. Schedule at claim, not at post. See
-  `../../docs/research/hedera-primitives-verified.md`.
-- **`adminKey` is required**, or the schedule is immutable and both the claim-timeout
-  path and the violation clawback become impossible.
-- **`waitForExpiry` defaults to false**, which already is early-execute. Do not build a
-  second mechanism.
-- **`IDENTICAL_SCHEDULE_ALREADY_CREATED` returns the existing schedule ID.** That is the
-  idempotency primitive behind never double-paying.
+**`ScheduleCreateTransaction` rejects any transaction that debits a `KeyList`
+(threshold) account with `INVALID_SIGNATURE`** — verified on real testnet, 8
+isolated runs, root cause not found even after a `hedera-docs` search. Full
+writeup: `../../docs/research/schedule-create-keylist-blocker.md`. **Do not
+re-introduce `ScheduleCreateTransaction`/`ScheduleSignTransaction` into
+`HederaChainAdapter` without re-reading that file first** — `schedule.ts` still
+contains that implementation, unused, kept only in case Hedera's team confirms a
+fix or a missing construction detail later.
+
+**What runs instead, as of 2026-09-08** (`pending-payout.ts` + `direct-payout.ts`,
+decision: `../../docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md`):
+`createSchedule` tracks the payout's parameters locally, no chain call.
+`signSchedule` builds one `TransferTransaction` debiting escrow and co-signs it with
+**both** the verifier and schedule-admin keys in the same call, submitting it
+directly — real money movement, verified end to end against testnet
+(`scripts/live-happy-path.ts`). This works because both platform keys already live
+in the same trusted process (Known limits) — Hedera's Schedule Service solves a
+problem (signers acting at different times, different processes) we don't have.
+
+Facts that still hold regardless of which mechanism executes the payout:
+
+- **The payee must be known before payout can be built** — schedule (record) at
+  claim, not at post. See `../../docs/research/hedera-primitives-verified.md`.
 - **Topic submit keys differ by topic.** Orders and attestations have none, because
   experts submit from their own accounts. The registry has one.
+- **Idempotency is still guaranteed, just locally now.** `derivePendingPayoutId`
+  hashes the payout's params deterministically — identical params always resolve to
+  the identical id, mirroring what `IDENTICAL_SCHEDULE_ALREADY_CREATED` gave us for
+  free from the network. `signSchedule` on an already-executed payout returns
+  success without re-submitting; never double-pay still holds.
+- **New honest limitation:** pending-payout state is in-memory, per-process. A
+  restart between `createSchedule` and `signSchedule` loses that bookkeeping.
+  Fine for today's demo (one session, no restart); needs a durable backing store
+  before it's more than that.
 
 ## The cutover
 
