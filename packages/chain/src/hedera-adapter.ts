@@ -31,10 +31,14 @@ import { PendingPayoutStore } from "./pending-payout.js";
  * external ChainAdapter contract is unchanged, only the internals. See
  * docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md.
  *
- * **Open question, flagged rather than silently decided**: this class assumes ONE
- * escrow account, provisioned once out of band (escrow.ts's createEscrowAccount, run
- * separately — not by this class), not a fresh account per order. `lockFunds` only
- * transfers into it and always returns the same `escrowAccountId`.
+ * **One shared escrow account — settled, no longer an open question.** Provisioned
+ * once out of band (escrow.ts's createEscrowAccount, run separately, not by this
+ * class); every order locks funds into it, so `lockFunds` is a plain transfer in and
+ * always returns the same `escrowAccountId`. Per-order escrow (with the requester's
+ * own public key genuinely in the KeyList) is roadmap, not this week — see
+ * ../../../docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md. The
+ * third KeyList key is the demo requester's session key; say that out loud if a judge
+ * asks who holds it.
  *
  * `lockFunds`'s transfer is signed by whatever the constructor's `client` is
  * authorized as. If that's meant to be the requester's own signature, the caller
