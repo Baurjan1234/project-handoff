@@ -45,3 +45,8 @@ Newest last.
 - [Notes for the close: the content package owns the hash-verified read](2026-09-07-notes-read-lives-in-content-package.md) — moves NAS-39 part 2 into NAS-37
 - [One shared escrow account this week, per-order escrow is roadmap](2026-09-07-one-shared-escrow-account-this-week.md) — closes the open question on NAS-14
 - [The x402 payer signer lives in packages/chain, beside the ChainAdapter](2026-09-07-x402-signer-lives-in-packages-chain.md) — closes NAS-35, **unblocks the prize path**
+
+### 2026-09-08
+
+- [P1 signs off on @hiero-ledger/sdk 2.85.0](2026-09-08-p1-signs-off-on-hiero-sdk-2.85.0.md)
+- [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
