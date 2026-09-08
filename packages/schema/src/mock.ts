@@ -15,7 +15,7 @@
  * them and that logic has to be exercised.
  */
 
-import { FundLockError, FundLockSubmitError } from "./adapter.js";
+import { assertFundLockMemoFits, FundLockError, FundLockSubmitError } from "./adapter.js";
 import type {
   ChainAdapter,
   ConsensusRef,
@@ -390,12 +390,16 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
    * cryptography belongs to the network and to `packages/chain`.
    */
   async buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock> {
+    // Before anything is frozen. An id that will not fit the memo is a lock
+    // that cannot be built, and the requester should learn that here rather
+    // than as MEMO_TOO_LONG at precheck after they have paid the x402 fee.
+    const memo = assertFundLockMemoFits(params.orderId);
     const validUntil = utcSecondsFrom(this.#now() + FUND_LOCK_VALID_SECONDS * 1000);
     const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
 
     return {
       escrowAccountId,
-      memo: params.orderId,
+      memo,
       transactionBytes: encodeFakeTransfer({
         kind: "transfer",
         feePayer: params.requesterAccountId,
@@ -406,7 +410,7 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
           },
           { accountId: escrowAccountId, amountTinybars: params.amountTinybars },
         ],
-        memo: params.orderId,
+        memo,
         validUntil,
         signedBy: [],
       }),
@@ -418,6 +422,7 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
     expected: LockFundsParams,
     signedTransactionBytes: string,
   ): Promise<EscrowRef> {
+    assertFundLockMemoFits(expected.orderId);
     const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
     const transfer = decodeFakeTransfer(signedTransactionBytes);
 

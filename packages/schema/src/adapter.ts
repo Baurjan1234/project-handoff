@@ -255,6 +255,38 @@ export class FundLockError extends Error {
 }
 
 /**
+ * Hedera refuses a transaction memo over 100 bytes with `MEMO_TOO_LONG`.
+ *
+ * A bound this package states in a comment is a bound nothing enforces, the
+ * same way the HCS message size is checked rather than assumed. `order_id` is
+ * the memo, so an id that outgrows this is a fund lock that cannot be built —
+ * and the place to find that out is here, not at precheck on the requester's
+ * machine after they have already paid the x402 fee.
+ *
+ * An `ord_`-prefixed uuid is 36 bytes, so today there is room to spare. The
+ * check exists for the day somebody makes ids longer.
+ */
+export const FUND_LOCK_MEMO_MAX_BYTES = 100;
+
+/**
+ * The memo an order id produces, refused if it will not fit.
+ *
+ * Byte length, not string length: a multi-byte character costs Hedera more
+ * than one byte and `String.length` counts UTF-16 code units.
+ */
+export function assertFundLockMemoFits(orderId: string): string {
+  const bytes = new TextEncoder().encode(orderId).byteLength;
+  if (bytes > FUND_LOCK_MEMO_MAX_BYTES) {
+    throw new FundLockError(
+      "wrong-order",
+      `order id ${JSON.stringify(orderId)} is ${bytes} bytes, over the ` +
+        `${FUND_LOCK_MEMO_MAX_BYTES}-byte transaction memo Hedera accepts`,
+    );
+  }
+  return orderId;
+}
+
+/**
  * The lock passed the whitelist and the network refused it anyway.
  *
  * Every `FundLockRejection` is decided before submission. This is the other
