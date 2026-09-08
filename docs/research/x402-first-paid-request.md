@@ -24,10 +24,40 @@ Transaction `0.0.7162784@1788872048.359217143`, `SUCCESS` on the mirror node:
 **The payer paid no gas**, which is the whole point of the designated-fee-payer
 arrangement, and it is visible in the transfer list rather than taken on faith.
 
-The order itself was posted through `MockChainAdapter` in this run — the escrow account
-and topic ids were not yet configured — so `lock_funds` and `submit_envelope` are
-`MOCK-tx-*` and 404 on Hashscan. The **fee leg is real**; the order leg is not. Do not
-record this run.
+The order leg was `MockChainAdapter` in that first run. It is not any more — see below.
+
+## Then the whole money path, on testnet
+
+Re-run at 21:22 with `HANDOFF_CHAIN=testnet`, the three topic ids from P1, a dev escrow
+and a live Supabase project. **No mock ids.** Three transactions, all `SUCCESS` on the
+mirror node:
+
+| Leg | Transaction | Effect |
+|---|---|---|
+| Service fee | `0.0.7162784@1788873716.876972888` | `0.0.10376659` → `0.0.10376656`, 0.5 HBAR |
+| Fund lock | `0.0.10376667@1788873717.947151972` | `0.0.10376667` → `0.0.10422187`, 100 HBAR |
+| Envelope | `0.0.10376667@1788873720.134390016` | `CONSENSUSSUBMITMESSAGE`, topic `0.0.10421643`, seq 3 |
+
+Read back off the topic, the envelope is hashes and nothing else:
+
+```json
+{"artifact_hash_in":"1259dbcf75e0…","cert_tag":"cpa-us","claim_timeout_seconds":1800,
+ "class":"review","deadline":"2026-09-14T00:00:00Z","order_id":"ord_1a89aded…",
+ "price_tinybars":"10000000000","schema_version":1,"spec_hash":"1903285c8141…"}
+```
+
+Keys in alphabetical order, so canonical serialization is doing its job, and neither the
+spec text nor the artifact appears — hard rule 1, verified from the chain rather than
+from the code that wrote it.
+
+**Two of the four proof rows are now real**: the fee and the lock. The verdict and the
+payout rows wait on an expert publishing an attestation to `0.0.10421645`.
+
+**The escrow in that run was a dev account**, `0.0.10422187`, made by
+`packages/chain/scripts/provision-dev-escrow.ts`. It decodes on chain as ThresholdKey
+2-of-3 — the operator's ECDSA key in the requester slot, two ED25519 platform keys —
+which is the real structure, but it is one laptop's escrow and not the shared one. Swap
+in P1's account before recording.
 
 ## A raw private key has no curve, and the SDK guesses wrong
 
@@ -50,8 +80,22 @@ hex must go through `fromStringECDSA`, because the x402 scheme is secp256k1 and 
 the only reading that can be correct. DER names its own curve and is parsed as it
 stands. Implemented in `packages/chain/src/compose.ts`.
 
+**It was in two places, and the second one was worse.** `loadChainEnv` in
+`packages/chain/src/config.ts` parsed the *operator* key the same way, and every testnet
+operation in every lane goes through it — the cutover would have failed there for
+everybody. The configured operator `0.0.10376667` is `ECDSA_SECP256K1`; its raw key
+derives `037177c9e37d…` under `fromStringECDSA`, matching the account on chain, and
+`78ffacd97393…` under the generic parser. Correct account, correct key, and
+`INVALID_SIGNATURE` on everything.
+
 This is the class of bug unit tests do not catch: every test built a `PrivateKey` object
-directly, so no test ever exercised the string the environment actually holds.
+directly, so no test ever exercised the string the environment actually holds. Both call
+sites now choose the curve; `config.ts`, which had no tests at all, has five.
+
+**Rule, stated once for the whole repo.** Never hand a raw hex key to
+`PrivateKey.fromString`. Either the text is DER and names its curve, or somebody has to
+decide — and a wrong decision surfaces as a signature error that names neither the key
+nor the file.
 
 ## `/verify` can pass and `/settle` still fail
 
