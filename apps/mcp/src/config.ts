@@ -69,8 +69,6 @@ export interface ServiceConfig {
    * configuration, in one place, read by both the tool schema and the server.
    */
   readonly certTags: readonly CertTagOption[];
-  /** Whose funds the escrow locks. */
-  readonly requesterAccountId: string;
   readonly port: number;
 }
 
@@ -129,7 +127,6 @@ export function configFromEnv(env: Env = process.env): ServiceConfig {
     feeTinybars: required(env, "X402_FEE_TINYBARS"),
     ordersTopicId: required(env, "HANDOFF_ORDERS_TOPIC_ID"),
     attestationsTopicId: required(env, "HANDOFF_ATTESTATIONS_TOPIC_ID"),
-    requesterAccountId: required(env, "HANDOFF_REQUESTER_ACCOUNT_ID"),
     certTags: parseCertTags(required(env, "HANDOFF_CERT_TAGS")),
     port,
   };

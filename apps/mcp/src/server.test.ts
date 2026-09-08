@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockChainAdapter } from "@handoff/schema";
+import { MockChainAdapter, type LockFundsParams } from "@handoff/schema";
 import { InMemoryContentStore } from "./content.js";
 import { handle, type HttpRequest, type ServerDeps } from "./server.js";
 import { Facilitator, type FetchLike } from "./x402/facilitator.js";
@@ -37,7 +37,7 @@ function harness(options: { verify?: unknown; settle?: unknown } = {}) {
           },
         ],
       },
-      "/verify": options.verify ?? { isValid: true, payer: "0.0.10376659" },
+      "/verify": options.verify ?? { isValid: true, payer: PAYER },
       "/settle": options.settle ?? {
         success: true,
         transaction: SETTLE_TX,
@@ -56,7 +56,6 @@ function harness(options: { verify?: unknown; settle?: unknown } = {}) {
     ordersTopicId: "0.0.orders",
     attestationsTopicId: "0.0.9002",
     certTags: [{ code: "cpa-us", label: "Licensed reviewer" }],
-    requesterAccountId: "0.0.10376659",
   };
   return { deps, paths, content };
 }
@@ -71,8 +70,14 @@ function paidHeader(): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
 }
 
+/** Whoever the facilitator double says paid. The order body has to name the same one. */
+const PAYER = "0.0.10376659";
+
 function orderBody(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
+    // The account the facilitator double reports as the payer. The two have to
+    // agree or the order is refused, which is the point of the field.
+    requester_account_id: PAYER,
     spec: "Review the attached report for arithmetic defects.",
     artifact_base64: Buffer.from("FAKE report. Total 11,900.").toString("base64"),
     cert_tag: "cpa-us",
@@ -232,7 +237,7 @@ describe("POST /orders", () => {
         return new Response("upstream exploded", { status: 500 });
       }
       if (path === "/verify") {
-        return new Response(JSON.stringify({ isValid: true, payer: "0.0.10376659" }));
+        return new Response(JSON.stringify({ isValid: true, payer: PAYER }));
       }
       return new Response(
         JSON.stringify({
@@ -348,6 +353,91 @@ describe("free read paths", () => {
     const serialized = JSON.stringify(read.body);
     expect(serialized).not.toContain(spec);
     expect(serialized).not.toContain(artifact);
+  });
+});
+
+describe("who pays is who the order is for", () => {
+  it("locks the escrow against the account the facilitator verified", async () => {
+    const { deps } = harness();
+    const locked: string[] = [];
+    // Wrapped on the instance rather than spread into a new object: the mock
+    // keeps its state in private fields, which a spread would leave behind.
+    const chain = deps.chain;
+    const lock = chain.lockFunds.bind(chain);
+    chain.lockFunds = async (params: LockFundsParams) => {
+      locked.push(params.requesterAccountId);
+      return lock(params);
+    };
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      deps,
+    );
+
+    expect(response.status).toBe(200);
+    // Not the server's configuration, which no longer has an account, and not
+    // the body's word for it either — the account the facilitator named.
+    expect(locked).toEqual([PAYER]);
+  });
+
+  it("refuses an order that names a requester other than the payer, before it settles", async () => {
+    const { deps, paths, content } = harness();
+
+    const response = await handle(
+      post(
+        { [PAYMENT_SIGNATURE_HEADER]: paidHeader() },
+        orderBody({ requester_account_id: "0.0.9999" }),
+      ),
+      deps,
+    );
+
+    expect(response.status).toBe(400);
+    const body = response.body as { message: string };
+    expect(body.message).toContain("0.0.9999");
+    expect(body.message).toContain(PAYER);
+    expect(body.message).toContain("Nothing was charged.");
+
+    // The security property, not the message: verified, never settled, and
+    // nothing published or stored for an order somebody else would fund.
+    expect(paths).toContain("/verify");
+    expect(paths).not.toContain("/settle");
+    expect(content.size).toBe(0);
+  });
+
+  it("refuses when the facilitator verifies but does not name the payer", async () => {
+    const { deps, paths } = harness({ verify: { isValid: true } });
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      deps,
+    );
+
+    expect(response.status).toBe(502);
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("refuses a body with no requester at all, rather than falling back to a configured one", async () => {
+    const { deps } = harness();
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ requester_account_id: undefined })),
+      deps,
+    );
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain("requester_account_id");
+  });
+
+  it("refuses something that is not an account id", async () => {
+    const { deps } = harness();
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ requester_account_id: "alice" })),
+      deps,
+    );
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain("Hedera account id");
   });
 });
 
