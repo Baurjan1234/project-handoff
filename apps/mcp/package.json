@@ -12,6 +12,8 @@
     "mcp": "tsx src/mcp/main.ts"
   },
   "dependencies": {
+    "@handoff/chain": "workspace:*",
+    "@handoff/content": "workspace:*",
     "@handoff/schema": "workspace:*",
     "@modelcontextprotocol/server": "2.0.0",
     "zod": "4.5.4"
