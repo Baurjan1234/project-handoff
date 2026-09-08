@@ -34,7 +34,17 @@ const payerKey = process.env["X402_PAYER_PRIVATE_KEY"]?.trim();
 let signer: PaymentSigner = new UnwiredSigner();
 let check: PreflightCheck | undefined;
 
-if (payerAccountId && payerKey && !payerAccountId.includes("x")) {
+/**
+ * `.env.example` ships `X402_PAYER_ACCOUNT_ID=0.0.xxxxxx` as a shape to copy.
+ * Someone who filled in the key but not the account would otherwise get
+ * "account not found" out of the facilitator, which names neither the file nor
+ * the line. A real account id is decimal, so this cannot reject one.
+ */
+function isPlaceholder(accountId: string): boolean {
+  return !/^\d+\.\d+\.\d+$/.test(accountId);
+}
+
+if (payerAccountId && payerKey && !isPlaceholder(payerAccountId)) {
   try {
     signer = createX402Signer({
       accountId: payerAccountId,
@@ -59,8 +69,11 @@ if (payerAccountId && payerKey && !payerAccountId.includes("x")) {
   }
 } else {
   console.error(
-    "payment signer: none. Set X402_PAYER_ACCOUNT_ID and X402_PAYER_PRIVATE_KEY to order; " +
-      "reads work either way.",
+    payerAccountId && isPlaceholder(payerAccountId)
+      ? `payment signer: none. X402_PAYER_ACCOUNT_ID is ${payerAccountId}, which is the ` +
+        `placeholder from .env.example rather than an account. Reads work either way.`
+      : "payment signer: none. Set X402_PAYER_ACCOUNT_ID and X402_PAYER_PRIVATE_KEY to order; " +
+        "reads work either way.",
   );
 }
 
