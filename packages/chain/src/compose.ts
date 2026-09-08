@@ -1,4 +1,5 @@
 import { AccountId, PrivateKey } from "@hiero-ledger/sdk";
+import { X402Signer } from "./x402-signer.js";
 import { createTestnetClient, type ChainEnv } from "./config.js";
 import { HederaChainAdapter } from "./hedera-adapter.js";
 
@@ -43,5 +44,32 @@ export function createHederaChainAdapter(
     // its curve, and these two are not guaranteed to be either one.
     verifierKey: PrivateKey.fromString(platform.verifierKey),
     scheduleAdminKey: PrivateKey.fromString(platform.scheduleAdminKey),
+  });
+}
+
+/**
+ * Build the x402 payer from configuration, for the same reason as above.
+ *
+ * `X402Signer`'s constructor takes a `PrivateKey`, which an app cannot make.
+ * The key-type guard is unchanged and still runs here: an ED25519 key is
+ * refused at construction, by key type, rather than at the facilitator as an
+ * opaque `InvalidSignature`.
+ */
+export interface X402SignerStrings {
+  readonly accountId: string;
+  /** Must be ECDSA. Parsed generically, so a DER key names its own curve. */
+  readonly privateKey: string;
+  /** The resource this payment is for, absolute, as the 402 named it. */
+  readonly resourceUrl: string;
+  /** A ceiling this signer will not sign past, in tinybars. */
+  readonly maxAmountTinybars: string;
+}
+
+export function createX402Signer(config: X402SignerStrings): X402Signer {
+  return new X402Signer({
+    accountId: config.accountId,
+    privateKey: PrivateKey.fromString(config.privateKey),
+    resourceUrl: config.resourceUrl,
+    maxAmountTinybars: config.maxAmountTinybars,
   });
 }
