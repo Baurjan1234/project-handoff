@@ -319,14 +319,17 @@ expert web app itself; custodial key management is a weeks-scale project.
   operator balance divided by the order price. **Nothing guards this yet, and nothing
   will.** Guarding a platform-funded escrow is work on a path that is being deleted, so
   the endpoint stays private until the requester-signed fund lock lands rather than
-  going out behind a price cap and a balance floor. One bound does survive the change
-  and is needed more after it, not less: a **maximum deadline**. `TIMEOUT` is the only
-  path that returns escrowed funds and it fires at the deadline, so an unbounded
-  deadline strands the requester's own money — `deadline` is checked today only for
-  being in the future. The fix is a requester-signed fund
+  going out behind a price cap and a balance floor. The fix is a requester-signed fund
   lock: the server builds the transfer, the requester's own key signs it, the server
   submits it. That interface is proposed on the mock as `RequesterFundedEscrow` and is
   roadmap unless it lands before the freeze.
+- **Escrowed funds have no return path.** `TIMEOUT` is a label in the lifecycle state
+  machine and nothing else: no process watches order deadlines, `ORDER_DEADLINE_EXPIRE`
+  is fired by nothing outside its own unit test, and `packages/chain/src/escrow.ts` has
+  a transfer in and none out. So an order nobody claims holds its funds indefinitely.
+  This week that is our own money, since the platform funds the escrow. Under the
+  requester-signed lock it becomes the requester's, which changes what the gap costs
+  without changing what it is.
 - **Execution class is schema + architecture**, demoed as roadmap; its proofs need an
   oracle story presented honestly as a trusted-verifier stub.
 - **Content availability is centralized** (Supabase). Signed URLs are access control —

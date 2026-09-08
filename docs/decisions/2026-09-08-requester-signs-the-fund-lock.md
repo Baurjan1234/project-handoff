@@ -82,11 +82,14 @@ re-challenges instead of burning a round trip on `TRANSACTION_EXPIRED`.
   **the service stays private until this lands.** It does not go out behind a price cap
   and an operator-balance floor instead: those guard the platform-funded escrow, which
   this decision deletes, so building them is work on a path with a week to live.
-- **A maximum deadline is the one bound that outlives this**, and it is needed more
-  afterwards rather than less. `TIMEOUT` is the only path that returns escrowed funds
-  and it fires at the deadline; once the money in escrow is the requester's own, an
-  unbounded deadline strands it. `deadline` is checked today only for being in the
-  future.
+- **Escrowed funds have no return path, and this changes whose money is stuck.**
+  `TIMEOUT` is a label in the lifecycle state machine; `ORDER_DEADLINE_EXPIRE` is fired
+  by nothing outside its own unit test, no process watches deadlines, and
+  `packages/chain/src/escrow.ts` has a transfer in and none out. An unclaimed order
+  holds its funds indefinitely. That is our money today and the requester's afterwards.
+  P1's lane, and a Known limits line rather than code if the freeze arrives first. A
+  maximum deadline is **not** the fix and was wrongly named as one in the first draft of
+  this file — bounding a deadline bounds nothing while nothing acts on it.
 - `docs/architecture.md` fund-lock arrow becomes two arrows and gains the signature.
 
 **Supersedes.** Nothing. It closes a gap
