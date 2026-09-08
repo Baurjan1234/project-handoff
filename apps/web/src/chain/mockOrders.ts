@@ -29,7 +29,7 @@ import fakeArtifact from "../../../../assets/demo/fake-quarterly-summary.txt?raw
 import fakeSpec from "../../../../assets/demo/fake-review-spec.txt?raw";
 import fakeVendorClause from "../../../../assets/demo/fake-vendor-clause.txt?raw";
 import fakeVendorSpec from "../../../../assets/demo/fake-vendor-spec.txt?raw";
-import type { InMemoryContentStore } from "../content";
+import type { ContentStore } from "../content";
 import { claimsFor, claimStateFor, encodeClaim, type ClaimReader } from "../orders/claim";
 import { countWords, type ExpertOrder, type InboxEntry } from "../orders/order";
 import type { OrderSource } from "../orders/source";
@@ -144,7 +144,7 @@ export function withSimulatedTopicLag(
 export class MockOrderSource implements OrderSource {
   readonly reader: ClaimReader;
   readonly #chain: MockChainAdapter;
-  readonly #content: InMemoryContentStore;
+  readonly #content: ContentStore;
   readonly #options: MockOrdersOptions;
   readonly #orders: readonly ExpertOrder[];
   readonly #raced: ReadonlySet<string>;
@@ -152,7 +152,7 @@ export class MockOrderSource implements OrderSource {
 
   private constructor(
     chain: MockChainAdapter,
-    content: InMemoryContentStore,
+    content: ContentStore,
     options: MockOrdersOptions,
     orders: readonly ExpertOrder[],
     raced: ReadonlySet<string>,
@@ -169,7 +169,7 @@ export class MockOrderSource implements OrderSource {
   /** Post and fund every fixture, and let the rival claim the ones marked as theirs. */
   static async seed(
     chain: MockChainAdapter,
-    content: InMemoryContentStore,
+    content: ContentStore,
     options: MockOrdersOptions,
   ): Promise<MockOrderSource> {
     const now = options.now ?? Date.now;
@@ -261,8 +261,8 @@ export class MockOrderSource implements OrderSource {
       order.envelope.deadline,
     );
     if (state.kind !== "yours") throw new Error("The document opens after a confirmed claim.");
-    const bytes = this.#content.get(order.envelope.artifact_hash_in);
-    if (bytes === undefined) throw new Error("The document is not in the content store.");
+    const bytes = await this.#content.get(order.envelope.artifact_hash_in);
+    if (bytes === null) throw new Error("The document is not in the content store.");
     return new TextDecoder().decode(bytes);
   }
 }
