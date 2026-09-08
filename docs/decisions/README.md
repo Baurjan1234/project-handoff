@@ -39,6 +39,8 @@ Newest last.
 ### 2026-09-06
 
 - [The two prices, committed](2026-09-06-demo-price-and-x402-fee.md)
+- [UX philosophy and design system for this week](2026-09-06-ux-philosophy-and-design-system.md)
+- [UX fixes from the persona review and the Laws of UX](2026-09-06-ux-fixes-from-persona-and-laws.md) — amends the entry above
 
 ### 2026-09-07
 
@@ -49,4 +51,5 @@ Newest last.
 ### 2026-09-08
 
 - [P1 signs off on @hiero-ledger/sdk 2.85.0](2026-09-08-p1-signs-off-on-hiero-sdk-2.85.0.md)
+- [Requester copy claims no check that did not run; NAS-36 closes with its scope moved](2026-09-08-copy-claims-no-check-that-did-not-run.md) — amends the MCP replies in the design system
 - [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
