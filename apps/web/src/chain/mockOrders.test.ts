@@ -15,7 +15,7 @@ async function seed() {
     expertAccountId: EXPERT,
     ordersTopicId: "MOCK-topic-orders",
     requesterAccountId: "MOCK-requester",
-    priceHbar: "200",
+    priceHbar: "100",
     mirrorLagMs: 6_000,
     now,
   });

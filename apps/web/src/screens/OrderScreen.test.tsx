@@ -27,7 +27,7 @@ describe("OrderScreen", () => {
     expect(html).toContain("The document opens after you claim.");
     expect(html).toMatch(/<button[^>]*>Claim<\/button>/);
     expect(html).toContain("Required credential:");
-    expect(html).toContain("200 HBAR");
+    expect(html).toContain("100 HBAR");
     expect(expectNoBannedWords(html)).toEqual([]);
   });
 

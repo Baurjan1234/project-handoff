@@ -9,7 +9,7 @@ const mockConfig: WebChainConfig = {
   mode: "mock",
   expertAccountIdPrefill: null,
   ordersTopicId: "MOCK-topic-orders",
-  mock: { requesterAccountId: "MOCK-requester", priceHbar: "200" },
+  mock: { requesterAccountId: "MOCK-requester", priceHbar: "100" },
 };
 const testnetConfig: WebChainConfig = { mode: "testnet", expertAccountIdPrefill: null, ordersTopicId: "0.0.4242" };
 

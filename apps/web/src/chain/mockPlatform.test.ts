@@ -10,7 +10,7 @@ function seed(chain: MockChainAdapter) {
   return seedClaimedReviewOrder(chain, {
     ordersTopicId: TOPIC,
     requesterAccountId: "MOCK-requester",
-    priceHbar: "200",
+    priceHbar: "100",
     now: () => FIXED_NOW,
   });
 }
@@ -20,7 +20,7 @@ describe("seedClaimedReviewOrder", () => {
     const chain = new MockChainAdapter({ now: () => FIXED_NOW });
     const order = await seed(chain);
 
-    expect(order.envelope.price_tinybars).toBe("20000000000");
+    expect(order.envelope.price_tinybars).toBe("10000000000");
     expect(order.envelope.class).toBe("review");
     expect(order.escrowAccountId).toMatch(/^MOCK-escrow-/);
     expect(order.topicId).toBe(TOPIC);

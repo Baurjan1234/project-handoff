@@ -33,7 +33,7 @@ export const envelope = ReviewOrder.parse({
   spec_hash: "a".repeat(64),
   artifact_hash_in: "b".repeat(64),
   cert_tag: "demo-reviewer",
-  price_tinybars: "20000000000",
+  price_tinybars: "10000000000",
   deadline: DEADLINE,
   claim_timeout_seconds: 1800,
   schema_version: SCHEMA_VERSION,
