@@ -115,3 +115,74 @@ export interface ChainAdapter {
   /** Settlement is read, never assumed. Null while the mirror node is still catching up. */
   getTransaction(transactionId: string): Promise<TransactionRecord | null>;
 }
+
+/**
+ * PROPOSAL, not yet part of `ChainAdapter`. See
+ * `docs/decisions/` once Nasaa rules on it; until then this interface is
+ * implemented by `MockChainAdapter` alone and nothing in the money path calls
+ * it.
+ *
+ * `lockFunds` debits whatever account the adapter's client signs as, which in
+ * every server-side deployment is the platform operator. So the escrow is
+ * funded by us, not by the requester, and a public endpoint is drainable: the
+ * caller spends the x402 fee and we spend the whole order value. This
+ * interface is the fix. It splits the lock into a build the server does and a
+ * signature only the requester can produce.
+ *
+ * 1. `buildFundLock` freezes a transfer whose debited account **and fee payer**
+ *    are both the requester, so one signature covers both, and hands back the
+ *    bytes. The server never signs it.
+ * 2. The requester signs those bytes with the key that already signs the x402
+ *    fee, on their own machine.
+ * 3. `submitFundLock` validates the returned bytes against what was asked for
+ *    and submits them. It never trusts them: the bytes come back over the wire
+ *    and a caller who edits the amount, the payee or the payer must be
+ *    rejected before anything is executed.
+ *
+ * Signature *validity* is deliberately not checked here. The network checks
+ * it, a bad signature fails at consensus, and by then nothing has moved and
+ * the x402 fee is still unsettled — the same verify-gates-serving,
+ * settle-last ordering the payment gate already relies on.
+ */
+export interface RequesterFundedEscrow {
+  buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock>;
+
+  /**
+   * @param expected what the server asked for, so the validator has something
+   * to compare the returned bytes against. Never taken from the bytes.
+   * @param signedTransactionBytes base64, as returned by the requester.
+   */
+  submitFundLock(expected: LockFundsParams, signedTransactionBytes: string): Promise<EscrowRef>;
+}
+
+export interface UnsignedFundLock {
+  readonly escrowAccountId: string;
+  /** base64 protobuf of the frozen, unsigned transfer. */
+  readonly transactionBytes: string;
+  /**
+   * UTC instant, second precision, `Z` only. A frozen Hedera transaction stops
+   * being submittable at `validStart + validDuration`, so the server can hand
+   * back a fresh challenge instead of burning a round trip on
+   * TRANSACTION_EXPIRED.
+   */
+  readonly validUntil: string;
+}
+
+/** Why `submitFundLock` refused. Every case is a mismatch the caller can fix or a stale build. */
+export type FundLockRejection =
+  | "unparseable"
+  | "not-a-transfer"
+  | "wrong-amount"
+  | "wrong-escrow-account"
+  | "wrong-requester"
+  | "wrong-fee-payer"
+  | "extra-transfers"
+  | "unsigned"
+  | "expired";
+
+export class FundLockError extends Error {
+  constructor(readonly reason: FundLockRejection, message: string) {
+    super(message);
+    this.name = "FundLockError";
+  }
+}

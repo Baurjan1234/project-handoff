@@ -15,6 +15,7 @@
  * them and that logic has to be exercised.
  */
 
+import { FundLockError } from "./adapter.js";
 import type {
   ChainAdapter,
   ConsensusRef,
@@ -22,12 +23,139 @@ import type {
   EscrowRef,
   LockFundsParams,
   ReadMessagesOptions,
+  RequesterFundedEscrow,
   ScheduleRef,
   SignScheduleResult,
   TopicMessage,
   TransactionRecord,
   TxRef,
+  UnsignedFundLock,
 } from "./adapter.js";
+import { parseTinybars } from "./money.js";
+
+/**
+ * Hedera's default transaction validity is 120 seconds and its maximum is 180.
+ * The real adapter sets 180 explicitly, because between our 402, the client's
+ * preflight mirror read and the facilitator's `/verify` the default is a
+ * genuine expiry path rather than an edge case. The mock uses the same number
+ * so callers exercise the same window.
+ */
+export const FUND_LOCK_VALID_SECONDS = 180;
+
+/** The mock's stand-in for a frozen `TransferTransaction`. Never protobuf. */
+interface FakeTransfer {
+  readonly kind: string;
+  readonly feePayer: string;
+  readonly from: string;
+  readonly to: string;
+  readonly amountTinybars: string;
+  readonly validUntil: string;
+  readonly signedBy: readonly string[];
+}
+
+function utcSecondsFrom(epochMillis: number): string {
+  return `${new Date(Math.floor(epochMillis / 1000) * 1000).toISOString().slice(0, 19)}Z`;
+}
+
+function encodeFakeTransfer(transfer: FakeTransfer): string {
+  return btoa(JSON.stringify(transfer));
+}
+
+function isFakeTransfer(value: unknown): value is FakeTransfer {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate["kind"] === "string" &&
+    typeof candidate["feePayer"] === "string" &&
+    typeof candidate["from"] === "string" &&
+    typeof candidate["to"] === "string" &&
+    typeof candidate["amountTinybars"] === "string" &&
+    typeof candidate["validUntil"] === "string" &&
+    Array.isArray(candidate["signedBy"]) &&
+    candidate["signedBy"].every((entry) => typeof entry === "string")
+  );
+}
+
+function decodeFakeTransfer(transactionBytes: string): FakeTransfer {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(atob(transactionBytes));
+  } catch {
+    throw new FundLockError("unparseable", "the signed fund lock is not decodable");
+  }
+  if (!isFakeTransfer(parsed)) {
+    throw new FundLockError("unparseable", "the signed fund lock is missing fields");
+  }
+  return parsed;
+}
+
+/**
+ * The requester side of the exchange, so a test or the web demo seeder can
+ * play it. In the real flow this happens on the requester's machine with the
+ * key that already signs the x402 fee, and the server never has it.
+ */
+export function signFundLock(transactionBytes: string, signerAccountId: string): string {
+  const transfer = decodeFakeTransfer(transactionBytes);
+  if (transfer.signedBy.includes(signerAccountId)) return transactionBytes;
+  return encodeFakeTransfer({ ...transfer, signedBy: [...transfer.signedBy, signerAccountId] });
+}
+
+/**
+ * The whitelist. Everything the returned bytes are allowed to be, checked
+ * against what the server asked for — never against what the bytes claim.
+ *
+ * Signature *validity* is not checked, here or in the real adapter. The
+ * network checks it, and a bad one fails at consensus with nothing moved.
+ */
+function assertFundLockMatches(
+  transfer: FakeTransfer,
+  expected: LockFundsParams,
+  escrowAccountId: string,
+  nowMillis: number,
+): void {
+  if (transfer.kind !== "transfer") {
+    throw new FundLockError("not-a-transfer", `expected a transfer, got ${transfer.kind}`);
+  }
+  if (transfer.from !== expected.requesterAccountId) {
+    throw new FundLockError(
+      "wrong-requester",
+      `the debited account is ${transfer.from}, not the requester ${expected.requesterAccountId}`,
+    );
+  }
+  if (transfer.feePayer !== expected.requesterAccountId) {
+    throw new FundLockError(
+      "wrong-fee-payer",
+      `the fee payer is ${transfer.feePayer}, not the requester ${expected.requesterAccountId}`,
+    );
+  }
+  if (transfer.to !== escrowAccountId) {
+    throw new FundLockError(
+      "wrong-escrow-account",
+      `the credited account is ${transfer.to}, not the escrow ${escrowAccountId}`,
+    );
+  }
+  if (parseTinybars(transfer.amountTinybars) !== parseTinybars(expected.amountTinybars)) {
+    throw new FundLockError(
+      "wrong-amount",
+      `the transfer moves ${transfer.amountTinybars} tinybars, not the ${expected.amountTinybars} the order is priced at`,
+    );
+  }
+  if (transfer.signedBy.length === 0) {
+    throw new FundLockError("unsigned", "the fund lock came back without a signature");
+  }
+  if (!transfer.signedBy.includes(expected.requesterAccountId)) {
+    throw new FundLockError(
+      "wrong-requester",
+      `the fund lock is signed by ${transfer.signedBy.join(", ")}, not by the requester ${expected.requesterAccountId}`,
+    );
+  }
+  if (Date.parse(transfer.validUntil) <= nowMillis) {
+    throw new FundLockError(
+      "expired",
+      `the fund lock stopped being submittable at ${transfer.validUntil}`,
+    );
+  }
+}
 
 export class MockChainError extends Error {
   constructor(message: string) {
@@ -52,7 +180,7 @@ interface MockSchedule {
   deleted: boolean;
 }
 
-export class MockChainAdapter implements ChainAdapter {
+export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
   readonly network = "testnet" as const;
 
   readonly #now: () => number;
@@ -123,6 +251,50 @@ export class MockChainAdapter implements ChainAdapter {
     const transactionId = this.#nextTxId();
     this.#record(transactionId, this.#timestamp());
     return { transactionId, escrowAccountId: `MOCK-escrow-${params.orderId}` };
+  }
+
+
+  /**
+   * PROPOSAL. Builds the transfer the requester will sign. See
+   * `RequesterFundedEscrow`.
+   *
+   * The mock's "bytes" are base64 JSON, not protobuf, and its signature is a
+   * marker rather than a real one. That is on purpose: what this fixture has
+   * to exercise is the *shape* of the exchange and every way it can be
+   * refused, so `submitFundLock` has something to reject. Signature
+   * cryptography belongs to the network and to `packages/chain`.
+   */
+  async buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock> {
+    const validUntil = utcSecondsFrom(this.#now() + FUND_LOCK_VALID_SECONDS * 1000);
+    const escrowAccountId = `MOCK-escrow-${params.orderId}`;
+
+    return {
+      escrowAccountId,
+      transactionBytes: encodeFakeTransfer({
+        kind: "transfer",
+        feePayer: params.requesterAccountId,
+        from: params.requesterAccountId,
+        to: escrowAccountId,
+        amountTinybars: params.amountTinybars,
+        validUntil,
+        signedBy: [],
+      }),
+      validUntil,
+    };
+  }
+
+  async submitFundLock(
+    expected: LockFundsParams,
+    signedTransactionBytes: string,
+  ): Promise<EscrowRef> {
+    const escrowAccountId = `MOCK-escrow-${expected.orderId}`;
+    const transfer = decodeFakeTransfer(signedTransactionBytes);
+
+    assertFundLockMatches(transfer, expected, escrowAccountId, this.#now());
+
+    const transactionId = this.#nextTxId();
+    this.#record(transactionId, this.#timestamp());
+    return { transactionId, escrowAccountId };
   }
 
   async createSchedule(params: CreateScheduleParams): Promise<ScheduleRef> {
