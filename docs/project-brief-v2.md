@@ -311,6 +311,16 @@ expert web app itself; custodial key management is a weeks-scale project.
   KeyList is the demo requester's session key. One escrow account per order, holding
   the requester's own key, is the production shape and is roadmap
   (`docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`).
+- **The platform funds the escrow, not the requester.** `lockFunds` is signed by
+  whatever account the adapter's client holds, which server-side is our operator. So
+  "funds lock up front" means *our* funds this week: the requester pays only the x402
+  service fee, from their own account. Two consequences said out loud — the escrow is
+  not the requester's money at risk, and a public endpoint is drainable at roughly the
+  operator balance divided by the order price. Mitigated this week by a price cap, an
+  operator-balance floor and short demo deadlines. The fix is a requester-signed fund
+  lock: the server builds the transfer, the requester's own key signs it, the server
+  submits it. That interface is proposed on the mock as `RequesterFundedEscrow` and is
+  roadmap unless it lands before the freeze.
 - **Execution class is schema + architecture**, demoed as roadmap; its proofs need an
   oracle story presented honestly as a trusted-verifier stub.
 - **Content availability is centralized** (Supabase). Signed URLs are access control —
