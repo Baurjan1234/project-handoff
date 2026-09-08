@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   postOrder,
   PaymentUnavailableError,
+  PreflightRefusedError,
   UnwiredSigner,
   type OrderInput,
   type PaymentSigner,
@@ -150,5 +151,57 @@ describe("the handoff_verify client", () => {
         fetch: fetchImpl,
       }),
     ).rejects.toThrow(/InvalidSignature/);
+  });
+});
+
+
+describe("the preflight gate", () => {
+  const signing: PaymentSigner = { async sign() { return "signed"; } };
+
+  it("refuses before the payment is built, with the requester's sentence", async () => {
+    let signed = false;
+    const { fetchImpl, calls } = gatedService({ status: 200, body: { order_id: "o-1" } });
+
+    await expect(
+      postOrder(INPUT, {
+        baseUrl: "http://service",
+        fetch: fetchImpl,
+        signer: { async sign() { signed = true; return "signed"; } },
+        async preflight() {
+          return { ok: false, reply: "Your account holds 42 HBAR. Nothing was charged." };
+        },
+      }),
+    ).rejects.toThrow(PreflightRefusedError);
+
+    // Nothing signed, and only the unpaid call went out — which is what makes
+    // "Nothing was charged." a fact rather than a hope.
+    expect(signed).toBe(false);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("runs after the price is known, so it checks against the real quote", async () => {
+    let quoted = "";
+    const { fetchImpl } = gatedService({ status: 200, body: { order_id: "o-1" } });
+
+    await postOrder(INPUT, {
+      baseUrl: "http://service",
+      fetch: fetchImpl,
+      signer: signing,
+      async preflight(requirements) {
+        quoted = requirements.amount;
+        return { ok: true };
+      },
+    });
+
+    expect(quoted).toBe(REQUIREMENTS.amount);
+  });
+
+  it("is optional, and its absence signs whatever is quoted", async () => {
+    const { fetchImpl, calls } = gatedService({ status: 200, body: { order_id: "o-1" } });
+
+    await expect(
+      postOrder(INPUT, { baseUrl: "http://service", fetch: fetchImpl, signer: signing }),
+    ).resolves.toMatchObject({ order_id: "o-1" });
+    expect(calls).toHaveLength(2);
   });
 });

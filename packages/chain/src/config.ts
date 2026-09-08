@@ -37,12 +37,46 @@ export function loadChainEnv(): ChainEnv {
   return {
     network: "testnet",
     operatorId: AccountId.fromString(requireEnv("HEDERA_ACCOUNT_ID")),
-    // Generic parser, not fromStringED25519/ECDSA — a portal-exported DER key
-    // self-identifies its curve, and dev accounts are not guaranteed to be one or
-    // the other (the x402 signer specifically must be ECDSA; this operator need not be).
-    operatorKey: PrivateKey.fromString(requireEnv("HEDERA_PRIVATE_KEY")),
+    operatorKey: parseOperatorKey(requireEnv("HEDERA_PRIVATE_KEY"), process.env["HEDERA_KEY_TYPE"]),
     mirrorNodeUrl: process.env["HEDERA_MIRROR_NODE_URL"] ?? DEFAULT_MIRROR_NODE_URL,
   };
+}
+
+/**
+ * Parse the operator key, choosing the curve rather than letting the SDK guess.
+ *
+ * A DER key names its own curve and is parsed as it stands. A **raw** key is 64
+ * hex characters and says nothing about the curve — and the generic
+ * `PrivateKey.fromString` reads raw hex as ED25519. For an ECDSA account that
+ * silently produces the wrong key: every transaction fails
+ * `INVALID_SIGNATURE`, which names the signature rather than the parse, and the
+ * account and the key were both correct all along.
+ *
+ * Measured 2026-09-08 against account 0.0.10376667, `ECDSA_SECP256K1` on
+ * testnet, whose raw key derives the on-chain public key under
+ * `fromStringECDSA` and a different one under the generic parser.
+ *
+ * Raw defaults to **ECDSA**, because that is what the portal's non-default
+ * option produces and what this project needs anyway. An ED25519 dev account
+ * with a raw key sets `HEDERA_KEY_TYPE=ED25519`; the alternative is a mirror
+ * lookup, which would make this async for every caller.
+ */
+export function parseOperatorKey(text: string, keyType?: string): PrivateKey {
+  const trimmed = text.trim();
+  const hex = trimmed.startsWith("0x") || trimmed.startsWith("0X") ? trimmed.slice(2) : trimmed;
+  const declared = keyType?.trim().toUpperCase();
+
+  if (declared !== undefined && declared !== "" && declared !== "ECDSA" && declared !== "ED25519") {
+    throw new Error(`HEDERA_KEY_TYPE is "${keyType}". Use ECDSA or ED25519, or leave it unset.`);
+  }
+
+  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
+    return declared === "ED25519" ? PrivateKey.fromStringED25519(hex) : PrivateKey.fromStringECDSA(hex);
+  }
+
+  // DER, or something the SDK rejects with its own message. Either way the text
+  // carries its own curve and there is nothing here to decide.
+  return PrivateKey.fromStringDer(hex);
 }
 
 export function createTestnetClient(env: ChainEnv): Client {

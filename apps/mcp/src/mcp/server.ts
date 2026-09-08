@@ -25,12 +25,20 @@ import {
   postedReply,
   waitingReply,
 } from "../replies.js";
-import { fetchStatus, postOrder, type PaymentSigner } from "./client.js";
+import { fetchStatus, postOrder, type PaymentSigner, type PreflightCheck } from "./client.js";
 
 export interface McpDeps {
   /** Where the gated resource server is listening. */
   readonly baseUrl: string;
   readonly signer: PaymentSigner;
+  /**
+   * Checked once the price is known and before anything is signed.
+   *
+   * Optional so a session with no payer account configured still exposes the
+   * tools and fails at the signer with the price in the message, rather than
+   * refusing to start.
+   */
+  readonly preflight?: PreflightCheck;
   /**
    * The credential tags the service routes to, fetched at startup.
    *
@@ -127,7 +135,11 @@ export function createMcpServer(deps: McpDeps): McpServer {
             deadline: input.deadline,
             claimTimeoutSeconds: input.claim_timeout_seconds,
           },
-          { baseUrl: deps.baseUrl, signer: deps.signer },
+          {
+            baseUrl: deps.baseUrl,
+            signer: deps.signer,
+            ...(deps.preflight === undefined ? {} : { preflight: deps.preflight }),
+          },
         )) as PostedBody & Record<string, unknown>;
 
         const text = postedReply({
