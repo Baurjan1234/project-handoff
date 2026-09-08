@@ -19,6 +19,7 @@ const CONFIG: GateConfig = {
   network: "hedera:testnet",
   receiverAccountId: "0.0.10376656",
   feeTinybars: "100000",
+  serviceUrl: "http://localhost:4021",
 };
 
 const SUPPORTED = {
@@ -47,11 +48,19 @@ function harness(verifyResponse: unknown = { isValid: true, payer: "0.0.10376659
   return { deps: { facilitator, config: CONFIG }, paths };
 }
 
+/**
+ * The envelope our own `X402Signer` produces, captured rather than recalled.
+ *
+ * Four top-level keys — `x402Version`, `resource`, `accepted`, `payload` — and
+ * no `scheme` or `network` outside `accepted`. Captured 2026-09-08 by signing
+ * a quote offline with `@x402/hedera` 2.25.0 and decoding the resulting
+ * `PAYMENT-SIGNATURE` value; the transaction bytes are elided because only the
+ * envelope is this file's business.
+ */
 function paymentHeader(overrides: Partial<PaymentPayload> = {}): string {
   const payload: PaymentPayload = {
     x402Version: 2,
-    scheme: "exact",
-    network: "hedera:testnet",
+    resource: { url: "http://localhost:4021/orders" },
     accepted: buildRequirements(CONFIG, "0.0.7162784"),
     payload: { transaction: "AAAA" },
     ...overrides,
@@ -95,7 +104,7 @@ describe("gate", () => {
     expect(declared).toEqual(outcome.body);
     expect(declared.x402Version).toBe(2);
     expect(declared.accepts[0]?.payTo).toBe("0.0.10376656");
-    expect(declared.resource).toBe("/orders");
+    expect(declared.resource).toEqual({ url: "http://localhost:4021/orders" });
     // Nothing was offered, so there is nothing to verify.
     expect(paths).not.toContain("/verify");
   });
@@ -158,7 +167,12 @@ describe("gate", () => {
     const { deps, paths } = harness();
 
     const outcome = await gate(
-      headerLookup({ [PAYMENT_SIGNATURE_HEADER]: paymentHeader({ network: "eip155:80002" }) }),
+      headerLookup({
+        [PAYMENT_SIGNATURE_HEADER]: paymentHeader({
+          // In `accepted`, because version 2 has no top-level network.
+          accepted: { ...buildRequirements(CONFIG, "0.0.7162784"), network: "eip155:80002" as never },
+        }),
+      }),
       "/orders",
       deps,
     );
@@ -203,12 +217,75 @@ describe("settle", () => {
 });
 
 describe("decodePaymentSignature", () => {
+  function encode(value: unknown): string {
+    return Buffer.from(JSON.stringify(value), "utf8").toString("base64");
+  }
+
+  it("accepts the envelope our own signer emits", () => {
+    const decoded = decodePaymentSignature(paymentHeader());
+
+    // The round trip this service exists to serve. It failed before: the
+    // decoder required `scheme` and `network` at the top level, which is the
+    // version 1 shape, so our own payment was refused before the facilitator
+    // ever saw it.
+    expect(decoded.accepted.scheme).toBe("exact");
+    expect(decoded.accepted.network).toBe("hedera:testnet");
+    expect(decoded.payload.transaction).toBe("AAAA");
+    expect(decoded.resource?.url).toBe("http://localhost:4021/orders");
+  });
+
   it("rejects a payload that is not the exact scheme", () => {
-    const header = Buffer.from(
-      JSON.stringify({ x402Version: 2, scheme: "upto", network: "hedera:testnet" }),
-      "utf8",
-    ).toString("base64");
+    const header = encode({
+      x402Version: 2,
+      accepted: { ...buildRequirements(CONFIG, "0.0.7162784"), scheme: "upto" },
+      payload: { transaction: "AAAA" },
+    });
 
     expect(() => decodePaymentSignature(header)).toThrow(/exact-scheme/);
+  });
+
+  it("names version 1 rather than calling it unrecognisable", () => {
+    const header = encode({
+      x402Version: 1,
+      scheme: "exact",
+      network: "hedera:testnet",
+      payload: { transaction: "AAAA" },
+    });
+
+    expect(() => decodePaymentSignature(header)).toThrow(/version 1/);
+  });
+
+  it("rejects a payload with no transaction in it", () => {
+    const header = encode({
+      x402Version: 2,
+      accepted: buildRequirements(CONFIG, "0.0.7162784"),
+      payload: {},
+    });
+
+    expect(() => decodePaymentSignature(header)).toThrow(/exact-scheme/);
+  });
+});
+
+describe("the 402 names its resource", () => {
+  it("states an absolute URL, which is what a version 2 client requires", async () => {
+    const { deps } = harness();
+
+    const outcome = await gate(headerLookup({}), "/orders", deps);
+
+    expect(outcome.kind).toBe("payment-required");
+    if (outcome.kind !== "payment-required") return;
+    // An object with a URL, never the bare path. `PaymentRequiredV2Schema` in
+    // `@x402/core` types `resource` as an object and requires it, so a string
+    // here is rejected by any version 2 client before it builds a payment.
+    expect(outcome.body.resource).toEqual({ url: "http://localhost:4021/orders" });
+  });
+
+  it("refuses to start a challenge it cannot address", async () => {
+    const { deps } = harness();
+    const broken = { ...deps, config: { ...CONFIG, serviceUrl: "not a url" } };
+
+    await expect(gate(headerLookup({}), "/orders", broken)).rejects.toThrow(
+      /HANDOFF_SERVICE_URL/,
+    );
   });
 });

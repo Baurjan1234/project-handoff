@@ -12,6 +12,7 @@ const GATE_CONFIG: GateConfig = {
   network: "hedera:testnet",
   receiverAccountId: "0.0.10376656",
   feeTinybars: "100000",
+  serviceUrl: "http://localhost:4021",
 };
 
 const fetchStub: FetchLike = async (url) =>

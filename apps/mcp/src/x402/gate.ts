@@ -25,6 +25,7 @@ import {
   type PaymentPayload,
   type PaymentRequired,
   type PaymentRequirements,
+  type ResourceInfo,
   type SettleResponse,
   type X402Network,
 } from "./types.js";
@@ -49,6 +50,14 @@ export interface GateConfig {
   readonly receiverAccountId: string;
   /** The per-call service fee, in tinybars, as a string. */
   readonly feeTinybars: string;
+  /**
+   * This service's own base URL, used to name the resource in the 402.
+   *
+   * Absolute rather than a path, because the payer echoes it back and a bare
+   * "/orders" names no service. A v2 client rejects a 402 whose resource is
+   * not an object with a URL in it.
+   */
+  readonly serviceUrl: string;
   /** How long the facilitator may take. Their documented example is 300. */
   readonly maxTimeoutSeconds?: number;
 }
@@ -84,7 +93,7 @@ export function buildRequirements(config: GateConfig, feePayer: string): Payment
 
 export function paymentRequired(
   requirements: PaymentRequirements,
-  resource: string,
+  resource: ResourceInfo,
   error?: string,
 ): PaymentRequired {
   return {
@@ -93,6 +102,25 @@ export function paymentRequired(
     resource,
     ...(error === undefined ? {} : { error }),
   };
+}
+
+/**
+ * The absolute URL of a gated path on this service.
+ *
+ * Throws rather than falling back to the path, because a resource the payer
+ * cannot resolve is the kind of thing that is only noticed on camera.
+ */
+export function resourceInfo(serviceUrl: string, path: string): ResourceInfo {
+  let url: string;
+  try {
+    url = new URL(path, serviceUrl).toString();
+  } catch {
+    throw new GateError(
+      `serviceUrl ${JSON.stringify(serviceUrl)} is not a URL, so the 402 cannot name ` +
+        `what it is charging for. Set HANDOFF_SERVICE_URL.`,
+    );
+  }
+  return { url };
 }
 
 /** Base64 of the JSON, which is what `@x402/core` encodes and decodes. */
@@ -108,12 +136,24 @@ export function decodePaymentSignature(header: string): PaymentPayload {
     throw new GateError("payment header is not base64-encoded JSON");
   }
 
-  const candidate = parsed as Partial<PaymentPayload>;
+  const candidate = parsed as Partial<PaymentPayload> & Record<string, unknown>;
+
+  // A v1 payload is a recognisable shape rather than a mystery. Saying so
+  // costs one branch and saves the evening someone spends on
+  // "not an x402 payload" when they sent a perfectly good version 1 one.
+  if (candidate.accepted === undefined && typeof candidate["scheme"] === "string") {
+    throw new GateError(
+      "payment header is a version 1 payload, with scheme and network at the top level. " +
+        "This service speaks version 2, where they live in `accepted`.",
+    );
+  }
+
   if (
-    candidate.scheme !== "exact" ||
-    typeof candidate.network !== "string" ||
-    typeof candidate.payload?.transaction !== "string" ||
-    candidate.accepted === undefined
+    typeof candidate.accepted !== "object" ||
+    candidate.accepted === null ||
+    candidate.accepted.scheme !== "exact" ||
+    typeof candidate.accepted.network !== "string" ||
+    typeof candidate.payload?.transaction !== "string"
   ) {
     throw new GateError("payment header is not an exact-scheme x402 payload");
   }
@@ -149,11 +189,12 @@ export interface GateDeps {
  */
 export async function gate(
   lookup: HeaderLookup,
-  resource: string,
+  path: string,
   deps: GateDeps,
 ): Promise<GateOutcome> {
   const feePayer = await deps.facilitator.feePayer(deps.config.network);
   const requirements = buildRequirements(deps.config, feePayer);
+  const resource = resourceInfo(deps.config.serviceUrl, path);
 
   const header = lookup(PAYMENT_SIGNATURE_HEADER) ?? lookup(LEGACY_PAYMENT_HEADER);
   if (header === undefined) {
@@ -167,11 +208,13 @@ export async function gate(
     return challenge(requirements, resource, (error as Error).message);
   }
 
-  if (payload.network !== requirements.network) {
+  // The quote the payer echoed back, not a top-level field: version 2 has no
+  // top-level network to read.
+  if (payload.accepted.network !== requirements.network) {
     return challenge(
       requirements,
       resource,
-      `payment is for ${payload.network}, this service settles on ${requirements.network}`,
+      `payment is for ${payload.accepted.network}, this service settles on ${requirements.network}`,
     );
   }
 
@@ -189,7 +232,7 @@ export async function gate(
 
 function challenge(
   requirements: PaymentRequirements,
-  resource: string,
+  resource: ResourceInfo,
   error?: string,
 ): Extract<GateOutcome, { kind: "payment-required" }> {
   const body = paymentRequired(requirements, resource, error);
