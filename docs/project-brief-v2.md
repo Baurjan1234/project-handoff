@@ -148,27 +148,31 @@ nobody implements "just one quote message."
 ```
 POSTED        order envelope on HCS (spec + class + cert tag + price + deadline
               + acceptance schema + optional input artifact hash + schema_version)
-              funds locked in escrow; scheduled payment created (PAY is the default)
+              funds locked in escrow. No payee yet, so nothing to pay — the
+              commitment is made at CLAIMED (PAY is the default)
 CLAIMED       first valid claim from a certified account wins; CONSENSUS TIMESTAMP
               is the truth — UIs display optimistically but must handle "you lost
               the race" when the mirror confirms an earlier claim. Claimant gets a
               claim-timeout that is SHORT relative to the order deadline (a lazy
-              claimant must not be able to hold funds hostage to the deadline)
+              claimant must not be able to hold funds hostage to the deadline).
+              The payee is now known, so THIS is where the payout is committed
 DELIVERED     expert publishes the signed attestation on HCS. The expert's key
-              signs the HCS message ONLY — it is NOT a schedule key. The escrow
+              signs the HCS message ONLY — it never signs the payout. The escrow
               service validates the attestation against the order schema, then
-              platform verifier + schedule-admin ScheduleSign → payment fires.
-              The payout step is an IDEMPOTENT RETRY (never double-pay): if the
+              platform verifier + schedule-admin CO-SIGN ONE TransferTransaction
+              and the money moves. Idempotent retry (never double-pay): if the
               service is down when the expert signs, the attestation stands on
               HCS and payment lands on recovery
 SETTLED       payment executed; mirror-node confirmation in-app; Hashscan link
-— CLAIM-TIMEOUT claimant idle past claim-timeout → ScheduleDelete the payment to
-              that claimant → re-open ONCE → new claimant gets a FRESH schedule.
-              (Claim-timeout and order-deadline expiry are DIFFERENT events.)
-— TIMEOUT     unclaimed at order deadline → schedule expires unexecuted → funds
-              return to requester
-— VIOLATION   provable (mechanical) schema violation → ScheduleDelete — the only
-              clawback path. The check script is open-source, so a false clawback
+— CLAIM-TIMEOUT claimant idle past claim-timeout → cancel the payout recorded for
+              that claimant → re-open ONCE → new claimant gets a FRESH payout
+              record. (Claim-timeout and order-deadline expiry are DIFFERENT
+              events.)
+— TIMEOUT     unclaimed at order deadline → the payout is never co-signed → funds
+              stay in escrow for return to the requester
+— VIOLATION   provable (mechanical) schema violation → cancel the recorded payout
+              — the only clawback path. The check script is open-source, so a
+              false clawback
               is auditable; the expert keeps HCS proof; appeal = stubbed jury
 ```
 
@@ -181,19 +185,32 @@ A compromised backend has quorum.** Decentralizing the verifier is the productio
 roadmap; two Node processes on one team are not two custodians and we don't pretend
 otherwise.
 
-**Day-1 spike (P1, hour 1):** validate ScheduleCreate with payee unknown at post time —
-Hedera's Schedule Service normally wants a fully formed inner transfer, so **expect the
-fallback**: funds still lock into the escrow account at POSTED and the payee-less HCS
-envelope still publishes; the schedule is created *at claim time* (payee known),
-preserving pay-by-default from the moment of claim; the post→claim window is protected
-by the threshold key alone (trusted-platform, admitted). If the fallback is the
-architecture, the lifecycle above and the demo narration both say "committed at claim"
-— decide by end of hour 1, not at 3am, and update this diagram to match reality.
+**Day-1 spike (P1) — ANSWERED Sep 8, and the answer was neither option.** The spike
+expected a fallback where the schedule is created at claim time instead of post time.
+It turned out `ScheduleCreateTransaction` **cannot debit a `KeyList` account at all** —
+`INVALID_SIGNATURE`, reproduced across eight isolated testnet runs, root cause still
+unresolved with Hedera. So Hedera's Schedule Service is **not used**: the verifier and
+schedule-admin keys are both held by the same backend, both signatures are available in
+the same call, and the payout is one directly co-signed `TransferTransaction`. The
+Schedule Service exists for signers who act at different times from different
+processes, which is a problem we do not have.
+
+What that preserves, unchanged: funds lock into escrow at POSTED, the payee-less
+envelope still publishes, the payout is committed **at claim**, and the post→claim
+window is protected by the threshold key alone (trusted-platform, admitted above).
+Idempotency was `IDENTICAL_SCHEDULE_ALREADY_CREATED` for free from the network; it is
+now a deterministic hash of the payout's parameters. Never double-pay still holds.
+
+The lifecycle above and the demo narration both say **"committed at claim"**. Say "the
+platform co-signs and the money moves", never "the schedule fires". Verified end to end
+on real testnet against the provisioned escrow. See
+`docs/research/schedule-create-keylist-blocker.md` and
+`docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md`.
 
 ## The attestation, byte-for-byte
 
 An HCS message submitted **from the expert's own Hedera account** (the account
-signature is the attestation signature — the expert's key never touches the schedule).
+signature is the attestation signature — the expert's key never touches the payout).
 Payload:
 
 ```
@@ -243,7 +260,7 @@ Two distinct money flows, and they must never be confused on camera or in code.
 | Flow | What it is | Rail | Size |
 |---|---|---|---|
 | **Service fee** | The requester agent pays to call `handoff_verify` and post an order | x402 over HTTP, settled on `hedera:testnet` | Micropayment |
-| **Order value** | The price of the human judgment being bought | Escrow account plus scheduled transfer | The demo price |
+| **Order value** | The price of the human judgment being bought | Escrow account plus a co-signed transfer | The demo price |
 
 The service fee is what qualifies us for the prize. The order value is the product.
 
@@ -327,8 +344,8 @@ expert web app itself; custodial key management is a weeks-scale project.
 - **Tier 1 (demo dies without):** **x402 payment gate on `handoff_verify`**, settled
   through the Blocky402 testnet facilitator, plus the demo requester agent completing at
   least one real paid request end to end — this is the prize qualification requirement
-  and nothing else substitutes for it; escrow + fund-lock; scheduled pre-committed payment +
-  early-execute (as specified above); HCS envelopes (hash-only, `class` +
+  and nothing else substitutes for it; escrow + fund-lock; the payout pre-committed at
+  claim + early-execute (as specified above); HCS envelopes (hash-only, `class` +
   `schema_version` + `prior_attestation_ref`); content store (**Supabase behind an
   adapter** — P1 owns the project, service key vault-only, signed-URL TTL > claim-timeout
   + review time); lifecycle state machine; shared versioned schema package **shipping
@@ -380,7 +397,7 @@ is not scope.
 
 | Seat | Owns |
 |---|---|
-| P1 Protocol/chain | Escrow, schedule + early-execute, HCS, Supabase project, lifecycle, mirror/Hashscan threading |
+| P1 Protocol/chain | Escrow, payout + early-execute, HCS, Supabase project, lifecycle, mirror/Hashscan threading |
 | P2 Requester integration | `handoff_verify` MCP **and its x402 payment gate**, the x402 client in the demo requester session, budget prompt (Tier 2 only). This seat carries the prize-qualifying work and is the heaviest lane in v2 |
 | P3 Expert surface | Expert web app: inbox, review workspace, verdict editor with `defects[]` bounds, sign action |
 | P4 Trust, registry & story | Schema package + `MockChainAdapter`, attestation format, registry + gating, README/video/rubric |
@@ -392,7 +409,8 @@ the x402 gate for P2's time, **the x402 gate wins**. That is the requirement; Ag
 is not.
 
 **Day 1, in order:** (0) `AI-USAGE.md` in the same commit as the first source file;
-(1) P1 runs the ScheduleCreate spike against the pre-written fallback tree; (2) P4
+(1) P1 runs the ScheduleCreate spike against the pre-written fallback tree
+(**done — see the answered spike above; neither branch of the tree was the answer**); (2) P4
 ships the schema package + `MockChainAdapter` **first, pairing with P2 if needed — the
 mock is tiny and everything queues behind it**; (3) CI action (`tsc --noEmit` + unit
 tests on PR) + gitleaks hook with the first scaffolding; (4) P2/P3 build against the
