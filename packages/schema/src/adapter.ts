@@ -93,6 +93,18 @@ export interface ChainAdapter {
   submitMessage(topicId: string, contents: string): Promise<ConsensusRef>;
   readMessages(topicId: string, options?: ReadMessagesOptions): Promise<readonly TopicMessage[]>;
 
+  /**
+   * Publish a claim on the orders topic **from the claimant's own account**.
+   *
+   * This is not `submitMessage` with a different body. `submitMessage` pays
+   * with whatever account the adapter was built with; a claim has to be paid
+   * by the expert, because the payer account *is* the claimant and readers
+   * take it from the topic message, never from the body. The real adapter
+   * signs with the expert's key and nothing else, the same as an attestation.
+   * The mock records `claimantAccountId` as the payer.
+   */
+  publishClaim(topicId: string, claimantAccountId: string, contents: string): Promise<ConsensusRef>;
+
   lockFunds(params: LockFundsParams): Promise<EscrowRef>;
 
   createSchedule(params: CreateScheduleParams): Promise<ScheduleRef>;

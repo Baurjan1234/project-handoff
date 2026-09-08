@@ -1,6 +1,7 @@
 export * from "./adapter.js";
 export * from "./attestation.js";
 export * from "./canonical.js";
+export * from "./claim.js";
 export * from "./constants.js";
 export * from "./envelope.js";
 export * from "./mock.js";

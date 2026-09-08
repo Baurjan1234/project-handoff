@@ -88,23 +88,26 @@ export class MockChainAdapter implements ChainAdapter {
     });
   }
 
-  async submitMessage(topicId: string, contents: string): Promise<ConsensusRef> {
+  #append(topicId: string, payerAccountId: string, contents: string): ConsensusRef {
     const existing = this.#messages.get(topicId) ?? [];
     const transactionId = this.#nextTxId();
     const consensusTimestamp = this.#timestamp();
     const sequenceNumber = existing.length + 1;
 
-    existing.push({
-      topicId,
-      sequenceNumber,
-      consensusTimestamp,
-      payerAccountId: "MOCK-payer",
-      contents,
-    });
+    existing.push({ topicId, sequenceNumber, consensusTimestamp, payerAccountId, contents });
     this.#messages.set(topicId, existing);
     this.#record(transactionId, consensusTimestamp);
 
     return { transactionId, consensusTimestamp, sequenceNumber };
+  }
+
+  async submitMessage(topicId: string, contents: string): Promise<ConsensusRef> {
+    return this.#append(topicId, "MOCK-payer", contents);
+  }
+
+  /** The claimant pays, so the claimant is the payer. That is the whole point of the method. */
+  async publishClaim(topicId: string, claimantAccountId: string, contents: string): Promise<ConsensusRef> {
+    return this.#append(topicId, claimantAccountId, contents);
   }
 
   async readMessages(

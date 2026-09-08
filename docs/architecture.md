@@ -112,8 +112,8 @@ sequenceDiagram
     M->>H: lock funds in escrow, publish order envelope on HCS
     H-->>M: transaction ids
     M-->>R: order id, escrow tx, topic id
-    E->>H: claim from a certified account
-    Note over E,H: consensus timestamp decides the race
+    E->>H: publish claim message on the orders topic, from the expert's own account
+    Note over E,H: consensus timestamp decides the race; the payer account is the claimant
     E->>S: fetch artifact by signed URL
     E->>H: publish signed attestation from the expert's own account
     V->>H: read the attestation from a mirror node
@@ -182,6 +182,31 @@ Decentralizing the verifier is the production roadmap.
 The escrow is one shared account this week, provisioned once; every order locks into it
 and per-order accounting is off-chain. One account per order is roadmap, decided in
 `docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`.
+
+## The claim message
+
+Claiming is an HCS message on the orders topic, submitted from the expert's own account.
+The body is four fields, `{ kind: "claim", order_id, cert_tag, schema_version }`, because
+the topic message already carries who and when: the payer account is the claimant and
+the consensus timestamp is the claim time. The order envelope has no `kind` field and
+both shapes are strict, so a parser cannot confuse them.
+
+```mermaid
+flowchart LR
+  P["Order envelope<br/>posted by the platform"] --> C1["Claim from 0.0.5005<br/>consensus 10.000000008"]
+  P --> C2["Claim from 0.0.7007<br/>consensus 10.000000009"]
+  C1 --> W["Winner: 0.0.5005<br/>first by consensus timestamp"]
+  C2 -.->|ignored by readers| W
+  W -->|window expires, nothing delivered| R["First claim after expiry<br/>wins the one reopen"]
+  W -->|attestation lands| D["Delivered: the claim is final"]
+```
+
+The rule is `resolveClaims` in `packages/schema`, called by both ends so the expert app
+and the requester's status tool never disagree about who holds an order. A claim counts
+only if its order id and credential tag match and it landed before the deadline. The
+sign-by time is the claim time plus the claim timeout, capped at the deadline. The
+winning claim is what triggers `ScheduleCreate`, since it is the first moment the payee
+is known.
 
 ## Open: when the schedule is created
 
