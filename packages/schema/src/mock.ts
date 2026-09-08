@@ -118,7 +118,7 @@ function assertFundLockMatches(
   }
   if (transfer.from !== expected.requesterAccountId) {
     throw new FundLockError(
-      "wrong-requester",
+      "wrong-debited-account",
       `the debited account is ${transfer.from}, not the requester ${expected.requesterAccountId}`,
     );
   }
@@ -145,7 +145,7 @@ function assertFundLockMatches(
   }
   if (!transfer.signedBy.includes(expected.requesterAccountId)) {
     throw new FundLockError(
-      "wrong-requester",
+      "wrong-signer",
       `the fund lock is signed by ${transfer.signedBy.join(", ")}, not by the requester ${expected.requesterAccountId}`,
     );
   }

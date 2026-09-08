@@ -174,7 +174,14 @@ export type FundLockRejection =
   | "not-a-transfer"
   | "wrong-amount"
   | "wrong-escrow-account"
-  | "wrong-requester"
+  /**
+   * The debited account is not the requester, and the signer is not the
+   * requester, are two different mistakes with two different fixes: one built
+   * the transfer against the wrong account, the other signed with the wrong
+   * key. A single `wrong-requester` could not tell a client which it was.
+   */
+  | "wrong-debited-account"
+  | "wrong-signer"
   | "wrong-fee-payer"
   | "extra-transfers"
   | "unsigned"

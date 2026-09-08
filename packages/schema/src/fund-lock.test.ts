@@ -110,7 +110,7 @@ describe("submitFundLock refuses everything else", () => {
 
   it("refuses a substituted debited account — the caller cannot spend somebody else's balance", async () => {
     const built = await build();
-    await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { from: "0.0.9999" }), "wrong-requester");
+    await rejects(tamper(signFundLock(built.transactionBytes, REQUESTER), { from: "0.0.9999" }), "wrong-debited-account");
   });
 
   it("refuses a substituted fee payer, which is how the platform would end up paying again", async () => {
@@ -125,7 +125,18 @@ describe("submitFundLock refuses everything else", () => {
 
   it("refuses a lock somebody other than the requester signed", async () => {
     const built = await build();
-    await rejects(signFundLock(built.transactionBytes, "0.0.9999"), "wrong-requester");
+    await rejects(signFundLock(built.transactionBytes, "0.0.9999"), "wrong-signer");
+  });
+
+  it("tells a wrong-account build apart from a wrong-key signature", async () => {
+    // The two used to share one reason, which left a client unable to know
+    // whether to rebuild the transfer or re-sign it.
+    const built = await build();
+    await rejects(
+      tamper(signFundLock(built.transactionBytes, REQUESTER), { from: "0.0.9999" }),
+      "wrong-debited-account",
+    );
+    await rejects(signFundLock(built.transactionBytes, "0.0.9999"), "wrong-signer");
   });
 
   it("refuses a lock whose validity window has passed, rather than submitting a doomed transaction", async () => {
