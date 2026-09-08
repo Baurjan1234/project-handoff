@@ -7,16 +7,62 @@
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpServer } from "./server.js";
-import { fetchTags, UnwiredSigner } from "./client.js";
+import { fetchTags, UnwiredSigner, type PaymentSigner, type PreflightCheck } from "./client.js";
+import { createX402Signer } from "@handoff/chain";
+import { preflight } from "../preflight.js";
 import type { CertTagOption } from "../config.js";
 
 const baseUrl = process.env["HANDOFF_SERVICE_URL"]?.trim() ?? "http://localhost:4021";
+const mirrorNodeUrl =
+  process.env["HEDERA_MIRROR_NODE_URL"]?.trim() ?? "https://testnet.mirrornode.hedera.com/api/v1";
 
 // stderr, because stdout is the JSON-RPC channel.
 console.error(`handoff_verify -> ${baseUrl}`);
-console.error(
-  "payment signer: none. Ordering will report the price and stop until the x402 client lands.",
-);
+
+/**
+ * The payer, if this session has one.
+ *
+ * Absent is a supported state, not a broken one. A session with no payer
+ * account still gets both tools: reads are free and ungated, and ordering
+ * fails at the signer with the price in the message. Refusing to start would
+ * take `handoff_status` away too, and nobody restarts an agent client to
+ * recover a tool they never saw appear.
+ */
+const payerAccountId = process.env["X402_PAYER_ACCOUNT_ID"]?.trim();
+const payerKey = process.env["X402_PAYER_PRIVATE_KEY"]?.trim();
+
+let signer: PaymentSigner = new UnwiredSigner();
+let check: PreflightCheck | undefined;
+
+if (payerAccountId && payerKey && !payerAccountId.includes("x")) {
+  try {
+    signer = createX402Signer({
+      accountId: payerAccountId,
+      privateKey: payerKey,
+      resourceUrl: `${baseUrl.replace(/\/+$/, "")}/orders`,
+      maxAmountTinybars: process.env["X402_MAX_FEE_TINYBARS"]?.trim() || "100000000",
+    });
+    // The fee is the server's to state, so the amount comes from the quote and
+    // never from configuration here. The order value is the caller's and is
+    // not this account's problem: the escrow is funded server-side from the
+    // requester account, so this checks the fee alone.
+    check = async (requirements) =>
+      preflight(
+        { payerAccountId, feeTinybars: requirements.amount },
+        { mirrorNodeUrl },
+      );
+    console.error(`x402 payer: ${payerAccountId}`);
+  } catch (error) {
+    // A wrong key type is the common one, and its message names the key type
+    // rather than the signature. Say it once here instead of on every order.
+    console.error(`x402 payer unavailable: ${(error as Error).message}`);
+  }
+} else {
+  console.error(
+    "payment signer: none. Set X402_PAYER_ACCOUNT_ID and X402_PAYER_PRIVATE_KEY to order; " +
+      "reads work either way.",
+  );
+}
 
 /**
  * Fetch the tag list, patiently, and start anyway if it never arrives.
@@ -59,4 +105,11 @@ if (certTags.length > 0) {
   console.error(`credentials: ${certTags.map((tag) => tag.code).join(", ")}`);
 }
 
-serveStdio(() => createMcpServer({ baseUrl, signer: new UnwiredSigner(), certTags }));
+serveStdio(() =>
+  createMcpServer({
+    baseUrl,
+    signer,
+    certTags,
+    ...(check === undefined ? {} : { preflight: check }),
+  }),
+);
