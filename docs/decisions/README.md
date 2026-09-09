@@ -55,3 +55,7 @@ Newest last.
 - [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
 - [Platform-key env names live in the app, chain exports a string-taking factory](2026-09-08-platform-key-env-names-live-in-the-app.md) — closes the layout-rule gap the cutover hit
 - [Custody, email onboarding and non-Hedera wallets stay out](2026-09-08-custody-onboarding-and-wallets-stay-out.md) — three already ruled, one open question for **Nasaa**
+
+### 2026-09-09
+
+- [World Selfie Check: go, but after the Sep 11 freeze](2026-09-09-world-selfie-check-goes-ahead-post-freeze.md) — supersedes the Sep 5 gate, World ID is now Tier 2

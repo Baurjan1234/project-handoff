@@ -78,10 +78,12 @@ are not in this repo and an agent never needs them to build.
   review → sign); attestation format; allowlist registry with on-HCS events and cert
   gating; mirror-node settlement reads with tx IDs threaded through.
 - **Tier 2 (only after Tier 1 is green):** expert-side fleet pre-analysis; plain web
-  requester form; second-opinion audit; reject-rate reputation signal; budget prompt.
+  requester form; second-opinion audit; reject-rate reputation signal; budget prompt;
+  World ID Selfie Check at sign time (post-freeze track, decided
+  `docs/decisions/2026-09-09-world-selfie-check-goes-ahead-post-freeze.md`).
 - **Tier 3 (never build this week):** dispute jury and its UI; reject→RFQ fix market;
   a working `execution` demo path; redline class; custodial web2 wrap; fiat rails;
-  World ID; any token; general MCP-to-MCP negotiation.
+  any token; general MCP-to-MCP negotiation.
 
 If a task would land in Tier 3, stop and say so rather than building it. Tier 3 items
 exist as schema fields and slides, not code.
@@ -219,7 +221,7 @@ setup, apart from two one-time steps below.
 |---|---|
 | `hedera` | The official hosted Agent Kit, testnet. Builds transaction bytes; it never signs, never submits, and never sees a private key |
 | `hedera-docs` | Hedera's own documentation search |
-| `linear` | The board. Read and update issues; never depend on it at build time |
+| `linear` | The board. Project **"Project handoff"** (`project-handoff-dbc693664e86`). Read and update issues; never depend on it at build time |
 | `context7` | Live docs for everything that is not Hedera: Next.js, Tailwind, shadcn, Supabase, the MCP SDK, zod, vitest |
 
 **Never recall a Hedera SDK call from memory.** Look it up through `hedera-docs` or
