@@ -27,6 +27,14 @@
  * scope and never assigned to the returned value. `Object.keys()` on the result
  * lists methods and nothing else, and that is asserted in the tests rather than
  * left as an intention.
+ *
+ * ## The key is checked against the account before a Client exists
+ *
+ * The connect screen already read the account's public key off the mirror node.
+ * Handing it in as `expectedPublicKey` turns a wrong paste into a plain
+ * `KeyMismatchError` at connect, instead of an `INVALID_SIGNATURE` at the first
+ * submit, on a laptop that is about to be recorded. The error names the account
+ * and never the key.
  */
 
 import { AccountId, Client, PrivateKey, TopicId } from "@hiero-ledger/sdk";
@@ -37,16 +45,61 @@ import { fetchMirrorTopicMessages, fetchMirrorTransaction } from "./mirror.js";
 /** Exactly the slice the expert app may call. Mirrors apps/web's `ExpertChain`. */
 export type ExpertChain = Pick<ChainAdapter, "network" | "submitMessage" | "readMessages" | "getTransaction">;
 
+/** The two curves a Hedera account key can be. Named as the mirror node names them. */
+export type ExpertKeyType = "ED25519" | "ECDSA_SECP256K1";
+
 export interface ExpertChainParams {
   /** The expert's own account. They pay for and sign their own attestation. */
   accountId: string;
   /**
-   * The expert's key, as the DER string the connect screen collected. Taken as a
-   * string rather than a `PrivateKey` so the caller never has to hold a parsed key
-   * object either — this reads it once and keeps it in scope.
+   * The expert's key as the connect screen collected it: the DER string from the
+   * portal, or raw hex. Taken as a string rather than a `PrivateKey` so the caller
+   * never has to hold a parsed key object either — this reads it once and keeps it
+   * in scope. A raw hex key needs `keyType`, because 32 bytes do not say which
+   * curve they are on.
    */
   privateKeyDer: string;
+  /** Which curve to parse a raw key as. Ignored for DER, which carries its own. */
+  keyType?: ExpertKeyType;
+  /**
+   * The account's public key as the mirror node reports it (hex, raw or DER).
+   * When given, a key that does not produce it is refused with `KeyMismatchError`
+   * before any `Client` is built.
+   */
+  expectedPublicKey?: string;
   mirrorNodeUrl: string;
+}
+
+/** The pasted key is not the one that controls the account. Says which account; never which key. */
+export class KeyMismatchError extends Error {
+  constructor(accountId: string) {
+    super(`This key does not belong to account ${accountId}.`);
+    this.name = "KeyMismatchError";
+  }
+}
+
+function stripHexPrefix(text: string): string {
+  return text.startsWith("0x") || text.startsWith("0X") ? text.slice(2) : text;
+}
+
+/**
+ * DER carries the curve in its header (`302e…` ED25519, `3030…` ECDSA) and is
+ * always longer than a raw 32-byte key, so the two cannot be confused: a raw key
+ * is exactly 64 hex characters. The SDK's plain `fromString` is deprecated and
+ * DER-only, so this never calls it.
+ */
+function parsePrivateKey(text: string, keyType: ExpertKeyType | undefined): PrivateKey {
+  const hex = stripHexPrefix(text.trim());
+  if (hex.length > 64 && /^30/i.test(hex)) return PrivateKey.fromStringDer(hex);
+  if (keyType === "ECDSA_SECP256K1") return PrivateKey.fromStringECDSA(hex);
+  if (keyType === "ED25519") return PrivateKey.fromStringED25519(hex);
+  throw new Error("A raw hex key does not say which curve it is on. Pass keyType, or the DER form from the portal.");
+}
+
+function publicKeyMatches(privateKey: PrivateKey, expected: string): boolean {
+  const wanted = stripHexPrefix(expected.trim()).toLowerCase();
+  const publicKey = privateKey.publicKey;
+  return wanted === publicKey.toStringRaw().toLowerCase() || wanted === publicKey.toStringDer().toLowerCase();
 }
 
 /**
@@ -60,7 +113,11 @@ export function createExpertChain(params: ExpertChainParams): ExpertChain & { cl
   const accountId = AccountId.fromString(params.accountId);
 
   // Read once, into scope. Never stored on the returned object.
-  const privateKey = PrivateKey.fromString(params.privateKeyDer);
+  const privateKey = parsePrivateKey(params.privateKeyDer, params.keyType);
+
+  if (params.expectedPublicKey !== undefined && !publicKeyMatches(privateKey, params.expectedPublicKey)) {
+    throw new KeyMismatchError(params.accountId);
+  }
 
   const client = Client.forTestnet();
   client.setOperator(accountId, privateKey);
