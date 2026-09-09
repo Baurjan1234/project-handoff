@@ -36,12 +36,21 @@ async function main(): Promise<void> {
   console.log(`facilitator fee payer for hedera:testnet: ${hedera.extra.feePayer}`);
   console.log(`scheme: ${hedera.scheme}, x402Version: ${hedera.x402Version}`);
 
-  // 2. Build a payload with a throwaway ECDSA key. No account exists behind it.
-  const throwaway = PrivateKey.generateECDSA();
+  // 2. Build a payload. Uses the real funded payer from .env when it is there, and
+  // falls back to a throwaway key with no account behind it — which still answers the
+  // wire-shape question, just with a guaranteed rejection at precheck.
+  const envPayerId = process.env["X402_PAYER_ACCOUNT_ID"]?.trim();
+  const envPayerKey = process.env["X402_PAYER_PRIVATE_KEY"]?.trim();
+  const real = Boolean(envPayerId && envPayerKey);
+
+  const payerAccountId = real ? (envPayerId as string) : "0.0.999999999";
+  const payerKey = real ? PrivateKey.fromString(envPayerKey as string) : PrivateKey.generateECDSA();
+  console.log(`\npayer: ${payerAccountId} ${real ? "(real, from .env)" : "(throwaway, no account behind it)"}`);
+
   const signer = new X402Signer({
-    accountId: "0.0.999999999",
+    accountId: payerAccountId,
     resourceUrl: "http://localhost:8402/orders",
-    privateKey: throwaway,
+    privateKey: payerKey,
     maxAmountTinybars: FEE_TINYBARS,
   });
 
@@ -49,7 +58,9 @@ async function main(): Promise<void> {
     scheme: hedera.scheme,
     network: "hedera:testnet",
     amount: FEE_TINYBARS,
-    payTo: "0.0.98", // any account; this probe never settles
+    // The real receiver when we have one. This probe calls /verify only, never
+    // /settle, so no money moves either way.
+    payTo: or(process.env["X402_RECEIVER_ACCOUNT_ID"], "0.0.98"),
     maxTimeoutSeconds: 60,
     asset: "0.0.0",
     extra: { feePayer: hedera.extra.feePayer },
@@ -70,7 +81,7 @@ async function main(): Promise<void> {
         scheme: hedera.scheme,
         network: "hedera:testnet",
         amount: FEE_TINYBARS,
-        payTo: "0.0.98",
+        payTo: or(process.env["X402_RECEIVER_ACCOUNT_ID"], "0.0.98"),
         maxTimeoutSeconds: 60,
         asset: "0.0.0",
         extra: { feePayer: hedera.extra.feePayer },
