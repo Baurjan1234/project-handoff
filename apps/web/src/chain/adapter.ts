@@ -1,10 +1,12 @@
 /**
  * The one place the expert app picks a chain, now from a connection.
  *
- * Mock until the Monday-night cutover, then the real adapter from
- * `packages/chain`, constructed with the expert's own account and key. Both
- * satisfy the same `ChainAdapter` interface, so the sign action does not
- * change; only this file does. Nothing in this app imports the Hedera SDK.
+ * Mock until the cutover, then the expert's slice of the real chain from
+ * `packages/chain`, built with the expert's own account and key. Both satisfy
+ * the same `ExpertChain` shape, so the sign action does not change; only this
+ * file does. Nothing in this app imports the Hedera SDK: the testnet branch
+ * imports one factory from `@handoff/chain/expert`, which holds the key in a
+ * closure and exposes four methods.
  *
  * Two rules are types here rather than prose. `ExpertChain` is the slice of
  * the adapter the expert app is allowed to call: the expert's key signs the
@@ -15,8 +17,9 @@
  * platform as well.
  */
 
+import { createExpertChain } from "@handoff/chain/expert";
 import { MockChainAdapter, type ChainAdapter } from "@handoff/schema";
-import { InMemoryContentStore, type ContentStore } from "../content";
+import { HttpContentStore, InMemoryContentStore, type ContentStore } from "../content";
 import type { ExpertConnection } from "../session/connect";
 import type { WebChainConfig } from "./config";
 
@@ -66,14 +69,36 @@ export function createWebChain(config: WebChainConfig, connection: ExpertConnect
         disconnect() {},
       };
     }
-    case "testnet":
-      // Thrown before the key is read: nothing here can use it yet, so nothing
-      // reads it. Not a silent fallback to the mock, either: a screen that
-      // says "testnet" while showing mock ids is what the recording rule
-      // forbids. The credential is disposed by the caller either way.
-      throw new Error(
-        "The testnet adapter arrives with packages/chain at the Mon Sep 7 cutover. " +
-          "Until then run with VITE_CHAIN=mock, and never record it.",
+    case "testnet": {
+      if (config.mode !== "testnet") throw new ConnectionMismatch(config.mode, connection.mode);
+      const { accountId, credential, accountPublicKey } = connection;
+
+      // The one read of the key. It goes straight into the factory's closure
+      // and is checked against the account's public key before a client
+      // exists, so a wrong paste fails here with a plain message rather than
+      // at the first signature.
+      const expert = credential.key.useOnce((privateKeyDer) =>
+        createExpertChain({
+          accountId,
+          privateKeyDer,
+          keyType: credential.keyType,
+          mirrorNodeUrl: config.mirrorNodeUrl,
+          ...(accountPublicKey === null ? {} : { expectedPublicKey: accountPublicKey }),
+        }),
       );
+
+      let closed = false;
+      return {
+        mode: "testnet",
+        expertAccountId: accountId,
+        chain: expert,
+        content: new HttpContentStore(config.contentUrl),
+        disconnect() {
+          if (closed) return;
+          closed = true;
+          expert.close();
+        },
+      };
+    }
   }
 }
