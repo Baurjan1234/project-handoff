@@ -122,3 +122,28 @@ to a screen recipe in `docs/design-system.md`.
 Together with the design system and the flow walkthrough, this is the whole brief. If a
 screen needs something not covered here, ask P4 before building it; scope-cut authority
 sits there.
+
+## Testnet wiring, as built
+
+- `createWebChain`'s testnet branch calls `createExpertChain` from
+  `@handoff/chain/expert`, the only thing this app imports from the chain package. It
+  is a subpath export on purpose: the barrel drags in the platform adapter and the x402
+  signer, which have no business in a browser bundle. The key goes from `SecretKey` into
+  the factory's closure in one read, checked against the mirror node's public key first,
+  so a wrong paste is a `KeyMismatchError` at connect rather than a failed signature on
+  camera.
+- Orders come off the topic through `TestnetOrderSource` (`src/chain/testnetOrders.ts`)
+  and claims are decided by the treaty's `resolveClaims`; the app has no winner rule of
+  its own. A claim is `submitMessage` on the expert's chain, so the payer is the expert.
+- The payout is found, never told: `mirrorPayoutLocator` reads the expert's transfers
+  since the verdict's consensus timestamp and matches the one that moves the order value
+  from the escrow. Read directly from the mirror node, which is allowed; Hashscan is not.
+- Content is `HttpContentStore`: `GET {VITE_CONTENT_URL}/{sha256}` for the ask and the
+  document, `PUT` for the notes, every read checked against its hash. The Supabase
+  service key never reaches this app, so something server-side must answer that URL;
+  that is the open ask to P1/P2, and until it exists testnet mode reads the topic and
+  shows "not in the content store yet" for the ask.
+- Testnet needs `VITE_HANDOFF_ORDERS_TOPIC_ID`, `VITE_CONTENT_URL` and
+  `VITE_HANDOFF_ESCROW_ACCOUNT_ID`; `VITE_HEDERA_MIRROR_NODE_URL` is optional and
+  defaults to the public testnet mirror. A URL that mentions mainnet refuses to boot.
+
