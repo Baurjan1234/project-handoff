@@ -4,8 +4,9 @@ Mermaid in markdown so it is diffable and any session can regenerate it. **Keep 
 current in the same pull request as the change it describes.** A diagram that disagrees
 with the code is worse than no diagram.
 
-Nothing here is settled beyond the brief. The one genuinely open shape is the schedule
-timing, drawn at the bottom.
+Nothing here is settled beyond the brief. The schedule-timing question that used to sit
+at the bottom is settled: the payout is committed at claim and Hedera's Schedule Service
+is not used at all — see the section at the end for why, and what replaced it.
 
 ## Components
 
@@ -27,7 +28,7 @@ flowchart LR
   end
 
   subgraph ext["External"]
-    HEDERA["Hedera testnet<br/>HCS topics, escrow account<br/>Schedule Service"]
+    HEDERA["Hedera testnet<br/>HCS topics, escrow account<br/>native transfers"]
     MIRROR["Mirror node REST"]
     STORE["Supabase object store"]
     FAC["Blocky402 facilitator<br/>api.testnet.blocky402.com<br/>designated fee payer"]
@@ -53,7 +54,7 @@ flowchart LR
   CONTENT --> STORE
   EX --> WEB
   EX -. "signs the HCS message only" .-> HEDERA
-  SVC -. "ScheduleSign" .-> HEDERA
+  SVC -. "co-signed payout transfer" .-> HEDERA
   FAC -. "settles the service fee" .-> HEDERA
 ```
 
@@ -74,13 +75,13 @@ stateDiagram-v2
     POSTED --> TIMEOUT: order deadline passes unclaimed
     CLAIMED --> DELIVERED: expert publishes signed attestation on HCS
     CLAIMED --> CLAIM_TIMEOUT: claimant idle past claim-timeout
-    CLAIM_TIMEOUT --> POSTED: reopen once, new claimant gets a fresh schedule
+    CLAIM_TIMEOUT --> POSTED: reopen once, new claimant gets a fresh payout record
     CLAIM_TIMEOUT --> TIMEOUT: already reopened once
-    DELIVERED --> SETTLED: verifier plus schedule admin ScheduleSign
+    DELIVERED --> SETTLED: verifier plus schedule admin co-sign one transfer
     DELIVERED --> VIOLATION: mechanical schema violation
     SETTLED --> [*]
-    TIMEOUT --> [*]: schedule expires unexecuted, funds return
-    VIOLATION --> [*]: ScheduleDelete, the only clawback
+    TIMEOUT --> [*]: payout never signed, funds stay in escrow for return
+    VIOLATION --> [*]: cancel the recorded payout, the only clawback
 ```
 
 Three things this diagram is load-bearing for:
@@ -118,7 +119,7 @@ sequenceDiagram
     E->>H: publish signed attestation from the expert's own account
     V->>H: read the attestation from a mirror node
     V->>V: validate against the order schema
-    V->>H: ScheduleSign, idempotent
+    V->>H: co-signed transfer, idempotent
     H-->>E: payment executed
     E->>H: mirror-node read confirms settlement
 ```
@@ -170,7 +171,7 @@ Two of three on the escrow account.
 |---|---|---|
 | Requester session key | The requester | Clawback, with the platform |
 | Platform verifier key | Us | Early execute, and clawback |
-| Schedule admin key | Us | Early execute, and schedule deletion |
+| Schedule admin key | Us | Early execute, and cancelling a recorded payout |
 
 Early execute is verifier plus admin, after the attestation validates. Clawback is
 requester plus platform, only after a mechanical schema failure.
@@ -205,27 +206,48 @@ The rule is `resolveClaims` in `packages/schema`, called by both ends so the exp
 and the requester's status tool never disagree about who holds an order. A claim counts
 only if its order id and credential tag match and it landed before the deadline. The
 sign-by time is the claim time plus the claim timeout, capped at the deadline. The
-winning claim is what triggers `ScheduleCreate`, since it is the first moment the payee
-is known.
+winning claim is what records the payout, since it is the first moment the payee is
+known.
 
-## Open: when the schedule is created
+## Settled: the payout is committed at claim, and Hedera's Schedule Service is not used
 
-P1's hour-one spike settles this. Hedera's Schedule Service normally wants a fully formed
-inner transfer, so variant B is the expected outcome.
+This was "variant A or variant B" until Sep 8. The answer turned out to be neither,
+because **`ScheduleCreateTransaction` cannot debit a `KeyList` account at all** —
+`INVALID_SIGNATURE`, reproduced across eight isolated testnet runs, root cause still
+unresolved with Hedera (NAS-5). See
+`research/schedule-create-keylist-blocker.md`, and
+`decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md` for the
+replacement.
 
 ```mermaid
 flowchart TB
-  subgraph VA["Variant A, schedule at post"]
-    A1["POSTED<br/>lock funds and ScheduleCreate<br/>with the payee unknown"] --> A2["CLAIMED<br/>payee resolves"] --> A3["DELIVERED<br/>ScheduleSign"]
-  end
-  subgraph VB["Variant B, schedule at claim, expected"]
-    B1["POSTED<br/>lock funds, publish a payee-less envelope"] --> B2["CLAIMED<br/>ScheduleCreate, payee now known"] --> B3["DELIVERED<br/>ScheduleSign"]
-  end
+  P["POSTED<br/>lock funds into the shared escrow<br/>publish a payee-less envelope"]
+  C["CLAIMED<br/>payee now known<br/>payout recorded, nothing on-chain yet"]
+  D["DELIVERED → SETTLED<br/>verifier + schedule-admin co-sign ONE<br/>TransferTransaction, submitted directly"]
+  P --> C --> D
 ```
 
-Under variant B the post-to-claim window is protected by the threshold key alone, which
-is trusted-platform and gets admitted out loud. The demo narration then says "committed
-at claim", not "committed at post".
+Why this is not a downgrade: Hedera's Schedule Service exists so signers who act at
+**different times, from different processes** can accumulate signatures on a
+transaction. We do not have that problem — the verifier and schedule-admin keys are
+both held by the same trusted backend, which root `CLAUDE.md` already admits out loud.
+Both signatures are available in the same call, so the payout is one directly
+co-signed transfer instead.
 
-Decide by the end of hour one, then update this file, the brief's lifecycle block, and
-the narration together. Until it is decided, do not hard-code either shape.
+Two consequences that keep the old shape's guarantees:
+
+- **Idempotency** was `IDENTICAL_SCHEDULE_ALREADY_CREATED`, given free by the network.
+  It is now `derivePendingPayoutId`, a deterministic hash of the payout's parameters —
+  identical params resolve to the identical id, and signing an already-executed payout
+  returns success without re-submitting. Never double-pay still holds.
+- **The post-to-claim window** is still protected by the threshold key alone, still
+  trusted-platform, still admitted out loud.
+
+The demo narration says **"committed at claim"**, never "committed at post". What
+happens at DELIVERED is a co-signed transfer, not a `ScheduleSign` — say "the platform
+co-signs and the money moves", not "the schedule fires".
+
+Verified end to end on real testnet against the provisioned escrow
+(`packages/chain/scripts/live-happy-path.ts`): real fund lock, real co-signed payout,
+`SUCCESS` read back from a mirror node, and a second `signSchedule` that does not pay
+twice.

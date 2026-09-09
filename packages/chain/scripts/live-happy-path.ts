@@ -5,7 +5,7 @@
  * docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md, not
  * just after writing it.
  */
-import { PrivateKey } from "@hiero-ledger/sdk";
+import { AccountId, PrivateKey } from "@hiero-ledger/sdk";
 import { createTestnetClient, loadChainEnv } from "../src/config.ts";
 import { buildEscrowKeyList } from "../src/keys.ts";
 import { createEscrowAccount } from "../src/escrow.ts";
@@ -20,22 +20,44 @@ async function main(): Promise<void> {
   const env = loadChainEnv();
   const client = createTestnetClient(env);
 
-  const verifierKey = PrivateKey.generateED25519();
-  const scheduleAdminKey = PrivateKey.generateED25519();
+  // Use the PROVISIONED escrow and platform keys when .env has them. Generating them
+  // per run proves the mechanism and leaves nothing behind, which is not a demo — every
+  // take would be a different escrow account on the ledger, and the platform keys would
+  // exist only for the life of the process. Run provision-escrow.ts once instead.
+  const provisionedEscrow = process.env["HANDOFF_ESCROW_ACCOUNT_ID"]?.trim();
+  const provisionedVerifier = process.env["HANDOFF_VERIFIER_KEY"]?.trim();
+  const provisionedAdmin = process.env["HANDOFF_SCHEDULE_ADMIN_KEY"]?.trim();
 
-  const keyList = buildEscrowKeyList({
-    requester: env.operatorKey.publicKey,
-    verifier: verifierKey.publicKey,
-    scheduleAdmin: scheduleAdminKey.publicKey,
-  });
+  let escrowAccountId: AccountId;
+  let verifierKey: PrivateKey;
+  let scheduleAdminKey: PrivateKey;
 
-  const escrow = await createEscrowAccount(client, keyList, "5");
-  log("escrow account created (real)", { transactionId: escrow.transactionId, accountId: escrow.result.accountId.toString() });
+  if (provisionedEscrow && provisionedVerifier && provisionedAdmin) {
+    escrowAccountId = AccountId.fromString(provisionedEscrow);
+    verifierKey = PrivateKey.fromString(provisionedVerifier);
+    scheduleAdminKey = PrivateKey.fromString(provisionedAdmin);
+    log("using the provisioned escrow from .env", { escrowAccountId: escrowAccountId.toString() });
+  } else {
+    verifierKey = PrivateKey.generateED25519();
+    scheduleAdminKey = PrivateKey.generateED25519();
+    const keyList = buildEscrowKeyList({
+      requester: env.operatorKey.publicKey,
+      verifier: verifierKey.publicKey,
+      scheduleAdmin: scheduleAdminKey.publicKey,
+    });
+    const created = await createEscrowAccount(client, keyList, "5");
+    escrowAccountId = created.result.accountId;
+    log("no provisioned escrow in .env — created a throwaway", {
+      transactionId: created.transactionId,
+      accountId: escrowAccountId.toString(),
+      note: "run provision-escrow.ts to make this persistent",
+    });
+  }
 
   const adapter = new HederaChainAdapter({
     client,
     mirrorNodeUrl: env.mirrorNodeUrl,
-    escrowAccountId: escrow.result.accountId,
+    escrowAccountId,
     verifierKey,
     scheduleAdminKey,
   });
