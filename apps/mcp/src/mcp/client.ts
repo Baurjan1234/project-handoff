@@ -38,6 +38,31 @@ export class PaymentUnavailableError extends HandoffClientError {
 }
 
 /**
+ * A refusal decided before anything was signed.
+ *
+ * Carries the sentence the requester reads. It is a distinct error because the
+ * tool answers with the copy rather than with "the order failed" — and because
+ * nothing was charged, which is what every one of these sentences ends with.
+ */
+export class PreflightRefusedError extends HandoffClientError {
+  constructor(readonly reply: string) {
+    super(reply);
+    this.name = "PreflightRefusedError";
+  }
+}
+
+/**
+ * Checked after the price is known and before the payment is built.
+ *
+ * After, because the fee is the server's to state and a check against a
+ * guessed price is worse than none. Before, because the whole point is that
+ * nothing is charged.
+ */
+export type PreflightCheck = (
+  requirements: PaymentRequirements,
+) => Promise<{ readonly ok: true } | { readonly ok: false; readonly reply: string }>;
+
+/**
  * Turns payment requirements into the base64 payload that goes in the
  * `PAYMENT-SIGNATURE` header.
  */
@@ -69,15 +94,28 @@ export interface ReadDeps {
 
 export interface ClientDeps extends ReadDeps {
   readonly signer: PaymentSigner;
+  /**
+   * The account this client pays from, which is therefore the account whose
+   * funds the escrow locks. The service checks it against the account the
+   * facilitator says paid, so it is the payer's id or nothing.
+   *
+   * Optional because a build with no payer wired up has no account to name.
+   * That build's signer refuses at the 402 and never posts, so the order body
+   * it would have sent is never parsed.
+   */
+  readonly requesterAccountId?: string;
+  /** Optional. Absent means sign whatever is quoted, which is the old behaviour. */
+  readonly preflight?: PreflightCheck;
 }
 
 function base(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
-function body(input: OrderInput): string {
+function body(input: OrderInput, requesterAccountId: string | undefined): string {
   return JSON.stringify({
     class: "review",
+    requester_account_id: requesterAccountId,
     spec: input.spec,
     // JSON has no bytes. The text never leaves the content store either way;
     // only its hash is published.
@@ -116,7 +154,7 @@ export async function postOrder(
 ): Promise<Record<string, unknown>> {
   const call = deps.fetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
   const url = `${base(deps.baseUrl)}/orders`;
-  const payload = body(input);
+  const payload = body(input, deps.requesterAccountId);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   const first = await call(url, { method: "POST", headers, body: payload });
@@ -127,6 +165,12 @@ export async function postOrder(
   // Echo back the requirements we were quoted. Sending anything else is
   // rejected by the facilitator before it looks at the transaction at all.
   const requirements = await readChallenge(first);
+
+  if (deps.preflight !== undefined) {
+    const checked = await deps.preflight(requirements);
+    if (!checked.ok) throw new PreflightRefusedError(checked.reply);
+  }
+
   const signed = await deps.signer.sign(requirements);
 
   const paid = await call(url, {

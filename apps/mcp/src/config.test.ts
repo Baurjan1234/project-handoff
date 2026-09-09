@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { configFromEnv, ConfigError, type Env } from "./config.js";
+import { chainModeFromEnv, configFromEnv, ConfigError, type Env } from "./config.js";
 
 const COMPLETE: Env = {
   X402_RECEIVER_ACCOUNT_ID: "0.0.10376656",
   X402_FEE_TINYBARS: "100000",
   HANDOFF_ORDERS_TOPIC_ID: "0.0.999",
   HANDOFF_ATTESTATIONS_TOPIC_ID: "0.0.1000",
-  HANDOFF_REQUESTER_ACCOUNT_ID: "0.0.10376659",
   HANDOFF_CERT_TAGS: "cpa-us=Licensed reviewer",
 };
 
@@ -98,6 +97,25 @@ describe("configFromEnv", () => {
     });
   });
 
+  describe("chainModeFromEnv", () => {
+    it("defaults to mock, so nothing posts to testnet by accident", () => {
+      expect(chainModeFromEnv({})).toBe("mock");
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: "  " })).toBe("mock");
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: "mock" })).toBe("mock");
+    });
+
+    it("reads testnet", () => {
+      expect(chainModeFromEnv({ HANDOFF_CHAIN: " testnet " })).toBe("testnet");
+    });
+
+    it("refuses anything else rather than falling through to the mock", () => {
+      // A typo that silently ran on the mock would put MOCK-tx ids in front of
+      // a camera, and they 404 on Hashscan.
+      expect(() => chainModeFromEnv({ HANDOFF_CHAIN: "testent" })).toThrow(ConfigError);
+      expect(() => chainModeFromEnv({ HANDOFF_CHAIN: "mainnet" })).toThrow(/mock.*testnet/);
+    });
+  });
+
   it("takes no key of any kind out of the environment", () => {
     // This process states a price, asks the facilitator and posts an order.
     // The payer's key lives in the requester and the platform keys live in the
@@ -117,7 +135,6 @@ describe("configFromEnv", () => {
       "ordersTopicId",
       "port",
       "receiverAccountId",
-      "requesterAccountId",
       "serviceUrl",
     ]);
     expect(JSON.stringify(config)).not.toContain("deadbeef");

@@ -23,6 +23,12 @@ importers:
 
   apps/mcp:
     dependencies:
+      '@handoff/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@handoff/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@handoff/schema':
         specifier: workspace:*
         version: link:../../packages/schema
