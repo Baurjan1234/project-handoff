@@ -13,7 +13,7 @@ import { VERDICT_WORDS, VerdictPicker } from "../components/VerdictPicker";
 import type { ExpertIdentity } from "../components/Shell";
 import { clockWords, isPast } from "../lib/clock";
 import { EMPTY_DRAFT, type Draft, type DraftStore, type WorkspaceStep } from "../lib/draft";
-import type { ExpertOrder } from "../orders/order";
+import { countWords, type ExpertOrder } from "../orders/order";
 import { hashNotes } from "../sign/notes";
 import { previewAttestation } from "../sign/preview";
 import { describeError } from "../sign/runSign";
@@ -117,6 +117,7 @@ export function WorkspaceScreen({
   );
 
   const nowSeconds = Math.floor(now.getTime() / 1000);
+  const documentWords = order.documentWords ?? (artifactText === null ? null : countWords(artifactText));
   const claimExpired = !signed && !locked && isPast(signBy, nowSeconds);
 
   const notesBlockers: string[] = [];
@@ -295,7 +296,7 @@ export function WorkspaceScreen({
               <div className="grid gap-1 border-t border-border/60 pt-4">
                 <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Private · delivered to the requester</p>
                 <p className="line-clamp-3 text-sm whitespace-pre-wrap text-muted-foreground">{notes}</p>
-                <p className="text-sm text-muted-foreground">The document, {order.documentWords} words.</p>
+                <p className="text-sm text-muted-foreground">The document{documentWords === null ? "" : `, ${documentWords} words`}.</p>
               </div>
 
               <details className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
