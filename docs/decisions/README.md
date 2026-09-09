@@ -59,3 +59,4 @@ Newest last.
 ### 2026-09-09
 
 - [World Selfie Check: go, but after the Sep 11 freeze](2026-09-09-world-selfie-check-goes-ahead-post-freeze.md) — supersedes the Sep 5 gate, World ID is now Tier 2
+- [The requester signs the fund lock; the platform stops funding the escrow](2026-09-08-requester-signs-the-fund-lock.md) — closes a gap the one-shared-escrow decision left open, **breaking change to `ChainAdapter`**
