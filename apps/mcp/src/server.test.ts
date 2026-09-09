@@ -563,6 +563,21 @@ describe("content, addressed by hash", () => {
     expect(read.status).toBe(404);
   });
 
+  it("does not hand the store's own error text to an anonymous caller", async () => {
+    const { deps } = harness();
+    const store = {
+      put: async () => {
+        throw new Error("Supabase upload failed for handoff-content: bucket not found");
+      },
+      get: async () => null,
+    };
+
+    const written = await handle(content("PUT", HASH, BYTES), { ...deps, content: store });
+
+    expect(written.status).toBe(502);
+    expect(JSON.stringify(written.body)).not.toContain("Supabase");
+  });
+
   it("reports corrupted bytes as a broken commitment, never as a miss", async () => {
     const { deps } = harness();
     const store = {

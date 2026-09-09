@@ -213,7 +213,15 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
           body: { error: "the body does not hash to the hash in the path", expected: hash, actual },
         };
       }
-      await deps.content.put(hash, request.body);
+      try {
+        await deps.content.put(hash, request.body);
+      } catch {
+        // Caught rather than left to the catch-all in http.ts, which answers
+        // with the thrown message. The store's messages name the bucket and
+        // the vendor's own error text, and this endpoint is reachable by
+        // anyone; the caller can act on "it did not store" and nothing more.
+        return { status: 502, headers: { ...json, ...cors }, body: { error: "the content store did not take it" } };
+      }
       return { status: 200, headers: { ...json, ...cors }, body: { hash } };
     }
 
