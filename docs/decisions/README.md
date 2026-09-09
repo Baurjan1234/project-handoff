@@ -55,3 +55,4 @@ Newest last.
 - [Direct co-signed payout replaces ScheduleCreate for the KeyList escrow](2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md) — **unblocks the live demo path**
 - [Platform-key env names live in the app, chain exports a string-taking factory](2026-09-08-platform-key-env-names-live-in-the-app.md) — closes the layout-rule gap the cutover hit
 - [Custody, email onboarding and non-Hedera wallets stay out](2026-09-08-custody-onboarding-and-wallets-stay-out.md) — three already ruled, one open question for **Nasaa**
+- [The requester signs the fund lock; the platform stops funding the escrow](2026-09-08-requester-signs-the-fund-lock.md) — closes a gap the one-shared-escrow decision left open, **breaking change to `ChainAdapter`**
