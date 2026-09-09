@@ -45,6 +45,7 @@ export function OrderScreen({
     (decided?.phase === "yours" && decided.state?.kind === "yours" ? decided.state : null) ??
     (claim.kind === "yours" ? claim : null);
   const lost = decided?.phase === "someone-else" || (claim.kind === "someone-else" && decided === null);
+  const closed = decided === null && claim.kind === "closed";
   const confirming = flow.status.kind === "confirming";
   const stalled = decided?.phase === "stalled";
 
@@ -64,7 +65,7 @@ export function OrderScreen({
                 Open until <span className="text-foreground">{clockWords(envelope.deadline, now)}</span>
               </span>
               <span>{claimWindowWords(envelope.claim_timeout_seconds)}</span>
-              <span className="tabular-nums">{order.documentWords} words</span>
+              {order.documentWords !== null && <span className="tabular-nums">{order.documentWords} words</span>}
             </div>
           </div>
           <Escrow priceTinybars={envelope.price_tinybars} size="lg" />
@@ -121,6 +122,8 @@ export function OrderScreen({
           </>
         ) : lost ? (
           <p className="rounded-xl bg-muted/50 p-4 text-sm">Someone else claimed this.</p>
+        ) : closed ? (
+          <p className="rounded-xl bg-muted/50 p-4 text-sm">Claim window passed twice · this order is closed.</p>
         ) : confirming ? (
           <>
             <p className="flex items-center gap-2 text-lg font-semibold tracking-tight">

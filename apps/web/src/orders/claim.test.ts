@@ -1,64 +1,91 @@
 import { describe, expect, it } from "vitest";
-import type { TopicMessage } from "@handoff/schema";
-import { claimsFor, claimStateFor, compareTimestamps, confirmClaim, decodeClaim, encodeClaim } from "./claim";
+import { ReviewOrder, SCHEMA_VERSION, type ClaimRecord, type TopicMessage } from "@handoff/schema";
+import { claimBody, claimRecordsFor, claimStateFor, confirmClaim } from "./claim";
 
 const TOPIC = "MOCK-topic-orders";
 const EXPERT = "0.0.12345";
 const RIVAL = "0.0.99999";
-const DEADLINE = "2026-09-14T00:00:00Z";
 
-function message(sequenceNumber: number, consensusTimestamp: string, contents: string): TopicMessage {
-  return { topicId: TOPIC, sequenceNumber, consensusTimestamp, payerAccountId: "MOCK-payer", contents };
+/** Deadline 2026-09-14. Claims below land on 2026-09-08, well inside it. */
+const order = ReviewOrder.parse({
+  order_id: "ord",
+  class: "review",
+  spec_hash: "a".repeat(64),
+  artifact_hash_in: "b".repeat(64),
+  cert_tag: "demo-reviewer",
+  price_tinybars: "10000000000",
+  deadline: "2026-09-14T00:00:00Z",
+  claim_timeout_seconds: 1800,
+  schema_version: SCHEMA_VERSION,
+});
+const other = { ...order, order_id: "other" };
+
+/** 2026-09-08T12:00:00Z, as seconds. */
+const T0 = Date.UTC(2026, 8, 8, 12, 0, 0) / 1000;
+const at = (seconds: number, nanos = 0): string => `${T0 + seconds}.${String(nanos).padStart(9, "0")}`;
+
+function message(sequenceNumber: number, consensusTimestamp: string, payerAccountId: string, contents: string): TopicMessage {
+  return { topicId: TOPIC, sequenceNumber, consensusTimestamp, payerAccountId, contents };
 }
 
-describe("decodeClaim", () => {
-  it("round-trips, and refuses an extra field, a missing one, or another version", () => {
-    const encoded = encodeClaim("ord", EXPERT);
-    expect(decodeClaim(JSON.parse(encoded))).toEqual({ kind: "claim", order_id: "ord", claimant: EXPERT, schema_version: 1 });
-    expect(decodeClaim({ ...JSON.parse(encoded), extra: 1 })).toBeNull();
-    expect(decodeClaim({ kind: "claim", order_id: "ord", claimant: EXPERT })).toBeNull();
-    expect(decodeClaim({ ...JSON.parse(encoded), schema_version: 2 })).toBeNull();
-    expect(decodeClaim("claim")).toBeNull();
+describe("claimBody", () => {
+  it("is the treaty's claim: order, credential, version, and no claimant in the body", () => {
+    expect(JSON.parse(claimBody(order))).toEqual({ kind: "claim", order_id: "ord", cert_tag: "demo-reviewer", schema_version: 1 });
   });
 });
 
-describe("claimsFor", () => {
-  it("keeps only claims for the order, in consensus order, ignoring anything unparsable", () => {
-    const claims = claimsFor(
+describe("claimRecordsFor", () => {
+  it("keeps only claims for the order, takes the claimant from the payer, and orders by consensus time", () => {
+    const records = claimRecordsFor(
       [
-        message(1, "100.000000005", "{not json"),
-        message(2, "100.000000009", encodeClaim("other", RIVAL)),
-        message(3, "100.000000020", encodeClaim("ord", EXPERT)),
-        message(4, "100.000000010", encodeClaim("ord", RIVAL)),
+        message(1, at(0, 5), "MOCK-payer", "{not json"),
+        message(2, at(0, 9), RIVAL, claimBody(other)),
+        message(3, at(0, 20), EXPERT, claimBody(order)),
+        message(4, at(0, 10), RIVAL, claimBody(order)),
       ],
       "ord",
     );
-    expect(claims.map((c) => c.claimant)).toEqual([RIVAL, EXPERT]);
-  });
-
-  it("compares timestamps as numbers, so 9 nanoseconds is before 10", () => {
-    expect(compareTimestamps("100.000000009", "100.000000010")).toBeLessThan(0);
-    expect(compareTimestamps("101.000000000", "100.999999999")).toBeGreaterThan(0);
+    expect(records.map((r) => r.payerAccountId)).toEqual([RIVAL, EXPERT]);
+    expect(records[0]?.sequenceNumber).toBe(4);
   });
 });
 
 describe("claimStateFor", () => {
-  it("is open with no claims, yours when ours is first, someone-else otherwise", () => {
-    expect(claimStateFor([], EXPERT, 1800, DEADLINE)).toEqual({ kind: "open" });
-    const mine = { claimant: EXPERT, consensusTimestamp: "1757000000.000000001", sequenceNumber: 2 };
-    const theirs = { claimant: RIVAL, consensusTimestamp: "1757000000.000000000", sequenceNumber: 1 };
-    expect(claimStateFor([mine], EXPERT, 1800, DEADLINE)).toMatchObject({
+  const mine: ClaimRecord = {
+    claim: { kind: "claim", order_id: "ord", cert_tag: "demo-reviewer", schema_version: SCHEMA_VERSION },
+    payerAccountId: EXPERT,
+    consensusTimestamp: at(1),
+    sequenceNumber: 2,
+  };
+  const theirs: ClaimRecord = { ...mine, payerAccountId: RIVAL, consensusTimestamp: at(0), sequenceNumber: 1 };
+
+  it("is open with no claims", () => {
+    expect(claimStateFor(order, [], EXPERT, T0)).toEqual({ kind: "open" });
+  });
+
+  it("is yours when ours holds it, with the sign-by time from the network's clock", () => {
+    expect(claimStateFor(order, [mine], EXPERT, T0 + 2)).toEqual({
       kind: "yours",
-      claimedAtEpochSeconds: 1757000000,
-      signBy: "2025-09-04T16:03:20Z",
+      claimedAtEpochSeconds: T0 + 1,
+      signBy: "2026-09-08T12:30:01Z",
     });
-    expect(claimStateFor([theirs, mine], EXPERT, 1800, DEADLINE)).toEqual({ kind: "someone-else" });
+  });
+
+  it("is someone else's when an earlier claim holds it", () => {
+    expect(claimStateFor(order, [theirs, mine], EXPERT, T0 + 2)).toEqual({ kind: "someone-else" });
+  });
+
+  it("reopens once after the window expires, then closes", () => {
+    expect(claimStateFor(order, [theirs], EXPERT, T0 + 1800)).toEqual({ kind: "open" });
+    const reopened = { ...mine, consensusTimestamp: at(1801), sequenceNumber: 3 };
+    expect(claimStateFor(order, [theirs, reopened], EXPERT, T0 + 1802).kind).toBe("yours");
+    expect(claimStateFor(order, [theirs, reopened], EXPERT, T0 + 1801 + 1800)).toEqual({ kind: "closed" });
   });
 });
 
 describe("confirmClaim", () => {
   function clock() {
-    let t = 0;
+    let t = (T0 + 3) * 1000;
     return {
       now: () => t,
       sleep: async (ms: number) => {
@@ -67,13 +94,11 @@ describe("confirmClaim", () => {
     };
   }
 
-  const submitted = { transactionId: "MOCK-tx-9", consensusTimestamp: "1757000000.000000002", sequenceNumber: 2 };
+  const submitted = { transactionId: "MOCK-tx-9", consensusTimestamp: at(2), sequenceNumber: 2 };
   const base = (reader: { readMessages: () => Promise<readonly TopicMessage[]> }) => ({
     topicId: TOPIC,
-    orderId: "ord",
+    order,
     expertAccountId: EXPERT,
-    claimTimeoutSeconds: 1800,
-    deadline: DEADLINE,
     submitted,
     reader,
   });
@@ -81,12 +106,10 @@ describe("confirmClaim", () => {
   it("stays Confirming until the mirror shows our message, then it is yours", async () => {
     let reads = 0;
     const reader = {
-      readMessages: async () =>
-        ++reads < 3 ? [] : [message(2, submitted.consensusTimestamp, encodeClaim("ord", EXPERT))],
+      readMessages: async () => (++reads < 3 ? [] : [message(2, submitted.consensusTimestamp, EXPERT, claimBody(order))]),
     };
     const phases: string[] = [];
-    const c = clock();
-    const final = await confirmClaim({ ...base(reader), onChange: (s) => phases.push(s.phase) }, c);
+    const final = await confirmClaim({ ...base(reader), onChange: (s) => phases.push(s.phase) }, clock());
     expect(final.phase).toBe("yours");
     expect(final.state?.kind).toBe("yours");
     expect(phases.slice(0, -1).every((p) => p === "confirming")).toBe(true);
@@ -96,20 +119,28 @@ describe("confirmClaim", () => {
   it("loses to an earlier claim the mirror confirms, as an ordinary outcome", async () => {
     const reader = {
       readMessages: async () => [
-        message(1, "1757000000.000000001", encodeClaim("ord", RIVAL)),
-        message(2, submitted.consensusTimestamp, encodeClaim("ord", EXPERT)),
+        message(1, at(1), RIVAL, claimBody(order)),
+        message(2, submitted.consensusTimestamp, EXPERT, claimBody(order)),
       ],
     };
     const final = await confirmClaim(base(reader), clock());
     expect(final.phase).toBe("someone-else");
+    expect(final.state).toEqual({ kind: "someone-else" });
   });
 
   it("decides on an earlier claim even before the mirror shows ours", async () => {
-    const reader = {
-      readMessages: async () => [message(1, "1757000000.000000001", encodeClaim("ord", RIVAL))],
-    };
+    const reader = { readMessages: async () => [message(1, at(1), RIVAL, claimBody(order))] };
     const final = await confirmClaim(base(reader), clock());
     expect(final.phase).toBe("someone-else");
+  });
+
+  it("ignores a claim under the wrong credential, as the treaty says", async () => {
+    const wrongTag = claimBody({ ...order, cert_tag: "someone-elses-tag" });
+    const reader = {
+      readMessages: async () => [message(1, at(1), RIVAL, wrongTag), message(2, submitted.consensusTimestamp, EXPERT, claimBody(order))],
+    };
+    const final = await confirmClaim(base(reader), clock());
+    expect(final.phase).toBe("yours");
   });
 
   it("treats a throwing read as not-yet and stalls with the error after the limit", async () => {

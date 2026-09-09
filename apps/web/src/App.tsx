@@ -3,6 +3,7 @@ import { createWebChain, type WebChain } from "./chain/adapter";
 import { configFromEnv, type WebChainConfig } from "./chain/config";
 import { MockOrderSource } from "./chain/mockOrders";
 import { FAKE_CERT_TAG, MockPlatform, withSimulatedMirrorLag } from "./chain/mockPlatform";
+import { TestnetOrderSource } from "./chain/testnetOrders";
 import { Shell, type ExpertIdentity } from "./components/Shell";
 import { browserDrafts } from "./lib/draft";
 import { useNow } from "./lib/useNow";
@@ -15,6 +16,7 @@ import { InboxScreen } from "./screens/InboxScreen";
 import { OrderScreen } from "./screens/OrderScreen";
 import { WorkspaceScreen } from "./screens/WorkspaceScreen";
 import { describeConnectError, type ExpertConnection } from "./session/connect";
+import { mirrorPayoutLocator } from "./sign/payoutLocator";
 import { describeError } from "./sign/runSign";
 import { MIRROR_EXPECTED_LAG_MS } from "./sign/settlement";
 import { useSignFlow, type SignFlowDeps } from "./sign/useSignFlow";
@@ -46,11 +48,43 @@ type AppState = { kind: "connect"; notice: string | null } | { kind: "ready"; bo
 async function boot(config: WebChainConfig, connection: ExpertConnection): Promise<Booted> {
   const chain = createWebChain(config, connection);
 
+  if (config.mode === "testnet" && chain.mode === "testnet") {
+    // The real thing: orders and claims off the topic through the expert's
+    // own chain, the ask and the document from the content store, and the
+    // payout found by a mirror read of the expert's transfers since the
+    // verdict. Nobody stands in for anybody. Credential pills wait for the
+    // registry (NAS-27); until then there is nothing honest to show there.
+    const source = new TestnetOrderSource({
+      chain: chain.chain,
+      content: chain.content,
+      ordersTopicId: config.ordersTopicId,
+      escrowAccountId: config.escrowAccountId,
+      expertAccountId: chain.expertAccountId,
+    });
+    return {
+      config,
+      chain,
+      identity: { accountId: chain.expertAccountId, credentials: [] },
+      source,
+      deps: {
+        chain,
+        reader: chain.chain,
+        locatePayout: (o, signed) =>
+          mirrorPayoutLocator({
+            mirrorNodeUrl: config.mirrorNodeUrl,
+            expertAccountId: chain.expertAccountId,
+            escrowAccountId: config.escrowAccountId,
+            amountTinybars: o.envelope.price_tinybars,
+            notBefore: signed.consensusTimestamp,
+          }),
+      },
+    };
+  }
+
   if (config.mode !== "mock" || chain.mode !== "mock") {
-    // Unreachable today: createWebChain throws for testnet until the cutover.
-    // When the real adapter lands, the order source reads the topic here
-    // and the stand-ins below go away.
-    throw new Error("the testnet order source is not built yet; run with VITE_CHAIN=mock");
+    // createWebChain refuses a mode mismatch before this, so this is a type
+    // narrowing, not a path.
+    throw new Error("The configuration and the connection disagree about the chain.");
   }
 
   const platform = new MockPlatform(chain.mock, chain.expertAccountId);

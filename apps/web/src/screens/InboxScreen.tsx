@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { claimWindowWords, clockWords, isPast } from "../lib/clock";
-import type { InboxEntry } from "../orders/order";
+import { askSummary, type InboxEntry } from "../orders/order";
 import { Escrow } from "../components/Money";
 
 /**
@@ -33,8 +33,8 @@ export function InboxScreen({
 
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const live = entries.filter((e) => !isPast(e.order.envelope.deadline, nowSeconds));
-  const takeable = live.filter((e) => e.claim.kind !== "someone-else");
-  const others = live.length - takeable.length;
+  const takeable = live.filter((e) => e.claim.kind === "open" || e.claim.kind === "yours");
+  const others = live.filter((e) => e.claim.kind === "someone-else").length;
 
   return (
     <div className="grid gap-4">
@@ -63,7 +63,7 @@ export function InboxScreen({
                   <div className="flex items-start justify-between gap-4">
                     <div className="grid min-w-0 gap-1">
                       <span className="text-base font-semibold tracking-tight">{order.title}</span>
-                      <span className="line-clamp-1 text-sm text-muted-foreground">{firstLine(order.ask)}</span>
+                      <span className="line-clamp-1 text-sm text-muted-foreground">{askSummary(order.ask)}</span>
                     </div>
                     <Escrow priceTinybars={envelope.price_tinybars} />
                   </div>
@@ -73,7 +73,7 @@ export function InboxScreen({
                       Open until <span className="text-foreground">{clockWords(envelope.deadline, now)}</span>
                     </span>
                     <span>{claimWindowWords(envelope.claim_timeout_seconds)}</span>
-                    <span className="tabular-nums">{order.documentWords} words</span>
+                    {order.documentWords !== null && <span className="tabular-nums">{order.documentWords} words</span>}
                     <Badge variant="outline">{envelope.cert_tag}</Badge>
                   </div>
 
@@ -93,12 +93,5 @@ export function InboxScreen({
   );
 }
 
-/** The ask's first sentence that is not a FAKE label, for the row. */
-export function firstLine(ask: string): string {
-  const lines = ask
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !/^FAKE\b/.test(l));
-  const task = lines.find((l) => /^Task\b/i.test(l)) ?? lines[0] ?? "";
-  return task.replace(/^Task\s*(\(FAKE\))?\s*:\s*/i, "");
-}
+/** For the tests: the row's one-line ask. */
+export const firstLine = askSummary;

@@ -1,118 +1,89 @@
 /**
  * Claim is confirmed, not assumed.
  *
- * A claim is a message on the orders topic from the expert's own account.
- * The button acknowledges the click at once; the *result* waits for the
- * mirror, because the consensus timestamp decides who won and the submit
- * receipt only says that our message was accepted, not that it was first.
- * So the sequence is: submit, then read the topic until the mirror shows our
- * message, then look at every claim for this order in consensus order. The
- * earliest one wins. If it is ours, the workspace opens. If it is not, the
- * screen says "Someone else claimed this" and that is an ordinary outcome.
+ * A claim is the treaty's `ClaimEnvelope` on the orders topic, submitted from
+ * the expert's own account: the payer account is the claimant and the
+ * consensus timestamp is the claim time, neither in the body. The button
+ * acknowledges the click at once; the *result* waits for the mirror, because
+ * the submit receipt only says that our message was accepted, not that it was
+ * first. So the sequence is: submit, then read the topic until the mirror
+ * shows our message, then ask the treaty's `resolveClaims` who holds the
+ * order. If it is us, the workspace opens. If it is not, the screen says
+ * "Someone else claimed this" and that is an ordinary outcome.
+ *
+ * The winner rule is not here. It is `resolveClaims` in `@handoff/schema`,
+ * because it has two ends, this app and the requester's status tool, and a
+ * rule implemented twice is a rule that disagrees with itself.
  *
  * Same shape as settlement: a read that throws is "not yet", the loop keeps
  * going, and after `giveUpAfterMs` it stops in a state the screen can retry
  * from. Nothing spins forever.
- *
- * The claim message's schema is not in the treaty yet. This shape is the
- * app's, is versioned, and is the one asked of P1 for the cutover: whatever
- * `packages/chain` publishes at claim time must let a reader recover
- * `order_id` and the claimant, in consensus order.
  */
 
-import { OrderId, SCHEMA_VERSION, type ConsensusRef, type ReadMessagesOptions, type TopicMessage } from "@handoff/schema";
-import { signBy } from "../lib/clock";
+import {
+  compareConsensusTimestamps,
+  encodeClaim,
+  parseConsensusTimestamp,
+  resolveClaims,
+  SCHEMA_VERSION,
+  tryDecodeClaim,
+  type ClaimRecord,
+  type ConsensusRef,
+  type OrderEnvelope,
+  type ReadMessagesOptions,
+  type TopicMessage,
+} from "@handoff/schema";
+import { epochSecondsToUtc } from "../lib/clock";
 import { abortableSleep } from "../sign/settlement";
 import type { ClaimState } from "./order";
 
-export interface ClaimMessage {
-  readonly kind: "claim";
-  readonly order_id: string;
-  readonly claimant: string;
-  readonly schema_version: typeof SCHEMA_VERSION;
+/** The bytes a claim for this order puts on the topic. */
+export function claimBody(order: OrderEnvelope): string {
+  return encodeClaim({ kind: "claim", order_id: order.order_id, cert_tag: order.cert_tag, schema_version: SCHEMA_VERSION });
 }
 
-export function encodeClaim(orderId: string, claimant: string): string {
-  const message: ClaimMessage = {
-    kind: "claim",
-    order_id: OrderId.parse(orderId),
-    claimant,
-    schema_version: SCHEMA_VERSION,
-  };
-  if (claimant.length === 0) throw new Error("a claim needs a claimant");
-  return JSON.stringify(message);
+export function epochSecondsOf(consensusTimestamp: string): number {
+  return Number(parseConsensusTimestamp(consensusTimestamp).seconds);
 }
 
-/** Exactly the four fields, or nothing. An extra or missing one is not a claim. */
-export function decodeClaim(value: unknown): ClaimMessage | null {
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  if (keys.join(",") !== "claimant,kind,order_id,schema_version") return null;
-  const { kind, order_id, claimant, schema_version } = record;
-  if (kind !== "claim" || schema_version !== SCHEMA_VERSION) return null;
-  if (typeof order_id !== "string" || !OrderId.safeParse(order_id).success) return null;
-  if (typeof claimant !== "string" || claimant.length === 0) return null;
-  return { kind, order_id, claimant, schema_version };
-}
-
-/** A claim as read back, with the network's word on when. */
-export interface ClaimRecord {
-  readonly claimant: string;
-  readonly consensusTimestamp: string;
-  readonly sequenceNumber: number;
-}
-
-/** Ordered by consensus timestamp, which is the truth about who was first. */
-export function claimsFor(messages: readonly TopicMessage[], orderId: string): readonly ClaimRecord[] {
-  const claims: ClaimRecord[] = [];
+/** Every claim for the order the mirror has shown, in consensus order. Anything unparsable is not a claim. */
+export function claimRecordsFor(messages: readonly TopicMessage[], orderId: string): readonly ClaimRecord[] {
+  const records: ClaimRecord[] = [];
   for (const message of messages) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(message.contents);
-    } catch {
-      continue;
-    }
-    const claim = decodeClaim(parsed);
+    const claim = tryDecodeClaim(message.contents);
     if (claim === null || claim.order_id !== orderId) continue;
-    claims.push({
-      claimant: claim.claimant,
+    records.push({
+      claim,
+      payerAccountId: message.payerAccountId,
       consensusTimestamp: message.consensusTimestamp,
       sequenceNumber: message.sequenceNumber,
     });
   }
-  return claims.sort((a, b) => compareTimestamps(a.consensusTimestamp, b.consensusTimestamp));
+  return records.sort((a, b) => compareConsensusTimestamps(a.consensusTimestamp, b.consensusTimestamp));
 }
 
-/** `seconds.nanoseconds` compared as numbers, never as strings. */
-export function compareTimestamps(a: string, b: string): number {
-  const [as, an] = a.split(".");
-  const [bs, bn] = b.split(".");
-  const seconds = Number(as) - Number(bs);
-  if (seconds !== 0) return seconds;
-  return Number((an ?? "0").padEnd(9, "0")) - Number((bn ?? "0").padEnd(9, "0"));
-}
-
-export function epochSecondsOf(consensusTimestamp: string): number {
-  return Number(consensusTimestamp.split(".")[0]);
-}
-
-/** What the mirror says for one order, from its claims in consensus order. */
+/** What the treaty's rule says for one order, in the words the screens use. */
 export function claimStateFor(
-  claims: readonly ClaimRecord[],
+  order: OrderEnvelope,
+  records: readonly ClaimRecord[],
   expertAccountId: string,
-  claimTimeoutSeconds: number,
-  deadline: string,
+  nowEpochSeconds: number,
 ): ClaimState {
-  const first = claims[0];
-  if (first === undefined) return { kind: "open" };
-  if (first.claimant !== expertAccountId) return { kind: "someone-else" };
-  const claimedAtEpochSeconds = epochSecondsOf(first.consensusTimestamp);
-  return {
-    kind: "yours",
-    claimedAtEpochSeconds,
-    signBy: signBy(claimedAtEpochSeconds, claimTimeoutSeconds, deadline),
-  };
+  const resolution = resolveClaims({ order, claims: records, nowEpochSeconds });
+  switch (resolution.state) {
+    case "unclaimed":
+      return { kind: "open" };
+    case "claimed":
+      return resolution.active.claimantAccountId === expertAccountId
+        ? {
+            kind: "yours",
+            claimedAtEpochSeconds: epochSecondsOf(resolution.active.claimedAt),
+            signBy: epochSecondsToUtc(resolution.active.signByEpochSeconds),
+          }
+        : { kind: "someone-else" };
+    case "claim_timeout":
+      return resolution.reopenAvailable ? { kind: "open" } : { kind: "closed" };
+  }
 }
 
 /** `ChainAdapter` satisfies this structurally. Narrowed so a test can fake one read. */
@@ -123,9 +94,9 @@ export interface ClaimReader {
 export type ClaimPhase =
   /** Submitted and accepted; the mirror has not shown it yet. */
   | "confirming"
-  /** The mirror shows our claim as the earliest. Claimed · yours to review. */
+  /** The mirror shows our claim as the one that holds the order. Claimed · yours to review. */
   | "yours"
-  /** The mirror shows an earlier claim. Someone else claimed this. */
+  /** The mirror shows the order is not ours. Someone else claimed this. */
   | "someone-else"
   /** Polling stopped without an answer. A retry is offered. */
   | "stalled";
@@ -134,17 +105,15 @@ export interface ClaimConfirmation {
   readonly phase: ClaimPhase;
   readonly elapsedMs: number;
   readonly claimTransactionId: string;
-  /** Set with phase `yours`. */
+  /** Set once decided. */
   readonly state: ClaimState | null;
   readonly lastReadError: string | null;
 }
 
 export interface ConfirmClaimParams {
   readonly topicId: string;
-  readonly orderId: string;
+  readonly order: OrderEnvelope;
   readonly expertAccountId: string;
-  readonly claimTimeoutSeconds: number;
-  readonly deadline: string;
   /** What the submit returned. Its sequence number is how we spot our own message. */
   readonly submitted: ConsensusRef;
   readonly reader: ClaimReader;
@@ -155,6 +124,7 @@ export interface ConfirmClaimParams {
 export interface ConfirmOptions {
   readonly intervalMs: number;
   readonly giveUpAfterMs: number;
+  /** Epoch milliseconds. */
   readonly now: () => number;
   readonly sleep: (ms: number, signal: AbortSignal | undefined) => Promise<void>;
 }
@@ -165,6 +135,9 @@ export const DEFAULT_CONFIRM_OPTIONS: ConfirmOptions = {
   now: Date.now,
   sleep: abortableSleep,
 };
+
+/** A mirror read asks for up to this many messages. The public mirror node's ceiling. */
+export const TOPIC_READ_LIMIT = 100;
 
 export async function confirmClaim(
   params: ConfirmClaimParams,
@@ -192,7 +165,7 @@ export async function confirmClaim(
     let readError: string | null = null;
     let messages: readonly TopicMessage[] | null = null;
     try {
-      messages = await params.reader.readMessages(params.topicId);
+      messages = await params.reader.readMessages(params.topicId, { limit: TOPIC_READ_LIMIT });
     } catch (error) {
       readError = error instanceof Error ? error.message : String(error);
     }
@@ -200,16 +173,15 @@ export async function confirmClaim(
     const elapsedMs = options.now() - started;
 
     if (messages !== null) {
-      const claims = claimsFor(messages, params.orderId);
-      const ours = claims.some((c) => c.sequenceNumber === params.submitted.sequenceNumber);
-      const earlier = claims.some(
-        (c) => compareTimestamps(c.consensusTimestamp, params.submitted.consensusTimestamp) < 0,
-      );
+      const records = claimRecordsFor(messages, params.order.order_id);
+      const ours = records.some((r) => r.sequenceNumber === params.submitted.sequenceNumber);
+      const earlier = records.some((r) => compareConsensusTimestamps(r.consensusTimestamp, params.submitted.consensusTimestamp) < 0);
       // Decide once the mirror shows our message, or an earlier claim. An
       // earlier claim already decides it: nothing that arrives later can
       // move in front of it.
       if (ours || earlier) {
-        const resolved = claimStateFor(claims, params.expertAccountId, params.claimTimeoutSeconds, params.deadline);
+        const nowEpochSeconds = Math.max(Math.floor(options.now() / 1000), epochSecondsOf(params.submitted.consensusTimestamp));
+        const resolved = claimStateFor(params.order, records, params.expertAccountId, nowEpochSeconds);
         return emit({
           ...state,
           elapsedMs,
