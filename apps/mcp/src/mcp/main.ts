@@ -118,9 +118,17 @@ if (certTags.length > 0) {
   console.error(`credentials: ${certTags.map((tag) => tag.code).join(", ")}`);
 }
 
+const requesterAccountId =
+  payerAccountId && !isPlaceholder(payerAccountId) ? payerAccountId : undefined;
+
 serveStdio(() =>
   createMcpServer({
     baseUrl,
+    // The account that signs the fee is the account that funds the escrow.
+    // One variable, both uses, so they cannot drift apart. Absent when no
+    // payer is wired up: that build's signer refuses at the 402, so the body
+    // is never parsed and there is no account to leave out.
+    ...(requesterAccountId === undefined ? {} : { requesterAccountId }),
     signer,
     certTags,
     ...(check === undefined ? {} : { preflight: check }),

@@ -12,7 +12,7 @@ const order = ReviewOrder.parse({
   spec_hash: hashA,
   artifact_hash_in: hashB,
   cert_tag: "demo-reviewer",
-  price_tinybars: "20000000000",
+  price_tinybars: "10000000000",
   deadline: "2026-09-14T00:00:00Z",
   claim_timeout_seconds: 3600,
   schema_version: SCHEMA_VERSION,

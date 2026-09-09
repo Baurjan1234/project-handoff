@@ -94,6 +94,16 @@ export interface ReadDeps {
 
 export interface ClientDeps extends ReadDeps {
   readonly signer: PaymentSigner;
+  /**
+   * The account this client pays from, which is therefore the account whose
+   * funds the escrow locks. The service checks it against the account the
+   * facilitator says paid, so it is the payer's id or nothing.
+   *
+   * Optional because a build with no payer wired up has no account to name.
+   * That build's signer refuses at the 402 and never posts, so the order body
+   * it would have sent is never parsed.
+   */
+  readonly requesterAccountId?: string;
   /** Optional. Absent means sign whatever is quoted, which is the old behaviour. */
   readonly preflight?: PreflightCheck;
 }
@@ -102,9 +112,10 @@ function base(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
-function body(input: OrderInput): string {
+function body(input: OrderInput, requesterAccountId: string | undefined): string {
   return JSON.stringify({
     class: "review",
+    requester_account_id: requesterAccountId,
     spec: input.spec,
     // JSON has no bytes. The text never leaves the content store either way;
     // only its hash is published.
@@ -143,7 +154,7 @@ export async function postOrder(
 ): Promise<Record<string, unknown>> {
   const call = deps.fetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
   const url = `${base(deps.baseUrl)}/orders`;
-  const payload = body(input);
+  const payload = body(input, deps.requesterAccountId);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   const first = await call(url, { method: "POST", headers, body: payload });

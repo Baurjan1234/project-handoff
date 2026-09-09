@@ -19,7 +19,7 @@ describe("InboxScreen", () => {
   it("gives the three facts before Claim: what, how big, how long, as two clocks side by side", () => {
     const html = renderToStaticMarkup(<InboxScreen entries={[open]} now={NOW} onOpen={() => {}} />);
     expect(html).toContain("Quarterly summary");
-    expect(html).toContain("200 HBAR");
+    expect(html).toContain("100 HBAR");
     expect(html).toContain("locked in escrow");
     expect(html).toContain("Open until");
     expect(html).toContain("20:00");

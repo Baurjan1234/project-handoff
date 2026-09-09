@@ -45,7 +45,6 @@ export interface ServerDeps {
   readonly content: ContentStore;
   readonly ordersTopicId: string;
   readonly attestationsTopicId: string;
-  readonly requesterAccountId: string;
   readonly certTags: readonly CertTagOption[];
 }
 
@@ -58,6 +57,18 @@ export interface ServerDeps {
  */
 const OrderRequestBody = z.strictObject({
   class: z.literal("review").default("review"),
+  /**
+   * Whose account funds the escrow.
+   *
+   * A claim, not a credential. Anyone can put anyone's account id here, so it
+   * is checked below against the account the facilitator says actually paid,
+   * and only the verified one is ever used. It has to be in the body rather
+   * than in the server's configuration because a service reachable by more
+   * than one requester cannot know the caller from an environment variable.
+   */
+  requester_account_id: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/, "expected a Hedera account id like 0.0.1234"),
   spec: z.string().min(1),
   /** Base64, because JSON has no bytes. Never published, only hashed. */
   artifact_base64: z.string().min(1),
@@ -179,6 +190,36 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
     };
   }
 
+  // Who pays is settled by the facilitator, never by the caller's own say-so.
+  // Same slot as the tag check: after verify, before settle, before anything
+  // is published, so a refusal here has taken nothing.
+  if (outcome.payer === undefined) {
+    return {
+      status: 502,
+      headers: json,
+      body: {
+        error: "the facilitator verified the payment but did not say who paid",
+        message:
+          "The payment checked out, but the facilitator did not name the account it came " +
+          "from, and the escrow cannot be funded by an account nobody has vouched for. " +
+          "Nothing was charged.",
+      },
+    };
+  }
+  if (outcome.payer !== parsed.data.requester_account_id) {
+    return {
+      status: 400,
+      headers: json,
+      body: {
+        error: "the order names a different requester than the one who paid",
+        message:
+          `The order says ${parsed.data.requester_account_id} is the requester, but the ` +
+          `service fee was paid from ${outcome.payer}. An order is funded by the account ` +
+          `that paid for it. Nothing was charged.`,
+      },
+    };
+  }
+
   let posted;
   try {
     posted = await postReviewOrder(
@@ -194,7 +235,9 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
         chain: deps.chain,
         content: deps.content,
         ordersTopicId: deps.ordersTopicId,
-        requesterAccountId: deps.requesterAccountId,
+        // The verified account, not the one the body claimed. They are equal
+        // by the check above; reading it from the payment keeps that obvious.
+        requesterAccountId: outcome.payer,
       },
     );
   } catch (error) {

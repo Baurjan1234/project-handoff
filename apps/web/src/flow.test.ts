@@ -26,7 +26,7 @@ describe("post, claim, sign, settle", () => {
     const order = await seedClaimedReviewOrder(chain, {
       ordersTopicId: "MOCK-topic-orders",
       requesterAccountId: "MOCK-requester",
-      priceHbar: "200",
+      priceHbar: "100",
       now,
     });
 
