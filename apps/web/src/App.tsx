@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { browserAccount } from "./session/remembered";
 import { createWebChain, type WebChain } from "./chain/adapter";
 import { configFromEnv, type WebChainConfig } from "./chain/config";
 import { MockOrderSource } from "./chain/mockOrders";
@@ -125,6 +126,21 @@ function readConfig(): Config {
 export function App() {
   const config = useMemo(readConfig, []);
   const [state, setState] = useState<AppState>({ kind: "connect", notice: null });
+  // Public, so a reload may keep it. The key is never kept; see session/remembered.ts.
+  const remembered = useMemo(() => browserAccount.load(), []);
+  const autoConnected = useRef(false);
+
+  // Mock mode has no key, so a remembered account reconnects on its own and a
+  // refresh is never a loss. Testnet asks for the key again, by design.
+  useEffect(() => {
+    if (!config.ok || config.config.mode !== "mock" || remembered === null || autoConnected.current) return;
+    autoConnected.current = true;
+    const mode = config.config;
+    void boot(mode, { mode: "mock", accountId: remembered }).then(
+      (booted) => setState((current) => (current.kind === "connect" ? { kind: "ready", booted } : current)),
+      () => browserAccount.forget(),
+    );
+  }, [config, remembered]);
 
   if (!config.ok) {
     return (
@@ -139,6 +155,7 @@ export function App() {
     const connect = async (connection: ExpertConnection): Promise<ConnectOutcome> => {
       try {
         const booted = await boot(config.config, connection);
+        browserAccount.save(connection.accountId);
         setState({ kind: "ready", booted });
         return { ok: true };
       } catch (error) {
@@ -148,7 +165,7 @@ export function App() {
     return (
       <ConnectScreen
         mode={config.config.mode}
-        prefill={config.config.expertAccountIdPrefill}
+        prefill={remembered ?? config.config.expertAccountIdPrefill}
         notice={state.notice}
         onConnect={connect}
       />
@@ -160,6 +177,7 @@ export function App() {
       booted={state.booted}
       onDisconnect={() => {
         state.booted.chain.disconnect();
+        browserAccount.forget();
         setState({
           kind: "connect",
           notice: "Disconnected. A verdict you published stays published, and your unsigned notes are kept.",
