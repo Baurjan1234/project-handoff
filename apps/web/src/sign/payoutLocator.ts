@@ -32,7 +32,20 @@ export interface MirrorPayoutParams {
 
 interface MirrorTransfer {
   readonly account: string | null;
+  /** As the mirror node sends it: a JSON number. Never used as one; see `tinybarsOf`. */
   readonly amount: number;
+}
+
+/**
+ * The mirror node's wire encoding is a JSON number, which is exact only up to
+ * 2^53 tinybars. Money here is bigint, so the number is checked to be a safe
+ * integer and converted once; anything else is refused rather than compared.
+ */
+export function tinybarsOf(amount: unknown): bigint {
+  if (typeof amount !== "number" || !Number.isSafeInteger(amount)) {
+    throw new Error("The mirror node returned a transfer amount that is not an exact integer.");
+  }
+  return BigInt(amount);
 }
 
 interface MirrorTransaction {
@@ -73,8 +86,8 @@ export function mirrorPayoutLocator(params: MirrorPayoutParams): PayoutLocator {
       const body = (await response.json()) as { transactions?: readonly MirrorTransaction[] };
       const hit = (body.transactions ?? []).find((tx) => {
         const transfers = tx.transfers ?? [];
-        const paidExpert = transfers.some((t) => t.account === params.expertAccountId && BigInt(t.amount) === amount);
-        const fromEscrow = transfers.some((t) => t.account === params.escrowAccountId && BigInt(t.amount) === -amount);
+        const paidExpert = transfers.some((t) => t.account === params.expertAccountId && tinybarsOf(t.amount) === amount);
+        const fromEscrow = transfers.some((t) => t.account === params.escrowAccountId && tinybarsOf(t.amount) === -amount);
         return paidExpert && fromEscrow;
       });
       return hit === undefined ? null : toSdkTransactionId(hit.transaction_id);

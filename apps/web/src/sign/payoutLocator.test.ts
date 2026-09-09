@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mirrorPayoutLocator, payoutQueryUrl, toSdkTransactionId } from "./payoutLocator";
+import { mirrorPayoutLocator, payoutQueryUrl, tinybarsOf, toSdkTransactionId } from "./payoutLocator";
 
 const EXPERT = "0.0.12345";
 const ESCROW = "0.0.999";
@@ -63,5 +63,15 @@ describe("mirrorPayoutLocator", () => {
   it("converts the mirror node's id spelling and refuses anything else", () => {
     expect(toSdkTransactionId("0.0.4242-1757000010-000000000")).toBe("0.0.4242@1757000010.000000000");
     expect(() => toSdkTransactionId("MOCK-tx-7")).toThrow("Not a mirror-node transaction id");
+  });
+
+  it("refuses an amount the mirror node did not send as an exact integer, instead of comparing it", async () => {
+    expect(tinybarsOf(10000000000)).toBe(10000000000n);
+    expect(tinybarsOf(-5)).toBe(-5n);
+    expect(() => tinybarsOf(1.5)).toThrow("not an exact integer");
+    expect(() => tinybarsOf(2 ** 53)).toThrow("not an exact integer");
+    expect(() => tinybarsOf("100")).toThrow("not an exact integer");
+    const odd = { ...payout, transfers: [{ account: ESCROW, amount: -1e10 }, { account: EXPERT, amount: 1e10 + 0.5 }] };
+    await expect(mirrorPayoutLocator({ ...params, fetchImpl: answering([odd]).fetchImpl }).locate()).rejects.toThrow("not an exact integer");
   });
 });
