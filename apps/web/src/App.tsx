@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { browserAccount } from "./session/remembered";
 import { createWebChain, type WebChain } from "./chain/adapter";
-import { configFromEnv, type WebChainConfig } from "./chain/config";
+import { configFromEnv, DEFAULT_MIRROR_NODE_URL, type WebChainConfig } from "./chain/config";
 import { MockOrderSource } from "./chain/mockOrders";
 import { FAKE_CERT_TAG, MockPlatform, withSimulatedMirrorLag } from "./chain/mockPlatform";
 import { TestnetOrderSource } from "./chain/testnetOrders";
+import { ClaimDialog } from "./components/ClaimDialog";
+import { MoneyUnitProvider } from "./components/Money";
 import { Shell, type ExpertIdentity } from "./components/Shell";
 import { browserDrafts } from "./lib/draft";
 import { useNow } from "./lib/useNow";
@@ -168,6 +170,7 @@ export function App() {
         prefill={remembered ?? config.config.expertAccountIdPrefill}
         notice={state.notice}
         onConnect={connect}
+        credential={config.config.mode === "mock" ? { label: "Demo reviewer", tag: FAKE_CERT_TAG } : null}
       />
     );
   }
@@ -229,9 +232,12 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
   const claimStateOf = (entry: InboxEntry) => (confirmed !== null && claimedOrder.current === entry.order.envelope.order_id ? confirmed : entry.claim);
 
   const claimedOrder = useRef<string | null>(null);
+  // Which order the claim dialog is reporting on. Null when nothing is in flight.
+  const [claiming, setClaiming] = useState<ExpertOrder | null>(null);
   const claim = useCallback(
     async (order: ExpertOrder) => {
       claimedOrder.current = order.envelope.order_id;
+      setClaiming(order);
       await claimFlow.claim(order);
     },
     [claimFlow],
@@ -252,7 +258,9 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
         // The workspace shows its skeleton and the next read tries again.
       },
     );
-    navigate({ kind: "workspace", orderId });
+    // Claimed from the order screen: go straight through. Claimed from the
+    // inbox: the dialog says so and its own button opens the workspace.
+    if (route.kind === "order") navigate({ kind: "workspace", orderId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmed]);
 
@@ -268,29 +276,59 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route, entries]);
 
+  // The rate is a public, key-free read of Hedera's own fee rate. The mock
+  // fabricates ids, not exchange rates, so it reads the same place.
+  const mirrorNodeUrl = booted.config.mode === "testnet" ? booted.config.mirrorNodeUrl : DEFAULT_MIRROR_NODE_URL;
   const held = signFlow.status.kind === "signing" || claimFlow.status.kind === "confirming";
   const body = renderRoute();
   const openCount = entries === null ? null : entries.filter((e) => e.claim.kind === "open" || e.claim.kind === "yours").length;
 
   return (
-    <Shell
-      mode={booted.config.mode}
-      identity={booted.identity}
-      onDisconnect={onDisconnect}
-      disconnectHeld={held}
-      wide={route.kind === "workspace"}
-      openCount={openCount}
-      onInbox={() => navigate({ kind: "inbox" })}
-    >
-      {body}
-    </Shell>
+    // The rate wraps the whole frame: the navbar shows a balance too, and an
+    // amount outside the provider cannot switch units.
+    <MoneyUnitProvider mirrorNodeUrl={mirrorNodeUrl}>
+      <Shell
+        mode={booted.config.mode}
+        identity={booted.identity}
+        onDisconnect={onDisconnect}
+        disconnectHeld={held}
+        wide={route.kind === "workspace"}
+        openCount={openCount}
+        onInbox={() => navigate({ kind: "inbox" })}
+      >
+        {body}
+        <ClaimDialog
+          order={claiming}
+          flow={flowForScreen}
+          now={now}
+          onOpenWorkspace={() => {
+            const orderId = claiming?.envelope.order_id;
+            setClaiming(null);
+            if (orderId !== undefined) navigate({ kind: "workspace", orderId });
+          }}
+          onClose={() => setClaiming(null)}
+        />
+      </Shell>
+    </MoneyUnitProvider>
   );
 
   function renderRoute() {
     const go = (r: Route) => navigate(r);
     switch (route.kind) {
       case "inbox":
-        return <InboxScreen entries={entries} now={now} onOpen={(orderId) => go({ kind: "order", orderId })} />;
+        return (
+          <InboxScreen
+            entries={entries}
+            now={now}
+            onOpen={(orderId) => go({ kind: "order", orderId })}
+            onResume={(orderId) => go({ kind: "workspace", orderId })}
+            onClaim={(order) => void claim(order)}
+            progress={(orderId) => {
+              const kept = browserDrafts.load(orderId);
+              return kept.notes.trim() === "" && kept.verdict === null && kept.issues.length === 0 ? "not-started" : "in-review";
+            }}
+          />
+        );
       case "order": {
         const entry = entryFor(route.orderId);
         if (entries === null) return <InboxScreen entries={null} now={now} onOpen={() => {}} />;
