@@ -350,6 +350,19 @@ as a subagent so the diff stays out of your session.
       threshold key alone. Decide by end of hour 1, then update the brief's lifecycle,
       `docs/architecture.md`, and the demo narration to match. Until this is settled, do
       not hard-code either shape.
+- [ ] **Does `/requests` in `apps/web` stay?** **Nasaa's alone to rule, and unratified as
+      of 2026-09-10.** A "My requests" tab was built on `jack/sign-action` at P3's
+      repeated request. It crosses two stated lines: `docs/ux-philosophy.md` puts the
+      requester web form at Tier 2 with "do not build it this week", and `apps/web`'s
+      own lane file said "do not add a wallet, seed phrase, or requester UI". It is
+      narrower than that Tier 2 item — no key is accepted or stored, no payment or
+      fund-lock call is made from the browser, the create panel makes only the first
+      free unpaid `POST /orders` and hands the finish to `handoff_verify`, and the list
+      is a mirror read of the requester's own escrow payments rather than a server's
+      word. The rules audit confirmed it breaches the tier line and found nothing else.
+      **Until P4 rules, this does not go on camera and does not merge to `main`;** if the
+      answer is no, the route gets deleted rather than the tab hidden. Rationale and the
+      two cross-lane blockers are in `apps/web/CLAUDE.md`.
 - [x] ~~**Who presents at live judging round 2**, Tue Sep 15.~~ Nasaa, claimed 2026-09-05
       and recorded in `docs/team-seats.md`. Deck and Q&A prep tracked on the board.
 - [x] ~~**Does the x402 gate cover only order posting**, or reads as well?~~ Order
