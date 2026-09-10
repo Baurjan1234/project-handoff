@@ -148,6 +148,42 @@ describe("decodeFundLock reads what the requester signed", () => {
     );
   });
 
+  it("refuses a transfer that also moves tokens, which the whitelist cannot see", async () => {
+    // `facts.transfers` is HBAR only. A decoder that projected token legs away
+    // would hand the validator a lock it called clean while the same signed
+    // transaction moved something else entirely.
+    const withToken = new TransferTransaction()
+      .addHbarTransfer(REQUESTER, Hbar.fromTinybars(`-${params.amountTinybars}`))
+      .addHbarTransfer(ESCROW, Hbar.fromTinybars(params.amountTinybars))
+      .addTokenTransfer("0.0.7777", REQUESTER, -5)
+      .addTokenTransfer("0.0.7777", AccountId.fromString("0.0.9999"), 5)
+      .setTransactionId(TransactionId.generate(REQUESTER))
+      .setTransactionMemo(params.orderId)
+      .freezeWith(client);
+
+    const signed = await sign(Buffer.from(withToken.toBytes()).toString("base64"), REQUESTER_KEY);
+    expect(() => decodeFundLock(signed)).toThrow(
+      expect.objectContaining({ reason: "extra-transfers" }),
+    );
+  });
+
+  it("refuses a leg debited through an allowance rather than the account's own key", async () => {
+    // The exchange rests on the requester's key authorising their own debit.
+    // An approved leg is spent from an allowance, and this adapter reports
+    // signers as opaque, so nothing else would catch it.
+    const approved = new TransferTransaction()
+      .addApprovedHbarTransfer(REQUESTER, Hbar.fromTinybars(`-${params.amountTinybars}`))
+      .addHbarTransfer(ESCROW, Hbar.fromTinybars(params.amountTinybars))
+      .setTransactionId(TransactionId.generate(REQUESTER))
+      .setTransactionMemo(params.orderId)
+      .freezeWith(client);
+
+    const signed = await sign(Buffer.from(approved.toBytes()).toString("base64"), REQUESTER_KEY);
+    expect(() => decodeFundLock(signed)).toThrow(
+      expect.objectContaining({ reason: "wrong-signer" }),
+    );
+  });
+
   it("survives a transfer carrying a rider leg, so the whitelist can refuse it", async () => {
     // The decoder must report every leg rather than the first two, or
     // extra-transfers becomes a rejection nothing can produce.

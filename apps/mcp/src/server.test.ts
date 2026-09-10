@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MockChainAdapter, sha256Hex, type LockFundsParams, signFundLock } from "@handoff/schema";
+import {
+  FundLockError,
+  FundLockSubmitError,
+  MockChainAdapter,
+  sha256Hex,
+  signFundLock,
+  type ChainAdapter,
+  type LockFundsParams,
+} from "@handoff/schema";
 import { InMemoryContentStore } from "./content.js";
 import { ContentHashMismatchError } from "@handoff/content";
 import { handle, CONTENT_PUT_MAX_BYTES, type HttpRequest, type ServerDeps } from "./server.js";
@@ -205,8 +213,12 @@ describe("POST /orders", () => {
       deps,
     );
 
-    expect(response.status).toBe(502);
-    expect(JSON.stringify(response.body)).toContain("memoed");
+    // A whitelist refusal is the caller's bytes being wrong with nothing
+    // executed, so it is a 400 they can rebuild from — not a 502.
+    expect(response.status).toBe(400);
+    const refusal = response.body as Record<string, unknown>;
+    expect(refusal["reason"]).toBe("wrong-order");
+    expect(String(refusal["detail"])).toContain("memoed");
     expect(paths).not.toContain("/settle");
   });
 
@@ -227,23 +239,111 @@ describe("POST /orders", () => {
     expect(paths).not.toContain("/settle");
   });
 
-  it("does not settle when the order fails to post", async () => {
+  /**
+   * Override one method on the real adapter, in place.
+   *
+   * Two ways to get this wrong, both silent. `{ ...adapter }` copies own
+   * properties only, so the prototype methods vanish and the call dies with
+   * "is not a function" — which the handler maps to 502, so a test asserting
+   * 502 passes without reaching the code it names. `Object.create(proto)`
+   * keeps the methods but not the private fields they read, so it dies on the
+   * first `#`-access instead. Assigning onto the instance shadows the
+   * prototype and leaves everything else intact. Each test builds its own
+   * harness, so mutating is safe.
+   */
+  function chainWith(deps: ServerDeps, overrides: Partial<ChainAdapter>): ChainAdapter {
+    return Object.assign(deps.chain, overrides);
+  }
+
+  it("does not settle when the fund lock cannot be submitted", async () => {
     const { deps, paths } = harness();
-    const chain = {
-      ...deps.chain,
-      network: "testnet" as const,
-      lockFunds: async () => {
+    const body = await paidBody(deps);
+    const chain = chainWith(deps, {
+      submitFundLock: async () => {
         throw new Error("escrow unreachable");
       },
-    };
+    });
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, body),
       { ...deps, chain },
     );
 
     expect(response.status).toBe(502);
     expect(paths).toContain("/verify");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("says the escrow is funded when the envelope fails after the lock lands", async () => {
+    const { deps, paths } = harness();
+    const body = await paidBody(deps);
+    const chain = chainWith(deps, {
+      submitMessage: async () => {
+        throw new Error("topic unreachable");
+      },
+    });
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, body),
+      { ...deps, chain },
+    );
+
+    // The requester's money moved and the order did not finish. Answering this
+    // with a bare "the order did not post" is how a caller orders again and
+    // funds a second escrow for one order.
+    expect(response.status).toBe(502);
+    const failure = response.body as Record<string, unknown>;
+    expect(failure["escrow_funded"]).toBe(true);
+    expect(failure["transaction_id"]).toMatch(/^MOCK-tx-/);
+    expect(String(failure["message"])).toContain("Do not order again");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("refuses a lock the whitelist rejects with 400, not 502 — nothing moved", async () => {
+    const { deps, paths } = harness();
+    const body = await paidBody(deps);
+    const chain = chainWith(deps, {
+      submitFundLock: async () => {
+        throw new FundLockError("wrong-amount", "the transfer debits 1, not 200");
+      },
+    });
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, body),
+      { ...deps, chain },
+    );
+
+    expect(response.status).toBe(400);
+    const failure = response.body as Record<string, unknown>;
+    expect(failure["reason"]).toBe("wrong-amount");
+    expect(String(failure["message"])).toContain("Nothing was charged.");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("tells a duplicate lock apart from a failure, and names the landed transaction", async () => {
+    const { deps, paths } = harness();
+    const body = await paidBody(deps);
+    const chain = chainWith(deps, {
+      submitFundLock: async () => {
+        throw new FundLockSubmitError(
+          "DUPLICATE_TRANSACTION",
+          "0.0.4004@1789035890.122059080",
+          "already submitted",
+        );
+      },
+    });
+
+    const response = await handle(
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, body),
+      { ...deps, chain },
+    );
+
+    expect(response.status).toBe(502);
+    const failure = response.body as Record<string, unknown>;
+    expect(failure["network_status"]).toBe("DUPLICATE_TRANSACTION");
+    expect(failure["escrow_funded"]).toBe(true);
+    expect(failure["transaction_id"]).toBe("0.0.4004@1789035890.122059080");
+    expect(String(failure["message"])).toContain("lock a second time");
     expect(paths).not.toContain("/settle");
   });
 

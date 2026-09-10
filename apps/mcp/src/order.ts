@@ -36,7 +36,19 @@ import {
 import type { ContentStore } from "./content.js";
 
 export class OrderError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /**
+     * The fund lock's transaction id, whenever the escrow is already funded.
+     *
+     * Present means the requester's money has moved and the order did not
+     * finish, which is the one failure a caller must not answer by ordering
+     * again — a fresh 402 mints a fresh id and a fresh lock, and they would
+     * fund the escrow a second time for what was meant to be one order.
+     * Structured rather than only in the message, so a handler can act on it.
+     */
+    readonly escrowTransactionId?: string,
+  ) {
     super(message);
     this.name = "OrderError";
   }
@@ -203,7 +215,19 @@ export async function postReviewOrder(
     deps.signedFundLock,
   );
 
-  const consensus = await deps.chain.submitMessage(deps.ordersTopicId, packaged.body);
+  let consensus;
+  try {
+    consensus = await deps.chain.submitMessage(deps.ordersTopicId, packaged.body);
+  } catch (error) {
+    // The funds are locked and the envelope is not out. Carry the lock's id:
+    // it is the requester's money, it has moved, and the caller needs to know
+    // that before they decide what to do next.
+    throw new OrderError(
+      `order ${envelope.order_id} locked its funds but the envelope did not publish ` +
+        `(${(error as Error).message}). fundLock ${escrow.transactionId}`,
+      escrow.transactionId,
+    );
+  }
 
   // No createSchedule here. The payee is unknown until somebody claims, and
   // ScheduleCreate needs a fully formed inner transfer.
@@ -230,6 +254,7 @@ export async function postReviewOrder(
       `order ${envelope.order_id} was published but its claim timeout does not fit the ` +
         `window the network assigned (${(error as Error).message}). ` +
         `fundLock ${escrow.transactionId}, submitEnvelope ${consensus.transactionId}`,
+      escrow.transactionId,
     );
   }
 

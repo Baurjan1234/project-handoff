@@ -142,6 +142,22 @@ export function decodeFundLock(signedTransactionBytes: string): FundLockFacts {
     );
   }
 
+  // A `TransferTransaction` is not only HBAR: it extends
+  // `AbstractTokenTransferTransaction` and carries token and NFT legs too. The
+  // whitelist reads `facts.transfers`, which is HBAR only, so a decoder that
+  // projected those away would let a caller staple arbitrary token movements
+  // onto a lock the validator then called clean. It cannot drain the platform
+  // — the requester can only move what is theirs — but a whitelist that is
+  // blind to whole categories of the transaction is not the whitelist this
+  // design claims. Refused here, where the categories are still visible.
+  if (parsed.tokenTransfers.size > 0 || parsed.nftTransfers.size > 0) {
+    throw new FundLockError(
+      "extra-transfers",
+      `a fund lock moves HBAR and nothing else; this also moves ` +
+        `${parsed.tokenTransfers.size} token and ${parsed.nftTransfers.size} NFT legs`,
+    );
+  }
+
   const transactionId = parsed.transactionId;
   const feePayer = transactionId?.accountId;
   const validStart = transactionId?.validStart;
@@ -153,10 +169,24 @@ export function decodeFundLock(signedTransactionBytes: string): FundLockFacts {
     // The transaction id's account is the fee payer. There is no separate
     // field for it on Hedera.
     feePayer: feePayer.toString(),
-    transfers: parsed.hbarTransfersList.map((leg) => ({
-      accountId: leg.accountId.toString(),
-      amountTinybars: leg.amount.toTinybars().toString(),
-    })),
+    transfers: parsed.hbarTransfersList.map((leg) => {
+      // An approved leg is debited through an allowance rather than by the
+      // owner's own signature. The whole point of this exchange is that the
+      // requester's key authorises their own debit, and this adapter reports
+      // signers as opaque precisely because it cannot check identity — so an
+      // allowance-backed leg would slip past both fences. Refuse the shape.
+      if (leg.isApproved) {
+        throw new FundLockError(
+          "wrong-signer",
+          `the leg debiting ${leg.accountId.toString()} is an approved transfer, spent from ` +
+            `an allowance rather than signed by the account itself`,
+        );
+      }
+      return {
+        accountId: leg.accountId.toString(),
+        amountTinybars: leg.amount.toTinybars().toString(),
+      };
+    }),
     memo: parsed.transactionMemo,
     validUntil: utcSecondsFrom(
       (validStart.seconds.toNumber() + parsed.transactionValidDuration) * 1000,

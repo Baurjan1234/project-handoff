@@ -16,9 +16,17 @@
  */
 
 import * as z from "zod";
-import { formatTinybars, hbarToTinybars, sha256Hex, Utc, type ChainAdapter } from "@handoff/schema";
+import {
+  formatTinybars,
+  FundLockError,
+  FundLockSubmitError,
+  hbarToTinybars,
+  sha256Hex,
+  Utc,
+  type ChainAdapter,
+} from "@handoff/schema";
 import type { ContentStore } from "./content.js";
-import { defaultOrderId, postReviewOrder } from "./order.js";
+import { defaultOrderId, OrderError, postReviewOrder } from "./order.js";
 import { gate, headerLookup, settle, type GateConfig } from "./x402/gate.js";
 import type { Facilitator } from "./x402/facilitator.js";
 import type { CertTagOption } from "./config.js";
@@ -443,9 +451,74 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
       },
     );
   } catch (error) {
-    // Do not settle. The payment is verified but unsubmitted, so the caller
-    // still has their money and can retry. Swallowing this into a settled fee
-    // would charge for a service that did not happen.
+    // Never settle on this path. What differs is what the caller should do
+    // next, and that turns entirely on whether their money moved — so these
+    // are told apart rather than flattened into one 502. A caller who cannot
+    // distinguish "nothing happened" from "your escrow is funded" answers the
+    // second by ordering again, and funds a second escrow for one order.
+
+    // Refused by the whitelist, before anything executed. The caller's own
+    // bytes are wrong and they can rebuild: nothing moved, nothing was taken.
+    if (error instanceof FundLockError) {
+      return {
+        status: 400,
+        headers: json,
+        body: {
+          error: "the fund lock was refused",
+          reason: error.reason,
+          message:
+            `The fund lock did not match the order it was issued for (${error.reason}). ` +
+            `Call again without payment to get a fresh one. Nothing was charged.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // Submitted and refused by the network. DUPLICATE_TRANSACTION is the one
+    // that means the escrow *is* funded — by an earlier submission of these
+    // same bytes — so it must never read as "try again".
+    if (error instanceof FundLockSubmitError) {
+      const funded = error.status === "DUPLICATE_TRANSACTION";
+      return {
+        status: 502,
+        headers: json,
+        body: {
+          error: "the fund lock did not settle",
+          network_status: error.status,
+          transaction_id: error.transactionId ?? "",
+          escrow_funded: funded,
+          message: funded
+            ? `This fund lock was already submitted, so the escrow is funded. Read ` +
+              `${error.transactionId} on a mirror node before doing anything else — ` +
+              `ordering again would lock a second time for the same order.`
+            : `The network refused the fund lock with ${error.status}. Nothing was ` +
+              `charged and no funds moved.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // The lock landed and the order did not finish. The requester's money has
+    // moved; say so, and hand back the id that proves it.
+    if (error instanceof OrderError && error.escrowTransactionId !== undefined) {
+      return {
+        status: 502,
+        headers: json,
+        body: {
+          error: "the funds are locked but the order did not post",
+          transaction_id: error.escrowTransactionId,
+          escrow_funded: true,
+          message:
+            `Your ${parsed.data.price_hbar} HBAR is in escrow (${error.escrowTransactionId}) ` +
+            `and the order did not finish publishing. Do not order again — that would lock ` +
+            `a second time. The service fee was not charged.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // Everything else: the payment is verified but unsettled, so the caller
+    // still has their money and can retry.
     return {
       status: 502,
       headers: json,
