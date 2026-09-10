@@ -1,11 +1,11 @@
 /**
- * Proves the direct-payout replacement end to end on real testnet: lockFunds ->
+ * Proves the direct-payout replacement end to end on real testnet: fund lock ->
  * createSchedule (bookkeeping only) -> signSchedule (real co-signed payout) ->
  * getTransaction (mirror confirms SUCCESS). Run before trusting the decision in
  * docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md, not
  * just after writing it.
  */
-import { AccountId, PrivateKey } from "@hiero-ledger/sdk";
+import { AccountId, PrivateKey, Transaction } from "@hiero-ledger/sdk";
 import { createTestnetClient, loadChainEnv } from "../src/config.ts";
 import { buildEscrowKeyList } from "../src/keys.ts";
 import { createEscrowAccount } from "../src/escrow.ts";
@@ -62,13 +62,29 @@ async function main(): Promise<void> {
     scheduleAdminKey,
   });
 
-  // POSTED: lock funds into escrow — real transfer.
-  const lockResult = await adapter.lockFunds({
+  // POSTED: lock funds into escrow — real transfer, signed by the requester.
+  //
+  // In this proof run the requester and the operator are the same account, so
+  // the script holds the key it signs with. On the real path they are
+  // different accounts and this signature happens on the requester's machine;
+  // the server only ever sees the bytes that come back.
+  const lockParams = {
     orderId: "demo-order-1",
     amountTinybars: "150000000", // 1.5 HBAR
     requesterAccountId: env.operatorId.toString(),
-  });
-  log("POSTED: lockFunds (real)", lockResult);
+  };
+  const unsignedLock = await adapter.buildFundLock(lockParams);
+  const signedLock = (
+    await Transaction.fromBytes(Buffer.from(unsignedLock.transactionBytes, "base64")).sign(
+      env.operatorKey,
+    )
+  )
+    .toBytes();
+  const lockResult = await adapter.submitFundLock(
+    lockParams,
+    Buffer.from(signedLock).toString("base64"),
+  );
+  log("POSTED: fund lock (real, requester-signed)", lockResult);
 
   // CLAIMED: payee known, "create schedule" — bookkeeping only, no chain call.
   const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");

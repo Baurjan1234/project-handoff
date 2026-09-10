@@ -14,7 +14,19 @@ set -uo pipefail
 
 BASE="${SMOKE_BASE:-http://localhost:${PORT:-4099}}"
 
+# requester_account_id is required, and the body is parsed before the gate now,
+# so a body without it is a 400 and never reaches a 402. Taken from your own
+# environment rather than defaulted to somebody's account: nothing is signed and
+# nothing is settled here, but a script that names one dev's account as its
+# default is a script that quietly tests their setup instead of yours.
+SMOKE_REQUESTER="${SMOKE_REQUESTER:-${X402_PAYER_ACCOUNT_ID:-${HEDERA_ACCOUNT_ID:-}}}"
+if [ -z "$SMOKE_REQUESTER" ]; then
+  echo "set SMOKE_REQUESTER, X402_PAYER_ACCOUNT_ID or HEDERA_ACCOUNT_ID to an account id" >&2
+  exit 1
+fi
+
 order='{"spec":"smoke","artifact_base64":"eA==","cert_tag":"cpa-us",
+        "requester_account_id":"'"$SMOKE_REQUESTER"'",
         "price_hbar":"200","deadline":"2026-09-14T00:00:00Z",
         "claim_timeout_seconds":3600}'
 
@@ -28,11 +40,11 @@ fi
 say "health"
 curl -s "$BASE/health"; echo
 
-say "unpaid: expect 402, and a feePayer fetched from the live facilitator"
+say "unpaid: expect 402, a feePayer from the live facilitator, and a fund lock to sign"
 curl -s -D - -o /dev/null -X POST "$BASE/orders" \
   -H 'Content-Type: application/json' -d "$order" | grep -iE '^(HTTP|payment-required)'
 
-say "the same 402, decoded"
+say "the same 402, decoded — note fund_lock beside the x402 challenge"
 curl -s -X POST "$BASE/orders" -H 'Content-Type: application/json' -d "$order" |
   python3 -m json.tool
 

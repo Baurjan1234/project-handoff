@@ -36,7 +36,19 @@ import {
 import type { ContentStore } from "./content.js";
 
 export class OrderError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /**
+     * The fund lock's transaction id, whenever the escrow is already funded.
+     *
+     * Present means the requester's money has moved and the order did not
+     * finish, which is the one failure a caller must not answer by ordering
+     * again — a fresh 402 mints a fresh id and a fresh lock, and they would
+     * fund the escrow a second time for what was meant to be one order.
+     * Structured rather than only in the message, so a handler can act on it.
+     */
+    readonly escrowTransactionId?: string,
+  ) {
     super(message);
     this.name = "OrderError";
   }
@@ -67,8 +79,15 @@ export interface PackageDeps {
 export interface PostDeps extends PackageDeps {
   readonly chain: ChainAdapter;
   readonly ordersTopicId: string;
-  /** Whose funds are being locked. One of the three escrow keys is theirs. */
+  /** Whose funds are being locked, taken from the payment and never from our env. */
   readonly requesterAccountId: string;
+  /**
+   * The lock the requester signed, base64, as it came back over the wire.
+   *
+   * Untrusted. `submitFundLock` validates it against the parameters below
+   * before anything executes; nothing here reads the bytes.
+   */
+  readonly signedFundLock: string;
 }
 
 export interface PackagedOrder {
@@ -90,14 +109,14 @@ export interface PostedOrder extends PackagedOrder {
    * Settlement state is read from a mirror node, never inferred from these.
    */
   readonly transactionIds: {
-    readonly lockFunds: string;
+    readonly fundLock: string;
     readonly submitEnvelope: string;
   };
 }
 
 const encoder = new TextEncoder();
 
-function defaultOrderId(): string {
+export function defaultOrderId(): string {
   // 36 bytes, inside the 64-byte bound, and readable in a log line.
   return `ord_${randomUUID().replaceAll("-", "")}`;
 }
@@ -172,6 +191,10 @@ export async function packageReviewOrder(
  * certified expert could claim and work on for nothing. Locking first and then
  * failing to publish leaves funds in an escrow we control, with no order
  * anybody has seen — recoverable, and nobody has been misled.
+ *
+ * The lock is the requester's own signed transfer, built at the 402 and signed
+ * on their machine. See
+ * ../../../docs/decisions/2026-09-08-requester-signs-the-fund-lock.md.
  */
 export async function postReviewOrder(
   request: ReviewOrderRequest,
@@ -180,13 +203,31 @@ export async function postReviewOrder(
   const packaged = await packageReviewOrder(request, deps);
   const { envelope } = packaged;
 
-  const escrow = await deps.chain.lockFunds({
-    orderId: envelope.order_id,
-    amountTinybars: envelope.price_tinybars,
-    requesterAccountId: deps.requesterAccountId,
-  });
+  // The whitelist compares the returned bytes against these, never against
+  // what the bytes claim. They are ours: the id was minted at the 402 and the
+  // price and requester come from the envelope we just packaged.
+  const escrow = await deps.chain.submitFundLock(
+    {
+      orderId: envelope.order_id,
+      amountTinybars: envelope.price_tinybars,
+      requesterAccountId: deps.requesterAccountId,
+    },
+    deps.signedFundLock,
+  );
 
-  const consensus = await deps.chain.submitMessage(deps.ordersTopicId, packaged.body);
+  let consensus;
+  try {
+    consensus = await deps.chain.submitMessage(deps.ordersTopicId, packaged.body);
+  } catch (error) {
+    // The funds are locked and the envelope is not out. Carry the lock's id:
+    // it is the requester's money, it has moved, and the caller needs to know
+    // that before they decide what to do next.
+    throw new OrderError(
+      `order ${envelope.order_id} locked its funds but the envelope did not publish ` +
+        `(${(error as Error).message}). fundLock ${escrow.transactionId}`,
+      escrow.transactionId,
+    );
+  }
 
   // No createSchedule here. The payee is unknown until somebody claims, and
   // ScheduleCreate needs a fully formed inner transfer.
@@ -198,7 +239,7 @@ export async function postReviewOrder(
     consensusTimestamp: consensus.consensusTimestamp,
     sequenceNumber: consensus.sequenceNumber,
     transactionIds: {
-      lockFunds: escrow.transactionId,
+      fundLock: escrow.transactionId,
       submitEnvelope: consensus.transactionId,
     },
   };
@@ -212,7 +253,8 @@ export async function postReviewOrder(
     throw new OrderError(
       `order ${envelope.order_id} was published but its claim timeout does not fit the ` +
         `window the network assigned (${(error as Error).message}). ` +
-        `lockFunds ${escrow.transactionId}, submitEnvelope ${consensus.transactionId}`,
+        `fundLock ${escrow.transactionId}, submitEnvelope ${consensus.transactionId}`,
+      escrow.transactionId,
     );
   }
 

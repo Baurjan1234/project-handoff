@@ -328,25 +328,26 @@ expert web app itself; custodial key management is a weeks-scale project.
   KeyList is the demo requester's session key. One escrow account per order, holding
   the requester's own key, is the production shape and is roadmap
   (`docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`).
-- **The platform funds the escrow, not the requester.** `lockFunds` is signed by
-  whatever account the adapter's client holds, which server-side is our operator. So
-  "funds lock up front" means *our* funds this week: the requester pays only the x402
-  service fee, from their own account. Two consequences said out loud — the escrow is
-  not the requester's money at risk, and a public endpoint is drainable at roughly the
-  operator balance divided by the order price. **Nothing guards this yet, and nothing
-  will.** Guarding a platform-funded escrow is work on a path that is being deleted, so
-  the endpoint stays private until the requester-signed fund lock lands rather than
-  going out behind a price cap and a balance floor. The fix is a requester-signed fund
-  lock: the server builds the transfer, the requester's own key signs it, the server
-  submits it. That interface is proposed on the mock as `RequesterFundedEscrow` and is
-  roadmap unless it lands before the freeze.
+- **The requester funds the escrow.** Proven on testnet 2026-09-10 with a payer who is
+  not the operator, which is the case `main` could not do at all.
+  `lockFunds` is gone. The server builds the transfer, the requester's own key signs it
+  on their own machine, and the server validates the returned bytes against what it
+  asked for before submitting them
+  (`docs/decisions/2026-09-08-requester-signs-the-fund-lock.md`). So "funds lock up
+  front" now means the requester's funds, and the drainability that came with a
+  platform-funded escrow is gone with it.
+  The run, on the mirror node: fund lock `0.0.10376659@1789035890.122059080`, SUCCESS,
+  memoed `ord_6d566a82d4b1449aafc8902870c1690f`, debiting the requester `0.0.10376659`
+  by `-100262336` tinybars — the order value plus their own gas — and crediting the
+  escrow `0.0.10422187` by `100000000`. The operator `0.0.10376667` appears nowhere in
+  that transfer list; across the whole order it spent `0.0059` HBAR, the cost of
+  submitting the HCS envelope. Details in `docs/research/x402-first-paid-request.md`.
 - **Escrowed funds have no return path.** `TIMEOUT` is a label in the lifecycle state
   machine and nothing else: no process watches order deadlines, `ORDER_DEADLINE_EXPIRE`
   is fired by nothing outside its own unit test, and `packages/chain/src/escrow.ts` has
   a transfer in and none out. So an order nobody claims holds its funds indefinitely.
-  This week that is our own money, since the platform funds the escrow. Under the
-  requester-signed lock it becomes the requester's, which changes what the gap costs
-  without changing what it is.
+  Under the requester-signed lock those are the requester's funds, which changes who
+  the gap costs without changing what it is.
 - **Execution class is schema + architecture**, demoed as roadmap; its proofs need an
   oracle story presented honestly as a trusted-verifier stub.
 - **Content availability is centralized** (Supabase). Signed URLs are access control —

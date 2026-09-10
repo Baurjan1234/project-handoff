@@ -5,7 +5,7 @@
  * `packages/chain`, constructed with the expert's own account and key" — and only
  * the slice it is allowed to call: `network`, `submitMessage`, `readMessages`,
  * `getTransaction`. Not `signSchedule`, `createSchedule`, `deleteSchedule` or
- * `lockFunds`: **the expert's key signs the HCS message and nothing else.**
+ * the fund lock: **the expert's key signs the HCS message and nothing else.**
  * `HederaChainAdapter` is the wrong thing to hand a browser — it needs the escrow
  * account and both platform keys, none of which an expert has or should have.
  *

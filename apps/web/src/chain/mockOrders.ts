@@ -24,6 +24,7 @@ import {
   type MockChainAdapter,
   type ReadMessagesOptions,
   type TopicMessage,
+  signFundLock,
 } from "@handoff/schema";
 import fakeArtifact from "../../../../assets/demo/fake-quarterly-summary.txt?raw";
 import fakeSpec from "../../../../assets/demo/fake-review-spec.txt?raw";
@@ -199,12 +200,18 @@ export class MockOrderSource implements OrderSource {
       assertClaimTimeoutFitsWindow(Math.floor(nowMillis / 1000), envelope);
 
       // Lock before publish, same as apps/mcp: a public order with no money
-      // behind it is the worse failure.
-      const escrow = await chain.lockFunds({
+      // behind it is the worse failure. The requester signs it themselves now,
+      // and this seeder plays that role.
+      const lockParams = {
         orderId: envelope.order_id,
         amountTinybars: envelope.price_tinybars,
         requesterAccountId: options.requesterAccountId,
-      });
+      };
+      const unsignedLock = await chain.buildFundLock(lockParams);
+      const escrow = await chain.submitFundLock(
+        lockParams,
+        signFundLock(unsignedLock.transactionBytes, options.requesterAccountId),
+      );
       await chain.submitMessage(options.ordersTopicId, encodeEnvelope(envelope));
       if (fixture.claimedByRival) {
         await chain.publishClaim(options.ordersTopicId, RIVAL_ACCOUNT_ID, claimBody(envelope));

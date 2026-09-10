@@ -9,6 +9,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpServer } from "./server.js";
 import { fetchTags, UnwiredSigner, type PaymentSigner, type PreflightCheck } from "./client.js";
 import { createX402Signer } from "@handoff/chain";
+import { formatTinybars, hbarToTinybars } from "@handoff/schema";
 import { preflight } from "../preflight.js";
 import type { CertTagOption } from "../config.js";
 
@@ -59,12 +60,17 @@ if (payerAccountId && payerKey && !isPlaceholder(payerAccountId)) {
       maxAmountTinybars: process.env["X402_MAX_FEE_TINYBARS"]?.trim() || "100000000",
     });
     // The fee is the server's to state, so the amount comes from the quote and
-    // never from configuration here. The order value is the caller's and is
-    // not this account's problem: the escrow is funded server-side from the
-    // requester account, so this checks the fee alone.
-    check = async (requirements) =>
+    // never from configuration here. The order value is the caller's and comes
+    // from the order they just asked for — this account funds the escrow with
+    // its own signature now, so both come out of the same balance and both are
+    // checked before anything is signed.
+    check = async (requirements, priceHbar) =>
       preflight(
-        { payerAccountId, feeTinybars: requirements.amount },
+        {
+          payerAccountId,
+          feeTinybars: requirements.amount,
+          escrowTinybars: formatTinybars(hbarToTinybars(priceHbar)),
+        },
         { mirrorNodeUrl },
       );
     console.error(`x402 payer: ${payerAccountId}`);

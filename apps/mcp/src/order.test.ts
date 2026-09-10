@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MOCK_ESCROW_ACCOUNT_ID,
   MockChainAdapter,
   sha256Hex,
+  signFundLock,
   type ChainAdapter,
   type ConsensusRef,
   type EscrowRef,
@@ -52,9 +54,17 @@ class RecordingAdapter implements ChainAdapter {
     return this.inner.publishClaim(...args);
   }
 
-  async lockFunds(params: LockFundsParams): Promise<EscrowRef> {
-    this.calls.push("lockFunds");
-    return this.inner.lockFunds(params);
+  async buildFundLock(params: LockFundsParams) {
+    this.calls.push("buildFundLock");
+    return this.inner.buildFundLock(params);
+  }
+
+  async submitFundLock(
+    expected: LockFundsParams,
+    signedTransactionBytes: string,
+  ): Promise<EscrowRef> {
+    this.calls.push("submitFundLock");
+    return this.inner.submitFundLock(expected, signedTransactionBytes);
   }
 
   async createSchedule(params: CreateScheduleParams): Promise<ScheduleRef> {
@@ -78,7 +88,26 @@ class RecordingAdapter implements ChainAdapter {
   }
 }
 
-function harness(chainNow: number = POSTED_AT) {
+const REQUESTER = "0.0.10376659";
+
+/**
+ * The lock the requester would have signed, built off a separate adapter so
+ * the recording one still shows only what `postReviewOrder` called.
+ */
+async function signedLockFor(
+  amountTinybars: string,
+  chainNow: number,
+): Promise<string> {
+  const builder = new MockChainAdapter({ now: () => chainNow });
+  const built = await builder.buildFundLock({
+    orderId: "ord_test",
+    amountTinybars,
+    requesterAccountId: REQUESTER,
+  });
+  return signFundLock(built.transactionBytes, REQUESTER);
+}
+
+async function harness(chainNow: number = POSTED_AT, priceTinybars = "20000000000") {
   const content = new InMemoryContentStore();
   const chain = new RecordingAdapter(new MockChainAdapter({ now: () => chainNow }));
   return {
@@ -88,7 +117,8 @@ function harness(chainNow: number = POSTED_AT) {
       content,
       chain,
       ordersTopicId: "0.0.orders",
-      requesterAccountId: "0.0.10376659",
+      requesterAccountId: REQUESTER,
+      signedFundLock: await signedLockFor(priceTinybars, chainNow),
       now: () => POSTED_AT,
       newOrderId: () => "ord_test",
     },
@@ -97,7 +127,7 @@ function harness(chainNow: number = POSTED_AT) {
 
 describe("packageReviewOrder", () => {
   it("commits to the content by hash and stores the bytes", async () => {
-    const { content, deps } = harness();
+    const { content, deps } = await harness();
 
     const packaged = await packageReviewOrder(request(), deps);
 
@@ -109,7 +139,7 @@ describe("packageReviewOrder", () => {
   });
 
   it("publishes hashes only, never the content", async () => {
-    const { deps } = harness();
+    const { deps } = await harness();
 
     const { body } = await packageReviewOrder(request(), deps);
 
@@ -120,7 +150,7 @@ describe("packageReviewOrder", () => {
   });
 
   it("converts the price through the money module and keeps it a string", async () => {
-    const { deps } = harness();
+    const { deps } = await harness();
 
     const whole = await packageReviewOrder(request({ priceHbar: "200" }), deps);
     const fractional = await packageReviewOrder(request({ priceHbar: "0.1" }), deps);
@@ -131,7 +161,7 @@ describe("packageReviewOrder", () => {
   });
 
   it("refuses a review order with nothing to review", async () => {
-    const { deps } = harness();
+    const { deps } = await harness();
 
     await expect(
       packageReviewOrder(request({ artifact: new Uint8Array() }), deps),
@@ -139,7 +169,7 @@ describe("packageReviewOrder", () => {
   });
 
   it("refuses a claim timeout that eats the window, before any money moves", async () => {
-    const { chain, deps } = harness();
+    const { chain, deps } = await harness();
 
     await expect(
       packageReviewOrder(
@@ -154,7 +184,7 @@ describe("packageReviewOrder", () => {
   });
 
   it("refuses a deadline that has already passed", async () => {
-    const { deps } = harness();
+    const { deps } = await harness();
 
     await expect(
       packageReviewOrder(request({ deadline: "2026-09-04T00:00:00Z" }), deps),
@@ -164,15 +194,15 @@ describe("packageReviewOrder", () => {
 
 describe("postReviewOrder", () => {
   it("locks the funds before it publishes the order", async () => {
-    const { chain, deps } = harness();
+    const { chain, deps } = await harness();
 
     await postReviewOrder(request(), deps);
 
-    expect(chain.calls).toEqual(["lockFunds", "submitMessage"]);
+    expect(chain.calls).toEqual(["submitFundLock", "submitMessage"]);
   });
 
   it("creates no schedule at post time, because the payee is unknown", async () => {
-    const { chain, deps } = harness();
+    const { chain, deps } = await harness();
 
     await postReviewOrder(request(), deps);
 
@@ -180,15 +210,17 @@ describe("postReviewOrder", () => {
   });
 
   it("threads every transaction id and the consensus timestamp out", async () => {
-    const { deps } = harness();
+    const { deps } = await harness();
 
     const posted = await postReviewOrder(request(), deps);
 
     expect(posted.orderId).toBe("ord_test");
-    expect(posted.transactionIds.lockFunds).not.toBe(posted.transactionIds.submitEnvelope);
-    expect(posted.transactionIds.lockFunds).toBeTruthy();
+    expect(posted.transactionIds.fundLock).not.toBe(posted.transactionIds.submitEnvelope);
+    expect(posted.transactionIds.fundLock).toBeTruthy();
     expect(posted.transactionIds.submitEnvelope).toBeTruthy();
-    expect(posted.escrowAccountId).toContain("ord_test");
+    // One shared escrow, so the account no longer names the order — the memo
+    // inside the signed lock is what binds it.
+    expect(posted.escrowAccountId).toBe(MOCK_ESCROW_ACCOUNT_ID);
     expect(posted.consensusTimestamp).toMatch(/^\d+\.\d{9}$/);
     expect(posted.sequenceNumber).toBe(1);
   });
@@ -196,10 +228,10 @@ describe("postReviewOrder", () => {
   it("carries both ids out when the network's clock invalidates the envelope", async () => {
     // Our clock says there are nine days of window. The network's says there
     // are one hundred seconds, which no claim timeout fits inside.
-    const { deps } = harness(Date.parse("2026-09-13T23:58:20Z"));
+    const { deps } = await harness(Date.parse("2026-09-13T23:58:20Z"));
 
     await expect(postReviewOrder(request(), deps)).rejects.toThrow(
-      /was published but its claim timeout does not fit.*lockFunds MOCK-tx-\d+.*submitEnvelope MOCK-tx-\d+/s,
+      /was published but its claim timeout does not fit.*fundLock MOCK-tx-\d+.*submitEnvelope MOCK-tx-\d+/s,
     );
   });
 });

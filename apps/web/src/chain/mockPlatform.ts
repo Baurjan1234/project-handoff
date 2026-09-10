@@ -20,6 +20,7 @@ import {
   hbarToTinybars,
   ReviewOrder,
   SCHEMA_VERSION,
+  signFundLock,
   type ChainAdapter,
 } from "@handoff/schema";
 import fakeArtifact from "../../../../assets/demo/fake-quarterly-summary.txt?raw";
@@ -51,7 +52,7 @@ export interface SeedOptions {
 /** What the sign screen needs, plus the ids the posting produced. */
 export interface SeededOrder extends OrderForSigning {
   readonly transactionIds: {
-    readonly lockFunds: string;
+    readonly fundLock: string;
     readonly submitEnvelope: string;
   };
 }
@@ -93,12 +94,19 @@ export async function seedClaimedReviewOrder(
   assertClaimTimeoutFitsWindow(Math.floor(nowMillis / 1000), envelope);
 
   // Lock before publish, same as apps/mcp: a public order with no money
-  // behind it is the worse failure.
-  const escrow = await chain.lockFunds({
+  // behind it is the worse failure. The requester signs it themselves now, and
+  // this file plays that role — see
+  // ../../../../docs/decisions/2026-09-08-requester-signs-the-fund-lock.md.
+  const lockParams = {
     orderId: envelope.order_id,
     amountTinybars: envelope.price_tinybars,
     requesterAccountId: options.requesterAccountId,
-  });
+  };
+  const unsignedLock = await chain.buildFundLock(lockParams);
+  const escrow = await chain.submitFundLock(
+    lockParams,
+    signFundLock(unsignedLock.transactionBytes, options.requesterAccountId),
+  );
   const published = await chain.submitMessage(options.ordersTopicId, encodeEnvelope(envelope));
 
   return {
@@ -106,7 +114,7 @@ export async function seedClaimedReviewOrder(
     escrowAccountId: escrow.escrowAccountId,
     topicId: options.ordersTopicId,
     transactionIds: {
-      lockFunds: escrow.transactionId,
+      fundLock: escrow.transactionId,
       submitEnvelope: published.transactionId,
     },
   };

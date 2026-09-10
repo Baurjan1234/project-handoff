@@ -26,9 +26,9 @@ describe("seedClaimedReviewOrder", () => {
     expect(order.topicId).toBe(TOPIC);
 
     // Both ids the posting produced come back. Neither is swallowed.
-    expect(order.transactionIds.lockFunds).toMatch(/^MOCK-tx-/);
+    expect(order.transactionIds.fundLock).toMatch(/^MOCK-tx-/);
     expect(order.transactionIds.submitEnvelope).toMatch(/^MOCK-tx-/);
-    expect(order.transactionIds.lockFunds).not.toBe(order.transactionIds.submitEnvelope);
+    expect(order.transactionIds.fundLock).not.toBe(order.transactionIds.submitEnvelope);
 
     const messages = await chain.readMessages(TOPIC);
     expect(messages).toHaveLength(1);
