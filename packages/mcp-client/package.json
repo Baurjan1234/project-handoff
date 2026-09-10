@@ -1,0 +1,50 @@
+{
+  "name": "@hedera-handoff/mcp-client",
+  "version": "0.1.0",
+  "description": "Order a certified human review from any agent session. The x402 client for Handoff, on Hedera testnet.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "handoff-mcp": "./dist/handoff-mcp.mjs"
+  },
+  "files": [
+    "dist/handoff-mcp.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "2.85.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@x402/core": "2.25.0",
+    "@x402/hedera": "2.25.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "hedera",
+    "x402",
+    "agent",
+    "model-context-protocol"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nasaa0528/project-handoff.git",
+    "directory": "packages/mcp-client"
+  }
+}
