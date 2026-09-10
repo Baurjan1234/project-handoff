@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ShieldCheck } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,9 @@ import { Logo } from "./Logo";
 import { Amount } from "./Money";
 import { Mono } from "./Mono";
 
+/** The public docs. The one link out of the funnel, and it opens beside it. */
+export const DOCS_URL = "https://docs.the-handoff.xyz";
+
 /** Who is signing. On every screen, quietly; on the Sign step, in full. */
 export interface ExpertIdentity {
   readonly accountId: string;
@@ -22,9 +25,14 @@ export interface ExpertIdentity {
 }
 
 /**
- * The navbar every expert screen shares: the mark and wordmark, one tab
- * because there is one place to be, and the expert's identity on the right
- * with the details one click down.
+ * The navbar every screen shares: the mark and wordmark, the two sides of one
+ * account, and the expert's identity on the right with the details one click
+ * down.
+ *
+ * Two tabs, because a Hedera account is not only a reviewer. Inbox is work
+ * this account can take; My requests is work this account paid for. The count
+ * rides on Inbox alone — there is nothing to count on the other side that the
+ * network can back.
  *
  * The dropdown says only what the network can back. There is no name and no
  * email in this product, because identity is the Hedera account; the balance
@@ -36,7 +44,9 @@ export function Navbar({
   mode,
   identity,
   openCount = null,
+  active = "inbox",
   onInbox,
+  onRequests,
   onDisconnect,
   disconnectHeld = false,
 }: {
@@ -44,7 +54,10 @@ export function Navbar({
   identity: ExpertIdentity;
   /** Orders the expert can take. Null while unknown. */
   openCount?: number | null | undefined;
+  /** Which tab the current screen belongs to. */
+  active?: "inbox" | "requests" | undefined;
   onInbox?: (() => void) | undefined;
+  onRequests?: (() => void) | undefined;
   onDisconnect?: (() => void) | undefined;
   /** While something is in flight that a disconnect would strand. */
   disconnectHeld?: boolean | undefined;
@@ -79,22 +92,30 @@ export function Navbar({
         </button>
 
         <nav className="flex h-full items-center" aria-label="Primary">
-          <button
-            type="button"
-            onClick={onInbox}
-            aria-current="page"
-            className="flex h-full items-center gap-1.5 border-b-2 border-primary px-4 text-[13px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Tab current={active === "inbox"} onClick={onInbox}>
             Inbox
             {openCount !== null && openCount > 0 && (
               <span className="min-w-[18px] rounded-full bg-primary px-1.5 text-center text-[11px] font-semibold text-primary-foreground">
                 {openCount}
               </span>
             )}
-          </button>
+          </Tab>
+          <Tab current={active === "requests"} onClick={onRequests}>
+            My requests
+          </Tab>
         </nav>
 
         <div className="flex-1" />
+
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mr-1 flex items-center gap-0.5 rounded-md px-2 py-1 text-[13px] font-semibold text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Docs
+          <ArrowUpRight className="size-3.5 text-faint" aria-hidden />
+        </a>
 
         <DropdownMenu onOpenChange={(open) => open && setAsked(true)}>
           <DropdownMenuTrigger asChild>
@@ -168,6 +189,36 @@ export function Navbar({
         </DropdownMenu>
       </div>
     </header>
+  );
+}
+
+/**
+ * One tab. The current one carries the rule and the ink; the other is quiet
+ * until hovered. `aria-current` is on the page's own tab only, so a screen
+ * reader is told where it is rather than that both are somewhere.
+ */
+function Tab({
+  current,
+  onClick,
+  children,
+}: {
+  current: boolean;
+  onClick?: (() => void) | undefined;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      {...(current ? { "aria-current": "page" as const } : {})}
+      className={`flex h-full items-center gap-1.5 border-b-2 px-4 text-[13px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+        current
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -20,6 +20,15 @@ describe("Navbar", () => {
     expect(expectNoBannedWords(html)).toEqual([]);
   });
 
+  it("links out to the docs, in a new tab, and nowhere else", () => {
+    const html = renderToStaticMarkup(<Navbar mode="testnet" identity={identity} />);
+    expect(html).toContain('href="https://docs.the-handoff.xyz"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    // Testnet only: the docs are the one outbound link, and it is not mainnet.
+    expect(html).not.toMatch(/mainnet/i);
+  });
+
   it("hides the count when there is no work to take", () => {
     const html = renderToStaticMarkup(<Navbar mode="testnet" identity={identity} openCount={0} />);
     expect(html).not.toContain(">0<");
