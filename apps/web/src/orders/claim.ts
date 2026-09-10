@@ -80,7 +80,11 @@ export function claimStateFor(
             claimedAtEpochSeconds: epochSecondsOf(resolution.active.claimedAt),
             signBy: epochSecondsToUtc(resolution.active.signByEpochSeconds),
           }
-        : { kind: "someone-else" };
+        : {
+            kind: "someone-else",
+            holderSignBy: epochSecondsToUtc(resolution.active.signByEpochSeconds),
+            youClaimed: records.some((record) => record.payerAccountId === expertAccountId),
+          };
     case "claim_timeout":
       return resolution.reopenAvailable ? { kind: "open" } : { kind: "closed" };
   }

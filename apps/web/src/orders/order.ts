@@ -31,7 +31,18 @@ export type ClaimState =
       /** Never past the order deadline. */
       readonly signBy: string;
     }
-  | { readonly kind: "someone-else" }
+  | {
+      readonly kind: "someone-else";
+      /**
+       * When the holder's window runs out. At that point the order returns to
+       * the inbox and anyone may claim it again, first come. A claim that
+       * raced and lost holds no position and no priority: the treaty's rule
+       * says a claim that lost stays lost, so nothing here is a queue.
+       */
+      readonly holderSignBy: string;
+      /** This expert claimed it and lost. True only when the topic says so. */
+      readonly youClaimed: boolean;
+    }
   /** The claim window expired twice. Nobody can claim it again. */
   | { readonly kind: "closed" };
 
