@@ -115,7 +115,10 @@ const OrderRequestBody = z.strictObject({
    * without it two orders at the same price from the same requester are
    * satisfied by the same lock.
    */
-  order_id: z.string().min(1).optional(),
+  order_id: z
+    .string()
+    .regex(/^ord_[0-9a-f]{32}$/, "not an order id this service minted")
+    .optional(),
   /**
    * The fund lock the requester signed, base64.
    *
@@ -391,6 +394,15 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
   // Minted at the 402 and echoed back. Without both of these there is nothing
   // to submit and nothing binding a lock to this order, so refuse before
   // settling: the caller still has their money.
+  //
+  // **The caller cannot choose this id, even though they send it.** To post
+  // under some id X they need a lock memoed X, the memo sits inside the signed
+  // body, and only this server mints one — at the 402, as a random uuid. An id
+  // the whitelist has not seen a matching lock for is refused by
+  // `submitFundLock` before anything executes. Replaying a spent lock is
+  // refused too, by the network: DUPLICATE_TRANSACTION inside the receipt
+  // period and TRANSACTION_EXPIRED past it. The shape check above is a cheap
+  // second fence, not the one doing the work.
   const { order_id: orderId, signed_fund_lock: signedFundLock } = parsed.data;
   if (orderId === undefined || signedFundLock === undefined) {
     return {

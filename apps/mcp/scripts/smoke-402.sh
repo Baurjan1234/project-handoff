@@ -15,9 +15,15 @@ set -uo pipefail
 BASE="${SMOKE_BASE:-http://localhost:${PORT:-4099}}"
 
 # requester_account_id is required, and the body is parsed before the gate now,
-# so a body without it is a 400 and never reaches a 402. Any well-formed account
-# id will do here: nothing is signed and nothing is settled by this script.
-SMOKE_REQUESTER="${SMOKE_REQUESTER:-0.0.10376659}"
+# so a body without it is a 400 and never reaches a 402. Taken from your own
+# environment rather than defaulted to somebody's account: nothing is signed and
+# nothing is settled here, but a script that names one dev's account as its
+# default is a script that quietly tests their setup instead of yours.
+SMOKE_REQUESTER="${SMOKE_REQUESTER:-${X402_PAYER_ACCOUNT_ID:-${HEDERA_ACCOUNT_ID:-}}}"
+if [ -z "$SMOKE_REQUESTER" ]; then
+  echo "set SMOKE_REQUESTER, X402_PAYER_ACCOUNT_ID or HEDERA_ACCOUNT_ID to an account id" >&2
+  exit 1
+fi
 
 order='{"spec":"smoke","artifact_base64":"eA==","cert_tag":"cpa-us",
         "requester_account_id":"'"$SMOKE_REQUESTER"'",

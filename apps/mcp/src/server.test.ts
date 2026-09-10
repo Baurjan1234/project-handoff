@@ -168,6 +168,48 @@ describe("POST /orders", () => {
     expect(paths).not.toContain("/settle");
   });
 
+  it("refuses an order id it did not mint, so a lock cannot be aimed at a made-up order", async () => {
+    const { deps, paths } = harness();
+
+    const response = await handle(
+      post(
+        { [PAYMENT_SIGNATURE_HEADER]: paidHeader() },
+        orderBody({ order_id: "ord_pick-me", signed_fund_lock: "AAAA" }),
+      ),
+      deps,
+    );
+
+    expect(response.status).toBe(400);
+    // The real fence is the memo inside the signed bytes; this one just keeps
+    // a made-up id from reaching the whitelist at all.
+    expect(JSON.stringify(response.body)).toContain("not an order id this service minted");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("refuses a lock built for another order, because the memo binds it", async () => {
+    const { deps, paths } = harness();
+
+    // A real lock, signed properly, but pointed at an id the server minted for
+    // a different order. The escrow is one shared account, so this is the only
+    // thing standing between two same-priced orders and one set of bytes.
+    const first = await paidBody(deps);
+    const second = await paidBody(deps);
+    const stolen = JSON.parse(first) as Record<string, unknown>;
+    const other = JSON.parse(second) as Record<string, unknown>;
+
+    const response = await handle(
+      post(
+        { [PAYMENT_SIGNATURE_HEADER]: paidHeader() },
+        JSON.stringify({ ...stolen, order_id: other["order_id"] }),
+      ),
+      deps,
+    );
+
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(response.body)).toContain("memoed");
+    expect(paths).not.toContain("/settle");
+  });
+
   it("settles only after the order is posted, so a paid-but-unusable call costs nothing", async () => {
     const { deps, paths } = harness();
 

@@ -229,9 +229,19 @@ export async function submitFundLock(
     };
   } catch (error) {
     if (!(error instanceof StatusError)) {
-      // A socket error carries no status and has to keep propagating rather
-      // than be flattened into a code nobody can act on.
-      throw error;
+      // A socket error or a receipt timeout carries no status, and inventing
+      // one would be interpreting the network rather than reporting it. But
+      // the transaction may well have landed — a timeout waiting for a receipt
+      // says nothing about whether consensus happened — so the id has to come
+      // out with it. Never swallow a transaction id, least of all the one that
+      // tells you whether the requester's money moved.
+      throw new Error(
+        `the fund lock was submitted as ${submittedId ?? "an unknown transaction"} and its ` +
+          `outcome is unknown: ${(error as Error).message}. Read the mirror node for that ` +
+          `id before retrying — a retry inside the receipt period is refused as a duplicate, ` +
+          `and past it would lock a second time.`,
+        { cause: error },
+      );
     }
     const status = error.status;
     throw new FundLockSubmitError(
