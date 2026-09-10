@@ -45,11 +45,16 @@ export function useMyRequests(wiring: MyRequestsWiring | null): MyRequestsView {
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
+  // Whose list this is, kept apart from the read itself. A new wiring means a
+  // first read, so the screen goes back to the skeleton; a `refresh` is not a
+  // first read, so the rows stay put while it happens. One effect doing both
+  // would blank the list every time somebody pressed Check again.
   useEffect(() => {
-    if (wiring === null) {
-      setRequests([]);
-      return;
-    }
+    setRequests(wiring === null ? [] : null);
+  }, [wiring]);
+
+  useEffect(() => {
+    if (wiring === null) return;
     const controller = new AbortController();
 
     void readMyRequests({
