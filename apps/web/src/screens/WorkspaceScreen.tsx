@@ -163,27 +163,34 @@ export function WorkspaceScreen({
 
   return (
     <div className="grid lg:h-[calc(100dvh-3.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]">
-      {/* The order's own bar: back, title, state, clock, money. */}
-      <div className="flex h-[52px] items-center gap-4 border-b border-border bg-card px-4 sm:px-6">
-        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-muted-foreground" onClick={onBackToInbox}>
-          <ArrowLeft data-icon="inline-start" aria-hidden />
-          Inbox
-        </Button>
-        <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
-        <span className="hidden min-w-0 flex-1 truncate font-serif text-sm font-semibold sm:block">{order.title}</span>
-        <span className="flex-1 sm:hidden" />
-        <div className="flex shrink-0 items-center gap-3">
-          <Badge variant="outline" className={signed ? "border-paid/20 bg-paid/5 text-paid" : "border-urgent/20 bg-urgent/5 text-urgent"}>
-            {statusWords}
-          </Badge>
-          <span className="text-xs font-semibold whitespace-nowrap">
-            Sign by <span className="tabular-nums">{clockWords(signBy, now)}</span>
-          </span>
-          <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-[13px] font-semibold text-paid" />
+      {/* The order's own bar: back, title, state, clock, money. The white runs edge to
+          edge like the navbar's; the row inside shares the navbar's gutter and cap, so
+          Inbox sits under the wordmark. */}
+      <div className="border-b border-border bg-card">
+        <div className="mx-auto flex h-[52px] max-w-6xl items-center gap-4 px-4 sm:px-6">
+          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-muted-foreground" onClick={onBackToInbox}>
+            <ArrowLeft data-icon="inline-start" aria-hidden />
+            Inbox
+          </Button>
+          <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+          <span className="hidden min-w-0 flex-1 truncate font-serif text-sm font-semibold sm:block">{order.title}</span>
+          <span className="flex-1 sm:hidden" />
+          <div className="flex shrink-0 items-center gap-3">
+            <Badge variant="outline" className={signed ? "border-paid/20 bg-paid/5 text-paid" : "border-urgent/20 bg-urgent/5 text-urgent"}>
+              {statusWords}
+            </Badge>
+            <span className="text-xs font-semibold whitespace-nowrap">
+              Sign by <span className="tabular-nums">{clockWords(signBy, now)}</span>
+            </span>
+            <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-[13px] font-semibold text-paid" />
+          </div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden">
+      {/* Only the panes are inset, on the bar's gutter and cap, so the paper's edge sits
+          under the wordmark too. Below lg they stack and carry their own padding, where
+          an outer gutter would only double it. */}
+      <div className="mx-auto grid w-full max-w-6xl lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden lg:px-6">
         {/* The paper. It stays. */}
         <section className="border-b border-border lg:overflow-y-auto lg:border-r lg:border-b-0">
           <div className="grid gap-6 px-5 py-7 sm:px-10 sm:py-8">
