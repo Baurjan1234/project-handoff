@@ -23,7 +23,6 @@ import type {
   EscrowRef,
   LockFundsParams,
   ReadMessagesOptions,
-  RequesterFundedEscrow,
   ScheduleRef,
   SignScheduleResult,
   TopicMessage,
@@ -166,7 +165,7 @@ interface MockSchedule {
   deleted: boolean;
 }
 
-export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
+export class MockChainAdapter implements ChainAdapter {
   readonly network = "testnet" as const;
 
   readonly #now: () => number;
@@ -235,15 +234,8 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
     return options.limit === undefined ? found : found.slice(0, options.limit);
   }
 
-  async lockFunds(params: LockFundsParams): Promise<EscrowRef> {
-    const transactionId = this.#nextTxId();
-    this.#record(transactionId, this.#timestamp());
-    return { transactionId, escrowAccountId: `MOCK-escrow-${params.orderId}` };
-  }
-
-
   /**
-   * PROPOSAL. Builds the transfer the requester will sign. See
+   * Builds the transfer the requester will sign. See
    * `RequesterFundedEscrow`.
    *
    * The mock's "bytes" are base64 JSON, not protobuf, and its signature is a

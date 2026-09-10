@@ -1,5 +1,5 @@
 /**
- * PROPOSAL. Tests for `RequesterFundedEscrow` on the mock.
+ * Tests for `RequesterFundedEscrow` on the mock.
  *
  * The point of these is not that the mock works. It is that the *exchange* has
  * exactly one accepting path and that every way of tampering with the returned
