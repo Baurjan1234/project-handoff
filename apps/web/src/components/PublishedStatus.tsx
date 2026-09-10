@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import type { ChainMode } from "../chain/config";
 import { MIRROR_EXPECTED_LAG_MS, type SettlementState } from "../sign/settlement";
 import type { OrderForSigning, SignedAttestation } from "../sign/sign";
-import { priceWords } from "./Money";
+import { Amount } from "./Money";
 import { Mono } from "./Mono";
 import { ProofRow } from "./ProofRow";
 
@@ -47,7 +47,6 @@ export function PublishedStatus({
   const paid = settlement.phase === "settled" && settlement.payout !== null;
   const failed = settlement.phase === "failed";
   const pending = settlement.phase === "stalled";
-  const price = priceWords(order.envelope.price_tinybars);
 
   return (
     <section className="grid gap-4" aria-live="polite">
@@ -65,7 +64,9 @@ export function PublishedStatus({
         {paid && settlement.payout !== null ? (
           <>
             <p className="text-lg font-semibold tracking-tight tabular-nums">
-              <span className="font-mono text-paid">Paid · {price}</span>{" "}
+              <span className="font-mono text-paid">
+                Paid · <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-paid" />
+              </span>{" "}
               <span className="font-normal text-muted-foreground">to your account</span>{" "}
               <Mono className="text-base">{expertAccountId}</Mono>
             </p>

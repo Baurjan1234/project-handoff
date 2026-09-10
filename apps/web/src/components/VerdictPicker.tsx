@@ -56,7 +56,7 @@ export function VerdictPicker({
         onValueChange={(next) => onChange(next as Verdict)}
         disabled={disabled}
         aria-label="Verdict"
-        className="grid gap-2"
+        className="grid grid-cols-3 gap-2"
       >
         {OPTIONS.map((option) => {
           const Icon = option.icon;
@@ -64,7 +64,8 @@ export function VerdictPicker({
             <label
               key={option.value}
               htmlFor={`verdict-${option.value}`}
-              className={`group flex cursor-pointer items-center gap-3 rounded-[10px] border-2 border-border bg-card px-3.5 py-2.5 transition select-none ${option.tone} hover:border-faint has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-disabled]]:cursor-default has-[[data-state=checked]]:border-[var(--tone)] has-[[data-state=checked]]:bg-[color-mix(in_srgb,var(--tone)_6%,transparent)]`}
+              className={`group flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border-2 border-border bg-card px-2 py-3 text-center transition select-none ${option.tone} hover:border-faint has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-disabled]]:cursor-default has-[[data-state=checked]]:border-[var(--tone)] has-[[data-state=checked]]:bg-[color-mix(in_srgb,var(--tone)_6%,transparent)]`}
+              title={option.detail}
             >
               <RadioGroupItem id={`verdict-${option.value}`} value={option.value} className="sr-only" />
               <span
@@ -73,11 +74,8 @@ export function VerdictPicker({
               >
                 <Icon className="size-3.5" strokeWidth={2.5} />
               </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13px] leading-tight font-semibold group-has-[[data-state=checked]]:text-[var(--tone)]">
-                  {VERDICT_WORDS[option.value]}
-                </span>
-                <span className="text-xs leading-snug text-muted-foreground">{option.detail}</span>
+              <span className="text-[12px] leading-tight font-semibold group-has-[[data-state=checked]]:text-[var(--tone)]">
+                {VERDICT_WORDS[option.value]}
               </span>
             </label>
           );
