@@ -9,7 +9,7 @@ const yours: InboxEntry = {
   order: order({ title: "Mine already" }),
   claim: { kind: "yours", claimedAtEpochSeconds: 0, signBy: SIGN_BY },
 };
-const theirs: InboxEntry = { order: order({ title: "Not for you" }), claim: { kind: "someone-else" } };
+const theirs: InboxEntry = { order: order({ title: "Not for you" }), claim: { kind: "someone-else", holderSignBy: SIGN_BY, youClaimed: false } };
 const expired: InboxEntry = {
   order: order({ title: "Too late", envelope: { ...order().envelope, deadline: utc(new Date(2026, 8, 8, 17, 0, 0)) } }),
   claim: { kind: "open" },
