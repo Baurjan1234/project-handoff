@@ -17,7 +17,9 @@ export function Shell({
   disconnectHeld = false,
   wide = false,
   openCount = null,
+  active = "inbox",
   onInbox,
+  onRequests,
   children,
 }: {
   mode: ChainMode;
@@ -28,7 +30,10 @@ export function Shell({
   /** The workspace spans the window and gutters itself; the funnel screens sit in a column. */
   wide?: boolean;
   openCount?: number | null;
+  /** Which tab the current screen belongs to. */
+  active?: "inbox" | "requests";
   onInbox?: () => void;
+  onRequests?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -38,11 +43,17 @@ export function Shell({
         mode={mode}
         identity={identity}
         openCount={openCount}
+        active={active}
         onInbox={onInbox}
+        onRequests={onRequests}
         onDisconnect={onDisconnect}
         disconnectHeld={disconnectHeld}
       />
-      <main className={wide ? "" : "mx-auto max-w-[860px] px-4 pt-7 pb-24 sm:px-6"}>{children}</main>
+      <main
+        className={wide ? "" : "mx-auto max-w-[860px] px-4 pt-7 pb-24 sm:px-6"}
+      >
+        {children}
+      </main>
       <TestnetBadge mode={mode} />
     </div>
   );
