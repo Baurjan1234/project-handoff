@@ -270,9 +270,18 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
 
   const held = signFlow.status.kind === "signing" || claimFlow.status.kind === "confirming";
   const body = renderRoute();
+  const openCount = entries === null ? null : entries.filter((e) => e.claim.kind === "open" || e.claim.kind === "yours").length;
 
   return (
-    <Shell mode={booted.config.mode} identity={booted.identity} onDisconnect={onDisconnect} disconnectHeld={held} wide={route.kind === "workspace"}>
+    <Shell
+      mode={booted.config.mode}
+      identity={booted.identity}
+      onDisconnect={onDisconnect}
+      disconnectHeld={held}
+      wide={route.kind === "workspace"}
+      openCount={openCount}
+      onInbox={() => navigate({ kind: "inbox" })}
+    >
       {body}
     </Shell>
   );
