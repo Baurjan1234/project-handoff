@@ -205,6 +205,18 @@ export async function submitFundLock(
 
   // Re-parsed rather than carried through the decoder, so nothing submitted is
   // reachable from a value the whitelist did not just approve.
+  //
+  // **One thing the first testnet run has to confirm.** `execute` puts the
+  // client's operator signature on this too: `Transaction._beforeExecute`
+  // signs with `client._operator` whenever one is set (Transaction.cjs:1668),
+  // and a transaction rebuilt with `fromBytes` has none of its own. The
+  // required signature is the requester's — they are the fee payer and the
+  // debited account — so ours is superfluous rather than load-bearing, and
+  // Hedera is expected to ignore it. Expected, not verified: no unit test can
+  // answer what the network does with a signature it did not ask for. If a run
+  // comes back INVALID_SIGNATURE with a lock the whitelist accepted, this is
+  // the first place to look, and the fix is a client with no operator for this
+  // one call.
   const transaction = Transaction.fromBytes(Buffer.from(signedTransactionBytes, "base64"));
   const submittedId = transaction.transactionId?.toString();
 
