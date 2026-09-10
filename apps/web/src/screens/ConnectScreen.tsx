@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChainMode } from "../chain/config";
 import { HashscanLink } from "../components/HashscanLink";
+import { Logo } from "../components/Logo";
 import { ModeBanner } from "../components/ModeBanner";
+import { TestnetBadge } from "../components/TestnetBadge";
 import { parseAccountId } from "../session/accountId";
 import {
   assessConnect,
@@ -273,36 +275,39 @@ export function ConnectCard({
   const blockers = keyRejected ? assessment.blockers.filter((blocker) => blocker !== keyShape.reason) : assessment.blockers;
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="flex min-h-dvh flex-col bg-background">
       <ModeBanner mode={mode} />
 
-      <header className="mx-auto max-w-md px-4 pt-6 pb-2 sm:px-6">
-        <h1 className="text-lg font-semibold tracking-tight">
-          Handoff <span className="font-normal text-muted-foreground">expert</span>
-        </h1>
-      </header>
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
+        <section
+          className="grid w-full max-w-[400px] gap-5 rounded-2xl bg-card px-6 py-9 shadow-[0_2px_12px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.03)] sm:px-10"
+          aria-labelledby="connect-title"
+        >
+          <div className="flex justify-center">
+            <Logo size="lg" />
+          </div>
 
-      <main className="mx-auto grid max-w-md gap-4 px-4 pt-4 pb-12 sm:px-6">
-        {notice !== null && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {notice}
-          </p>
-        )}
-
-        <section className="grid gap-5 rounded-2xl border border-border/60 bg-card p-5 shadow-xs sm:p-6" aria-labelledby="connect-title">
-          <div className="grid gap-1.5">
-            <h2 id="connect-title" className="text-base font-semibold tracking-tight">
+          <div className="grid gap-1.5 text-center">
+            <h1 id="connect-title" className="font-serif text-[22px] leading-tight font-semibold tracking-tight">
               Connect your account
-            </h2>
-            <p className="text-sm text-muted-foreground">
+            </h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {testnet
                 ? "Handoff pays you for signed verdicts. To sign, this app needs the Hedera testnet account you will be paid to, and the private key that proves it is yours."
                 : "Handoff pays you for signed verdicts. Enter the account id the demo signs as. On the mock chain nothing is real."}
             </p>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="connect-account-id">Account id</Label>
+          {notice !== null && (
+            <p role="status" className="rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground">
+              {notice}
+            </p>
+          )}
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="connect-account-id" className="text-[13px] font-semibold">
+              Account id
+            </Label>
             <Input
               id="connect-account-id"
               value={accountIdText}
@@ -313,7 +318,7 @@ export function ConnectCard({
               autoComplete="off"
               spellCheck={false}
               aria-describedby={testnet ? "connect-account-help connect-account-status" : "connect-account-help"}
-              className="h-10 rounded-xl font-mono"
+              className="h-11 rounded-[10px] bg-secondary font-mono text-[13px] focus-visible:ring-primary/20"
             />
             <Helper id="connect-account-help">
               Like an account number. It is public: the Hedera portal and Hashscan both show it.
@@ -326,8 +331,10 @@ export function ConnectCard({
           </div>
 
           {testnet ? (
-            <div className="grid gap-2">
-              <Label htmlFor="connect-private-key">Private key</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="connect-private-key" className="text-[13px] font-semibold">
+                Private key
+              </Label>
               <Input
                 id="connect-private-key"
                 ref={keyRef}
@@ -345,7 +352,7 @@ export function ConnectCard({
                 data-lpignore="true"
                 aria-invalid={keyRejected || undefined}
                 aria-describedby="connect-key-help connect-key-shape"
-                className="h-10 rounded-xl font-mono"
+                className="h-11 rounded-[10px] bg-secondary font-mono text-xs tracking-[0.02em] focus-visible:ring-primary/20"
               />
               <p
                 id="connect-key-shape"
@@ -354,15 +361,18 @@ export function ConnectCard({
               >
                 {keyShape === null ? "" : describeKeyShape(keyShape)}
               </p>
-              <Helper id="connect-key-help">
-                Your private key is your signature. It stays in this tab, in memory only: not saved, not sent
-                anywhere, never shown, forgotten when you disconnect, reload or close the tab. Your account id is
-                remembered; the key is asked for again. It signs your verdict and nothing else. It is never a
-                schedule key, so it cannot touch the money in escrow.
-              </Helper>
+              <div className="flex items-start gap-2 rounded-lg border border-paid/10 bg-paid/5 px-3 py-2.5">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-paid" aria-hidden />
+                <Helper id="connect-key-help">
+                  Your private key is your signature. It stays in this tab, in memory only: not saved, not sent
+                  anywhere, never shown, forgotten when you disconnect, reload or close the tab. Your account id is
+                  remembered; the key is asked for again. It signs your verdict and nothing else. It is never a
+                  schedule key, so it cannot touch the money in escrow.
+                </Helper>
+              </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-xs leading-relaxed text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border bg-secondary p-4 text-xs leading-relaxed text-muted-foreground">
               Mock chain. Nothing is signed here, so there is no key to enter. Every id you will see is fabricated,
               and this screen is never recorded.
             </div>
@@ -392,7 +402,7 @@ export function ConnectCard({
           )}
 
           {assessment.warnings.length > 0 && (
-            <ul aria-live="polite" className="grid gap-1 text-xs text-amber-700 dark:text-amber-300">
+            <ul aria-live="polite" className="grid gap-1 text-xs text-urgent">
               {assessment.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
@@ -407,7 +417,13 @@ export function ConnectCard({
           )}
 
           <div className="grid gap-2">
-            <Button type="button" size="lg" className="h-11 w-full rounded-xl" disabled={!canConnect} onClick={onConnect}>
+            <Button
+              type="button"
+              size="lg"
+              className="h-12 w-full rounded-[10px] text-[15px] font-semibold hover:bg-azure-hover"
+              disabled={!canConnect}
+              onClick={onConnect}
+            >
               {busy
                 ? "Connecting…"
                 : assessment.accountId === null
@@ -424,18 +440,20 @@ export function ConnectCard({
           </div>
 
           {testnet && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-center text-xs text-faint">
               In production a wallet app signs instead. Pasting a key is the testnet shortcut.
             </p>
           )}
         </section>
 
-        <p className="px-1 text-xs text-muted-foreground">
+        <p className="mt-4 max-w-[400px] text-center text-xs text-faint">
           {testnet
             ? "Testnet only. The account holds test HBAR, not real money. Never paste a key that controls real funds."
             : "Mock chain. Nothing here reaches any network."}
         </p>
       </main>
+
+      <TestnetBadge mode={mode} />
     </div>
   );
 }
