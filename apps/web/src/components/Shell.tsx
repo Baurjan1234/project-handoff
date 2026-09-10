@@ -25,7 +25,7 @@ export function Shell({
   onDisconnect?: () => void;
   /** While something is in flight that a disconnect would strand. */
   disconnectHeld?: boolean;
-  /** The workspace takes the whole width; the funnel screens do not. */
+  /** The workspace spans the window, inside a gutter and a cap; the funnel screens sit in a column. */
   wide?: boolean;
   openCount?: number | null;
   onInbox?: () => void;
@@ -42,7 +42,15 @@ export function Shell({
         onDisconnect={onDisconnect}
         disconnectHeld={disconnectHeld}
       />
-      <main className={wide ? "" : "mx-auto max-w-[860px] px-4 pt-7 pb-24 sm:px-6"}>{children}</main>
+      <main
+        className={
+          wide
+            ? "mx-auto w-full max-w-[1600px] lg:px-8"
+            : "mx-auto max-w-[860px] px-4 pt-7 pb-24 sm:px-6"
+        }
+      >
+        {children}
+      </main>
       <TestnetBadge mode={mode} />
     </div>
   );
