@@ -24,7 +24,7 @@
  * browser build.
  */
 
-import { PrivateKey } from "@hiero-ledger/sdk";
+import { PrivateKey, Transaction } from "@hiero-ledger/sdk";
 import type { PaymentRequirements } from "@x402/core/types";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { createClientHederaSigner } from "@x402/hedera";
@@ -109,6 +109,15 @@ export class X402Signer {
   readonly #resourceUrl: string;
   readonly #http: x402HTTPClient;
   readonly #maxAmountTinybars: bigint;
+  /**
+   * Held for the fund lock, which is a plain Hedera transaction rather than an
+   * x402 payload and so cannot go through the scheme above.
+   *
+   * This is the requester's key and it never leaves this process. The server
+   * gets signed bytes, never the key —
+   * ../../../docs/decisions/2026-09-08-requester-signs-the-fund-lock.md.
+   */
+  readonly #privateKey: PrivateKey;
 
   constructor(params: X402SignerParams) {
     // Fail here rather than at the facilitator. An Ed25519 key produces a
@@ -124,6 +133,7 @@ export class X402Signer {
     const cap = assertPositive(parseTinybars(params.maxAmountTinybars));
 
     this.#accountId = params.accountId;
+    this.#privateKey = params.privateKey;
     this.#resourceUrl = params.resourceUrl;
     this.#maxAmountTinybars = cap;
     this.#http = new x402HTTPClient(
@@ -177,6 +187,20 @@ export class X402Signer {
    * The fee payer is the facilitator, so the transaction id is generated
    * against its account and the payer never pays gas.
    */
+  /**
+   * Sign the fund lock the server built, on this machine.
+   *
+   * The same key that signs the service fee, which is what lets one signature
+   * cover the transfer's debit and its fee payer both. The bytes are the
+   * server's; this adds a signature and hands them back.
+   */
+  async signFundLock(transactionBytes: string): Promise<string> {
+    const signed = await Transaction.fromBytes(
+      Buffer.from(transactionBytes, "base64"),
+    ).sign(this.#privateKey);
+    return Buffer.from(signed.toBytes()).toString("base64");
+  }
+
   async sign(requirements: X402PaymentRequirements): Promise<string> {
     // Hard rule 5. A quote that names another network never reaches a signature.
     if (requirements.network !== X402_NETWORK) {

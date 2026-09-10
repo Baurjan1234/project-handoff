@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockChainAdapter, sha256Hex, type LockFundsParams } from "@handoff/schema";
+import { MockChainAdapter, sha256Hex, type LockFundsParams, signFundLock } from "@handoff/schema";
 import { InMemoryContentStore } from "./content.js";
 import { ContentHashMismatchError } from "@handoff/content";
 import { handle, CONTENT_PUT_MAX_BYTES, type HttpRequest, type ServerDeps } from "./server.js";
@@ -90,6 +90,31 @@ function orderBody(overrides: Record<string, unknown> = {}): string {
   });
 }
 
+/**
+ * The body a paid retry actually carries.
+ *
+ * Plays the exchange the way a client does: the unpaid call answers 402 with a
+ * fund lock, the requester signs it, and the retry echoes back the order id and
+ * the signed bytes. Building this by hand instead would test a shape no client
+ * produces.
+ */
+async function paidBody(
+  deps: ServerDeps,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const challenged = await handle(post({}, orderBody(overrides)), deps);
+  const fundLock = (challenged.body as { fund_lock?: { order_id: string; transaction_bytes: string } })
+    .fund_lock;
+  if (fundLock === undefined) {
+    throw new Error(`the 402 carried no fund lock: ${JSON.stringify(challenged.body)}`);
+  }
+  return orderBody({
+    ...overrides,
+    order_id: fundLock.order_id,
+    signed_fund_lock: signFundLock(fundLock.transaction_bytes, PAYER),
+  });
+}
+
 function futureUtc(seconds: number): string {
   return `${new Date(Date.now() + seconds * 1000).toISOString().slice(0, 19)}Z`;
 }
@@ -115,7 +140,7 @@ describe("POST /orders", () => {
     const { deps, paths } = harness();
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       deps,
     );
 
@@ -124,21 +149,37 @@ describe("POST /orders", () => {
 
     const body = response.body as Record<string, Record<string, string>>;
     expect(body["order_id"]).toMatch(/^ord_/);
-    expect(body["transaction_ids"]?.["lock_funds"]).toBeTruthy();
+    expect(body["transaction_ids"]?.["fund_lock"]).toBeTruthy();
     expect(body["transaction_ids"]?.["submit_envelope"]).toBeTruthy();
     expect(body["transaction_ids"]?.["service_fee"]).toBe(SETTLE_TX);
     expect(response.headers[PAYMENT_RESPONSE_HEADER]).toBeTruthy();
   });
 
-  it("settles only after the order is posted, so a bad order costs the caller nothing", async () => {
+  it("refuses a body it cannot price before it quotes, so no payment is even asked for", async () => {
     const { deps, paths } = harness();
 
+    // Parsing moved ahead of the gate, so a malformed body is a 400 rather
+    // than a 402 now. The caller is never asked to pay for an order that was
+    // never going to post.
+    const response = await handle(post({}, orderBody({ price_hbar: "not-a-price" })), deps);
+
+    expect(response.status).toBe(400);
+    expect(paths).not.toContain("/verify");
+    expect(paths).not.toContain("/settle");
+  });
+
+  it("settles only after the order is posted, so a paid-but-unusable call costs nothing", async () => {
+    const { deps, paths } = harness();
+
+    // Past the gate and refused anyway: the payment verified, but the retry
+    // carried no signed fund lock, so there is nothing to escrow.
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ price_hbar: "not-a-price" })),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
       deps,
     );
 
     expect(response.status).toBe(400);
+    expect((response.body as { message: string }).message).toContain("Nothing was charged.");
     // Verified, never settled: the payment was proven, not submitted.
     expect(paths).toContain("/verify");
     expect(paths).not.toContain("/settle");
@@ -155,7 +196,7 @@ describe("POST /orders", () => {
     };
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       { ...deps, chain },
     );
 
@@ -179,7 +220,7 @@ describe("POST /orders", () => {
     const { deps } = harness();
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       deps,
     );
 
@@ -204,7 +245,7 @@ describe("POST /orders", () => {
     });
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       deps,
     );
 
@@ -259,7 +300,7 @@ describe("POST /orders", () => {
     });
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       { ...deps, facilitator },
     );
 
@@ -309,7 +350,7 @@ describe("free read paths", () => {
   it("reads an order back after it posts, still without payment", async () => {
     const { deps } = harness();
 
-    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)), deps);
     const orderId = (posted.body as { order_id: string }).order_id;
 
     const read = await handle(
@@ -343,7 +384,7 @@ describe("free read paths", () => {
     const spec = "Review the attached report for arithmetic defects.";
     const artifact = "FAKE report. Total 11,900.";
 
-    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+    const posted = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)), deps);
     const orderId = (posted.body as { order_id: string }).order_id;
     const read = await handle(
       { method: "GET", path: `/orders/${orderId}`, headers: {}, body: Buffer.alloc(0) },
@@ -364,14 +405,14 @@ describe("who pays is who the order is for", () => {
     // Wrapped on the instance rather than spread into a new object: the mock
     // keeps its state in private fields, which a spread would leave behind.
     const chain = deps.chain;
-    const lock = chain.lockFunds.bind(chain);
-    chain.lockFunds = async (params: LockFundsParams) => {
-      locked.push(params.requesterAccountId);
-      return lock(params);
+    const submit = chain.submitFundLock.bind(chain);
+    chain.submitFundLock = async (expected: LockFundsParams, signedBytes: string) => {
+      locked.push(expected.requesterAccountId);
+      return submit(expected, signedBytes);
     };
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       deps,
     );
 
@@ -409,7 +450,7 @@ describe("who pays is who the order is for", () => {
     const { deps, paths } = harness({ verify: { isValid: true } });
 
     const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()),
+      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)),
       deps,
     );
 
@@ -443,21 +484,21 @@ describe("who pays is who the order is for", () => {
 });
 
 describe("credential tag routing", () => {
-  it("refuses an unknown tag before the fee settles", async () => {
+  it("refuses an unknown tag before it even quotes a price", async () => {
     const { deps, paths } = harness();
 
-    const response = await handle(
-      post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody({ cert_tag: "not-a-tag" })),
-      deps,
-    );
+    // The tag check moved ahead of the gate when the 402 started carrying a
+    // fund lock: there is no point pricing an order that routes nowhere. The
+    // copy's promise gets stronger, not weaker — nothing was charged because
+    // nothing was even quoted.
+    const response = await handle(post({}, orderBody({ cert_tag: "not-a-tag" })), deps);
 
     expect(response.status).toBe(400);
     const body = response.body as { message: string };
     expect(body.message).toContain('No reviewer holds the credential "not-a-tag"');
     expect(body.message).toContain("Available: Licensed reviewer");
-    // The promise the copy makes has to be true: verify ran, settle did not.
     expect(body.message).toContain("Nothing was charged.");
-    expect(paths).toContain("/verify");
+    expect(paths).not.toContain("/verify");
     expect(paths).not.toContain("/settle");
   });
 
@@ -475,7 +516,7 @@ describe("credential tag routing", () => {
   it("states what it charged, so the reply need not send anyone back for it", async () => {
     const { deps } = harness();
 
-    const response = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, orderBody()), deps);
+    const response = await handle(post({ [PAYMENT_SIGNATURE_HEADER]: paidHeader() }, await paidBody(deps)), deps);
 
     expect((response.body as { service_fee: { amount_tinybars: string } }).service_fee.amount_tinybars).toBe(
       GATE_CONFIG.feeTinybars,
