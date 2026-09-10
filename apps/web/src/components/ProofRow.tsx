@@ -1,5 +1,5 @@
+import { Copyable } from "./Copyable";
 import { HashscanLink } from "./HashscanLink";
-import { Mono } from "./Mono";
 
 /**
  * A transaction id and, for a real one, its Hashscan link. The one
@@ -22,7 +22,7 @@ export function ProofRow({
   }
   return (
     <div className="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <Mono className="text-xs">{transactionId}</Mono>
+      <Copyable value={transactionId} className="text-xs" />
       <HashscanLink kind="transaction" id={transactionId} />
       {at !== undefined && at !== null && <span className="tabular-nums">at {at}</span>}
     </div>

@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, PenLine, X } from "lucide-react";
 import type { Verdict } from "@handoff/schema";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -8,10 +8,30 @@ export const VERDICT_WORDS: Record<Verdict, string> = {
   reject: "Reject",
 };
 
-const OPTIONS: ReadonlyArray<{ value: Verdict; detail: string }> = [
-  { value: "approve", detail: "Stands as delivered." },
-  { value: "approve_with_changes", detail: "Acceptable once the listed defects are fixed." },
-  { value: "reject", detail: "Not acceptable. The defects say why." },
+const OPTIONS: ReadonlyArray<{
+  value: Verdict;
+  detail: string;
+  icon: typeof Check;
+  tone: string;
+}> = [
+  {
+    value: "approve",
+    detail: "Stands as delivered.",
+    icon: Check,
+    tone: "[--tone:var(--paid)]",
+  },
+  {
+    value: "approve_with_changes",
+    detail: "Acceptable once the listed defects are fixed.",
+    icon: PenLine,
+    tone: "[--tone:var(--urgent)]",
+  },
+  {
+    value: "reject",
+    detail: "Not acceptable. The defects say why.",
+    icon: X,
+    tone: "[--tone:var(--destructive)]",
+  },
 ];
 
 /**
@@ -36,29 +56,32 @@ export function VerdictPicker({
         onValueChange={(next) => onChange(next as Verdict)}
         disabled={disabled}
         aria-label="Verdict"
-        className="grid gap-3"
+        className="grid grid-cols-3 gap-2"
       >
-        {OPTIONS.map((option) => (
-          <label
-            key={option.value}
-            htmlFor={`verdict-${option.value}`}
-            className="group relative flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 transition select-none hover:border-foreground/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-disabled]]:cursor-default has-[[data-state=checked]]:border-foreground has-[[data-state=checked]]:bg-foreground has-[[data-state=checked]]:text-background"
-          >
-            <RadioGroupItem id={`verdict-${option.value}`} value={option.value} className="sr-only" />
-            <span className="grid gap-0.5">
-              <span className="text-base leading-tight font-semibold">{VERDICT_WORDS[option.value]}</span>
-              <span className="text-xs leading-snug opacity-75">{option.detail}</span>
-            </span>
-            <span
-              className="hidden size-5 shrink-0 items-center justify-center rounded-full bg-background text-foreground group-has-[[data-state=checked]]:flex"
-              aria-hidden
+        {OPTIONS.map((option) => {
+          const Icon = option.icon;
+          return (
+            <label
+              key={option.value}
+              htmlFor={`verdict-${option.value}`}
+              className={`group flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border-2 border-border bg-card px-2 py-3 text-center transition select-none ${option.tone} hover:border-faint has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-disabled]]:cursor-default has-[[data-state=checked]]:border-[var(--tone)] has-[[data-state=checked]]:bg-[color-mix(in_srgb,var(--tone)_6%,transparent)]`}
+              title={option.detail}
             >
-              <Check className="size-3.5" strokeWidth={3} />
-            </span>
-          </label>
-        ))}
+              <RadioGroupItem id={`verdict-${option.value}`} value={option.value} className="sr-only" />
+              <span
+                className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--tone)_15%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] text-[var(--tone)]"
+                aria-hidden
+              >
+                <Icon className="size-3.5" strokeWidth={2.5} />
+              </span>
+              <span className="text-[12px] leading-tight font-semibold group-has-[[data-state=checked]]:text-[var(--tone)]">
+                {VERDICT_WORDS[option.value]}
+              </span>
+            </label>
+          );
+        })}
       </RadioGroup>
-      <p className="text-xs text-muted-foreground">A reject is paid. You are delivering a judgment.</p>
+      <p className="text-[11px] text-faint">A reject is paid. You are delivering a judgment.</p>
     </div>
   );
 }

@@ -72,7 +72,17 @@ describe("claimStateFor", () => {
   });
 
   it("is someone else's when an earlier claim holds it", () => {
-    expect(claimStateFor(order, [theirs, mine], EXPERT, T0 + 2)).toEqual({ kind: "someone-else" });
+    // The holder's window and whether this expert tried, both from the topic.
+    expect(claimStateFor(order, [theirs, mine], EXPERT, T0 + 2)).toEqual({
+      kind: "someone-else",
+      holderSignBy: "2026-09-08T12:30:00Z",
+      youClaimed: true,
+    });
+    expect(claimStateFor(order, [theirs], EXPERT, T0 + 2)).toEqual({
+      kind: "someone-else",
+      holderSignBy: "2026-09-08T12:30:00Z",
+      youClaimed: false,
+    });
   });
 
   it("reopens once after the window expires, then closes", () => {
@@ -125,7 +135,7 @@ describe("confirmClaim", () => {
     };
     const final = await confirmClaim(base(reader), clock());
     expect(final.phase).toBe("someone-else");
-    expect(final.state).toEqual({ kind: "someone-else" });
+    expect(final.state?.kind).toBe("someone-else");
   });
 
   it("decides on an earlier claim even before the mirror shows ours", async () => {

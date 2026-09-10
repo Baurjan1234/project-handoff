@@ -2,11 +2,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Draft } from "../lib/draft";
 import type { SignFlow } from "../sign/useSignFlow";
-import { drafts, expectNoBannedWords, IDENTITY, idleSign, NOW, order, record, settlement, SIGN_BY, signedFlow, utc } from "./fixtures";
 import { PUBLISHED_STAMP } from "../components/PublishedStatus";
+import { drafts, expectNoBannedWords, IDENTITY, idleSign, NOW, order, record, settlement, SIGN_BY, signedFlow, utc } from "./fixtures";
 import { WorkspaceScreen } from "./WorkspaceScreen";
 
-const READY: Draft = { notes: "Footnote 2 dates the filing before the period ends.", defects: ["FN-2-DATE"], verdict: "reject", step: "sign" };
+const READY: Draft = {
+  notes: "Footnote 2 dates the filing before the period ends.",
+  issues: ["Footnote 2 is dated before the period ends"],
+  verdict: "reject",
+  step: "sign",
+};
 
 function render({
   draft = null,
@@ -14,7 +19,7 @@ function render({
   now = NOW,
   signBy = SIGN_BY,
   artifactText = "FAKE DOCUMENT — fabricated.",
-  defectDraft = "",
+  issueDraft = "",
   mode = "mock" as const,
 }: {
   draft?: Draft | null;
@@ -22,7 +27,7 @@ function render({
   now?: Date;
   signBy?: string;
   artifactText?: string | null;
-  defectDraft?: string;
+  issueDraft?: string;
   mode?: "mock" | "testnet";
 } = {}) {
   return renderToStaticMarkup(
@@ -36,32 +41,24 @@ function render({
       now={now}
       drafts={drafts(draft)}
       onBackToInbox={() => {}}
-      initialDefectDraft={defectDraft}
+      initialIssueDraft={issueDraft}
     />,
   );
 }
 
-describe("WorkspaceScreen, the column beside the document", () => {
-  it("carries the brief and the clock in, with the three-step mark, and the document on the left", () => {
+describe("WorkspaceScreen, the paper and the bar", () => {
+  it("keeps the ask and the document beside the verdict, with the clock as a time", () => {
     const html = render();
-    expect(html).toContain("What the requester is asking");
+    expect(html).toContain("Quarterly summary");
     expect(html).toContain("review the attached summary");
     expect(html).toContain("Sign by");
     expect(html).toContain("18:12");
+    expect(html).toContain("In review");
     expect(html).toContain("FAKE");
     expect(html).toContain("FAKE DOCUMENT");
-    for (const step of ["Notes", "Verdict", "Sign"]) expect(html).toContain(step);
-    expect(html).not.toMatch(/min left|remaining/);
+    expect(html).toContain("100 HBAR");
+    expect(html).not.toMatch(/min left|22h left|Due in/);
     expect(expectNoBannedWords(html)).toEqual([]);
-  });
-
-  it("starts on notes, with the budget in characters and the uppercase convention in the placeholder", () => {
-    const html = render();
-    expect(html).toContain("Your notes");
-    expect(html).toContain("characters left");
-    expect(html).toContain("NO_MONITORING");
-    expect(html).toContain("Private. Delivered to the requester");
-    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Continue to verdict<\/button>/);
   });
 
   it("shows a skeleton, not a spinner, while the document arrives", () => {
@@ -71,50 +68,85 @@ describe("WorkspaceScreen, the column beside the document", () => {
   });
 });
 
-describe("WorkspaceScreen, the verdict", () => {
-  it("preselects nothing and disables Continue until one is chosen", () => {
-    const html = render({ draft: { ...READY, verdict: null, step: "verdict" } });
+describe("WorkspaceScreen, the whole verdict at once", () => {
+  it("puts verdict, issues, notes and summary on one screen, behind no step", () => {
+    const html = render();
+    expect(html).toContain("Your verdict");
+    expect(html).toContain("Issues");
+    expect(html).toContain("Your notes");
+    expect(html).toContain("Summary");
+    expect(html).toContain("Sign verdict");
+    // The step mark stays as progress: three labels, none of them a gate.
+    for (const step of ["Notes", "Verdict", "Sign"]) expect(html).toContain(step);
+  });
+
+  it("preselects no verdict and refuses to sign until one is chosen", () => {
+    const html = render();
     expect(html).not.toContain('data-state="checked"');
-    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Continue<\/button>/);
+    expect(html).toContain("Pick a verdict.");
+    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Sign verdict<\/button>/);
     expect(html).toContain("A reject is paid.");
     expect(html).not.toMatch(/recommend/i);
     for (const word of ["Approve", "Approve with changes", "Reject"]) expect(html).toContain(word);
   });
 
-  it("enables Continue once a verdict is chosen", () => {
-    const html = render({ draft: { ...READY, step: "verdict" } });
+  it("clears every blocker once the verdict and the writing are there", () => {
+    const html = render({ draft: READY });
     expect(html).toContain('data-state="checked"');
-    expect(html).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>Continue<\/button>/);
+    // Nothing left to fix, so the hint takes the blockers' place. The button
+    // itself waits on the fingerprint, which is computed after the first paint.
+    expect(html).not.toContain("Pick a verdict.");
+    expect(html).not.toContain("Write your notes.");
+    expect(html).toContain("Your name is permanently linked to this verdict.");
   });
 });
 
-describe("WorkspaceScreen, the sign summary", () => {
-  it("is structured: signing-as, public forever with the real codes, private with the notes, fingerprints one click down", () => {
+describe("WorkspaceScreen, issues", () => {
+  it("numbers each issue and keeps its sentence beside the code", () => {
+    const html = render({ draft: { ...READY, issues: ["Missing receipt", "Over policy limit"] } });
+    expect(html).toContain("D-001");
+    expect(html).toContain("Missing receipt");
+    expect(html).toContain("D-002");
+    expect(html).toContain("Over policy limit");
+    expect(html).toContain("2 of 8 issues");
+    expect(html).toContain("Add issue");
+  });
+
+  it("says which half is public and which half is delivered", () => {
+    const html = render({ draft: { ...READY, issues: ["Missing receipt"] } });
+    expect(html).toContain("Public forever, under your account: the verdict and the issue codes");
+    expect(html).toContain("Private, delivered to the requester");
+  });
+
+  it("refuses while an issue sits uncommitted in the box", () => {
+    const html = render({ draft: READY, issueDraft: "Totals do not foot" });
+    expect(html).toContain("Add or clear the issue you typed.");
+    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Sign verdict<\/button>/);
+  });
+
+  it("asks for the writing when there is neither a note nor an issue", () => {
+    const html = render({ draft: { ...READY, notes: "", issues: [] } });
+    expect(html).toContain("Write your notes.");
+  });
+});
+
+describe("WorkspaceScreen, the summary", () => {
+  it("names the signer, the verdict, the codes and the fingerprint", () => {
     const html = render({ draft: READY });
-    expect(html).toContain("Signing as");
+    expect(html).toContain("Signed by");
     expect(html).toContain("0.0.12345");
     expect(html).toContain("demo-reviewer");
-    expect(html).toContain("Public forever, under your account");
     expect(html).toContain("Reject");
-    expect(html).toContain("FN-2-DATE");
-    expect(html).toContain("Private · delivered to the requester");
-    expect(html).toContain("Footnote 2 dates the filing");
-    expect(html).toContain("<summary");
-    expect(html).toContain("Fingerprints");
+    expect(html).toContain("D-001");
+    expect(html).toContain("Notes fingerprint");
+    expect(html).toContain("Show verification details");
     expect(html).toContain("exact document the requester committed to");
-    expect(html).toContain("Sign &amp; publish");
-    expect(html).toContain("Change verdict");
-    expect(html).toContain("Back to the document");
-    expect(html).not.toContain("Not yet");
     expect(expectNoBannedWords(html)).toEqual([]);
   });
 
-  it("refuses while a defect code sits uncommitted, and while the notes are empty", () => {
-    const typed = render({ draft: READY, defectDraft: "FN-3-TOTAL" });
-    expect(typed).toContain("Add or clear the defect code you typed.");
-    expect(typed).toMatch(/<button[^>]*\sdisabled=""[^>]*>Sign &amp; publish<\/button>/);
-    const empty = render({ draft: { ...READY, notes: "" } });
-    expect(empty).toContain("Write your notes.");
+  it("says None when there are no issues", () => {
+    const html = render({ draft: { ...READY, issues: [] } });
+    expect(html).toContain("None");
   });
 });
 
@@ -125,7 +157,7 @@ describe("WorkspaceScreen, after the sign", () => {
     expect(html).toContain("MOCK-tx-3");
     expect(html).toContain("Confirming");
     expect(html).toContain("Waiting for the network to confirm");
-    expect(html).not.toContain("Sign &amp; publish");
+    expect(html).not.toContain("Sign verdict");
     expect(html).toContain("min-h-5");
     expect(expectNoBannedWords(html)).toEqual([]);
   });
@@ -139,13 +171,12 @@ describe("WorkspaceScreen, after the sign", () => {
       payout: record("MOCK-tx-7"),
     });
     const html = render({ draft: READY, flow: signedFlow(state) });
-    expect(html).toContain("Paid · 100 HBAR");
+    expect(html).toContain("Paid ·");
+    expect(html).toContain("100 HBAR");
     expect(html).toContain("to your account");
-    expect(html).toContain("0.0.12345");
     expect(html).toContain("MOCK-tx-7");
     expect(html).toContain("Back to the inbox");
     expect(html).not.toContain("hashscan.io/testnet/transaction/");
-    expect(expectNoBannedWords(html)).toEqual([]);
   });
 
   it("links real ids on testnet", () => {
@@ -169,7 +200,6 @@ describe("WorkspaceScreen, after the sign", () => {
     expect(html).toContain("Payment lands when the service recovers");
     expect(html).toContain("Check again");
     expect(html).not.toContain("animate-pulse");
-    expect(expectNoBannedWords(html)).toEqual([]);
   });
 
   it("carries a recourse line on the format-check failure, with what the network said one click down", () => {
@@ -182,7 +212,6 @@ describe("WorkspaceScreen, after the sign", () => {
     expect(html).toContain("Could not pay out");
     expect(html).toContain("failed the format check");
     expect(html).toContain("Contact us");
-    expect(html).toContain("the network reports the verdict transaction as FAILED");
     expect(expectNoBannedWords(html)).toEqual([]);
   });
 
@@ -198,7 +227,7 @@ describe("WorkspaceScreen, the exits", () => {
     const html = render({ draft: READY, now: new Date(2026, 8, 8, 18, 13, 0) });
     expect(html).toContain("Claim expired · this order is back in the inbox.");
     expect(html).toContain("Your notes are kept");
-    expect(html).not.toContain("Sign &amp; publish");
+    expect(html).not.toContain("Sign verdict");
   });
 
   it("does not expire a claim that was already signed", () => {

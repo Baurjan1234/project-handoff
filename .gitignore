@@ -4,6 +4,7 @@ build/
 .next/
 out/
 coverage/
+new-expert-ui-export/
 *.tsbuildinfo
 
 # Secrets — hard rule 2. Never commit keys, seeds, or operator IDs.

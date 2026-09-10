@@ -1,7 +1,9 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock, FileText } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Copyable } from "../components/Copyable";
+import { HashscanLink } from "../components/HashscanLink";
 import { Escrow } from "../components/Money";
 import { Mono } from "../components/Mono";
 import { ProofRow } from "../components/ProofRow";
@@ -56,16 +58,25 @@ export function OrderScreen({
         Inbox
       </Button>
 
-      <section className="grid gap-5 rounded-2xl border border-border/60 bg-card p-5 shadow-xs sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid gap-1">
-            <h2 className="text-xl font-semibold tracking-tight">{order.title}</h2>
+      <section className="grid gap-5 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid min-w-0 gap-2">
+            <h2 className="font-serif text-2xl leading-tight font-bold tracking-tight">{order.title}</h2>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>
+              <span className="flex items-center gap-1">
+                <CalendarDays className="size-3" aria-hidden />
                 Open until <span className="text-foreground">{clockWords(envelope.deadline, now)}</span>
               </span>
-              <span>{claimWindowWords(envelope.claim_timeout_seconds)}</span>
-              {order.documentWords !== null && <span className="tabular-nums">{order.documentWords} words</span>}
+              <span className="flex items-center gap-1">
+                <Clock className="size-3" aria-hidden />
+                {claimWindowWords(envelope.claim_timeout_seconds)}
+              </span>
+              {order.documentWords !== null && (
+                <span className="flex items-center gap-1 tabular-nums">
+                  <FileText className="size-3" aria-hidden />
+                  {order.documentWords} words
+                </span>
+              )}
             </div>
           </div>
           <Escrow priceTinybars={envelope.price_tinybars} size="lg" />
@@ -73,26 +84,33 @@ export function OrderScreen({
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">Required credential:</span>
-          <Badge variant="outline">{envelope.cert_tag}</Badge>
+          <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] tracking-[0.04em] text-primary uppercase">
+            {envelope.cert_tag}
+          </Badge>
           <span className="text-muted-foreground">· Paid whatever the verdict is.</span>
         </div>
 
-        <div className="grid gap-2 border-t border-border/60 pt-5">
-          <h3 className="text-sm font-semibold">What the requester is asking</h3>
+        <div className="grid gap-2 border-t border-border pt-5">
+          <h3 className="text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">What the requester is asking</h3>
           <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">{order.ask}</p>
-          <p className="text-xs text-muted-foreground">The document opens after you claim.</p>
+          <p className="text-xs text-faint">The document opens after you claim.</p>
         </div>
 
         <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Details</summary>
-          <dl className="grid gap-x-4 gap-y-1 pt-2 sm:grid-cols-[8rem_1fr]">
-            <dt>Order</dt>
+          <summary className="cursor-pointer text-faint">Details</summary>
+          <dl className="grid gap-x-4 gap-y-1.5 pt-3 sm:grid-cols-[8rem_1fr]">
+            <dt className="text-faint">Order</dt>
             <dd>
-              <Mono>{envelope.order_id}</Mono>
+              <Copyable value={envelope.order_id} className="text-xs" />
             </dd>
-            <dt>Escrow account</dt>
+            <dt className="text-faint">Escrow account</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <Mono className="text-xs">{order.escrowAccountId}</Mono>
+              <HashscanLink kind="account" id={order.escrowAccountId} />
+            </dd>
+            <dt className="text-faint">Record</dt>
             <dd>
-              <Mono>{order.escrowAccountId}</Mono>
+              <HashscanLink kind="topic" id={order.topicId} label="View record" />
             </dd>
           </dl>
         </details>
@@ -107,60 +125,60 @@ export function OrderScreen({
         )}
 
         {confirmedYours !== null ? (
-          <>
-            <p className="text-lg font-semibold tracking-tight">Claimed · yours to review</p>
+          <div className="grid gap-3 rounded-xl border border-border bg-card p-6 shadow-xs">
+            <p className="font-serif text-lg font-semibold tracking-tight">Claimed · yours to review</p>
             <p className="text-sm text-muted-foreground">
-              Sign by <span className="text-foreground">{clockWords(confirmedYours.signBy, now)}</span>
+              Sign by <span className="font-semibold text-foreground">{clockWords(confirmedYours.signBy, now)}</span>
             </p>
-            <Button type="button" size="lg" className="h-11 w-full rounded-xl" onClick={onOpenWorkspace}>
+            <Button type="button" size="lg" className="h-11 w-full rounded-[10px] bg-paid text-[14px] font-bold hover:bg-paid/90" onClick={onOpenWorkspace}>
               Open the document
             </Button>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-faint">
               Changed your mind? Do nothing — this returns to the inbox at {clockWords(confirmedYours.signBy, now)}.
               Your notes are kept.
             </p>
-          </>
+          </div>
         ) : lost ? (
-          <p className="rounded-xl bg-muted/50 p-4 text-sm">Someone else claimed this.</p>
+          <p className="rounded-xl border border-border bg-card p-5 text-sm shadow-xs">Someone else claimed this.</p>
         ) : closed ? (
-          <p className="rounded-xl bg-muted/50 p-4 text-sm">Claim window passed twice · this order is closed.</p>
+          <p className="rounded-xl border border-border bg-card p-5 text-sm shadow-xs">Claim window passed twice · this order is closed.</p>
         ) : confirming ? (
-          <>
-            <p className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-              <span className="size-2 animate-pulse rounded-full bg-foreground/60" aria-hidden />
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-6 shadow-xs">
+            <p className="flex items-center gap-2 font-serif text-lg font-semibold tracking-tight">
+              <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden />
               Confirming
             </p>
             <p className="text-sm text-muted-foreground">Waiting for the network to confirm who was first. A few seconds.</p>
             <ProofRow transactionId={flow.status.confirmation?.claimTransactionId ?? null} reserved />
-          </>
+          </div>
         ) : stalled ? (
-          <>
-            <p className="text-lg font-semibold tracking-tight">Still confirming</p>
+          <div className="grid gap-3 rounded-xl border border-border bg-card p-6 shadow-xs">
+            <p className="font-serif text-lg font-semibold tracking-tight">Still confirming</p>
             <p className="text-sm text-muted-foreground">
               The network has not answered yet. Your claim was sent and stands; nothing is re-sent.
             </p>
-            <Button type="button" variant="outline" className="w-fit rounded-xl" onClick={flow.checkAgain}>
+            <Button type="button" variant="outline" className="w-fit rounded-lg" onClick={flow.checkAgain}>
               Check again
             </Button>
-          </>
+          </div>
         ) : refusal !== null ? (
-          <p className="rounded-xl bg-muted/50 p-4 text-sm">{refusal}</p>
+          <p className="rounded-xl border border-border bg-card p-5 text-sm shadow-xs">{refusal}</p>
         ) : (
-          <>
+          <div className="grid gap-2">
             <Button
               type="button"
               size="lg"
-              className="h-11 w-full rounded-xl"
+              className="h-11 w-full rounded-[10px] text-[14px] font-bold hover:bg-azure-hover"
               onClick={() => {
                 void flow.claim(order);
               }}
             >
               Claim
             </Button>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-center text-xs text-faint">
               {claimWindowWords(envelope.claim_timeout_seconds)}, never past {clockWords(envelope.deadline, now)}.
             </p>
-          </>
+          </div>
         )}
       </section>
     </div>

@@ -1,13 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/source-serif-4";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Tokens from the expert UI handoff (new-expert-ui-export/DEVELOPER-NOTES.md),
+ * mapped onto shadcn's variables so every component picks them up without
+ * bespoke CSS. Paper background, ink text, azure for the one primary action,
+ * green for money, serif for titles, mono for ids and amounts.
+ */
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Inter Variable', system-ui, sans-serif;
+    --font-serif: 'Source Serif 4 Variable', Georgia, serif;
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+    --font-heading: var(--font-serif);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +49,11 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    /* The handoff's own names, for the few places shadcn has no word. */
+    --color-paid: var(--paid);
+    --color-faint: var(--faint);
+    --color-azure-hover: var(--azure-hover);
+    --color-urgent: var(--urgent);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -49,72 +64,80 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --background: #FAF7F2;
+    --foreground: #1C1917;
+    --card: #FFFFFF;
+    --card-foreground: #1C1917;
+    --popover: #FFFFFF;
+    --popover-foreground: #1C1917;
+    --primary: #0497FE;
+    --primary-foreground: #FFFFFF;
+    --secondary: #FAFAF9;
+    --secondary-foreground: #1C1917;
+    --muted: #F5F5F4;
+    --muted-foreground: #78716C;
+    --accent: #F5F5F4;
+    --accent-foreground: #1C1917;
+    --destructive: #DC2626;
+    --border: #E7E5E4;
+    --input: #E7E5E4;
+    --ring: #0497FE;
+    --paid: #166534;
+    --faint: #A8A29E;
+    --azure-hover: #0380D9;
+    --urgent: #D97706;
+    --chart-1: #0497FE;
+    --chart-2: #166534;
+    --chart-3: #D97706;
+    --chart-4: #78716C;
+    --chart-5: #1C1917;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #1C1917;
+    --sidebar-primary: #0497FE;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F5F5F4;
+    --sidebar-accent-foreground: #1C1917;
+    --sidebar-border: #E7E5E4;
+    --sidebar-ring: #0497FE;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: #111111;
+    --foreground: #E7E5E4;
+    --card: #1A1A1A;
+    --card-foreground: #E7E5E4;
+    --popover: #1A1A1A;
+    --popover-foreground: #E7E5E4;
+    --primary: #0497FE;
+    --primary-foreground: #FFFFFF;
+    --secondary: #1E1E1E;
+    --secondary-foreground: #E7E5E4;
+    --muted: #222222;
+    --muted-foreground: #A8A29E;
+    --accent: #222222;
+    --accent-foreground: #E7E5E4;
+    --destructive: #EF4444;
+    --border: #2A2A2A;
+    --input: #2A2A2A;
+    --ring: #2AABFE;
+    --paid: #22C55E;
+    --faint: #78716C;
+    --azure-hover: #2AABFE;
+    --urgent: #FBBF24;
+    --chart-1: #2AABFE;
+    --chart-2: #22C55E;
+    --chart-3: #FBBF24;
+    --chart-4: #A8A29E;
+    --chart-5: #E7E5E4;
+    --sidebar: #1A1A1A;
+    --sidebar-foreground: #E7E5E4;
+    --sidebar-primary: #0497FE;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #222222;
+    --sidebar-accent-foreground: #E7E5E4;
+    --sidebar-border: #2A2A2A;
+    --sidebar-ring: #2AABFE;
 }
 
 @layer base {

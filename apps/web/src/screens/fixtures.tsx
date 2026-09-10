@@ -101,7 +101,7 @@ export function drafts(seed: Parameters<DraftStore["save"]>[1] | null = null): D
   const saved: unknown[] = [];
   return {
     saved,
-    load: () => seed ?? { notes: "", defects: [], verdict: null, step: "notes" },
+    load: () => seed ?? { notes: "", issues: [], verdict: null, step: "notes" },
     save: (_, draft) => void saved.push(draft),
     clear: () => {},
   };

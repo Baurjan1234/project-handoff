@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 /**
@@ -15,17 +16,20 @@ export function NotesEditor({
   disabled: boolean;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-1.5">
       <Textarea
         value={notes}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
         rows={6}
-        className="min-h-32 rounded-xl text-sm leading-relaxed"
-        placeholder="What you checked, what you found, and why the verdict is what it is."
+        className="min-h-[120px] rounded-[10px] bg-card text-[13px] leading-relaxed"
+        placeholder="What did you find? Summarize what you checked and flag anything that needs attention."
         aria-label="Your notes"
       />
-      <p className="text-xs text-muted-foreground">Private. Delivered to the requester; never published.</p>
+      <p className="flex items-center gap-1 text-[11px] text-faint">
+        <ShieldCheck className="size-[11px] shrink-0" aria-hidden />
+        Private. Delivered to the requester; never published. Only a fingerprint is recorded.
+      </p>
     </div>
   );
 }

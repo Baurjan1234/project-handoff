@@ -19,4 +19,12 @@ describe("routes", () => {
       expect(parseRoute(routePath(route))).toEqual(route);
     }
   });
+
+  it("puts the workspace under /orders, which is what Continue navigates to", () => {
+    expect(routePath({ kind: "workspace", orderId: "ord_5979205ba2844c258a0defe3cb3a08cf" })).toBe(
+      "/orders/ord_5979205ba2844c258a0defe3cb3a08cf/review",
+    );
+    expect(parseRoute("/ord_5979205ba2844c258a0defe3cb3a08cf/review")).toEqual({ kind: "inbox" });
+  });
 });
+
