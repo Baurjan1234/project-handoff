@@ -37,6 +37,20 @@ destinations, one line each, not a reading list.
 
 Mainnet endpoints are deliberately absent. Hard rule 5.
 
+## Ours — running now
+
+| What | Where |
+|---|---|
+| Resource server, x402-gated | https://api.the-handoff.xyz — `/health`, `/tags`, `/orders`, `/content/{sha256}` |
+| Expert app | https://the-handoff.xyz |
+| MCP client on npm | https://www.npmjs.com/package/@hedera-handoff/mcp-client |
+| Orders topic on Hashscan | https://hashscan.io/testnet/topic/0.0.10421643 |
+| Escrow account on Hashscan | https://hashscan.io/testnet/account/0.0.10422187 |
+
+The resource server runs as one systemd process on the team VPS and must stay one —
+payout bookkeeping is per-process. Deploy shape and why:
+`decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
+
 ## Tooling
 
 | What | Where |
