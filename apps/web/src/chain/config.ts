@@ -57,6 +57,20 @@ export interface TestnetChainConfig extends Common {
   readonly contentUrl: string;
   /** The shared escrow account, a public id. Shown and read about, never touched. */
   readonly escrowAccountId: string;
+  /**
+   * The resource server's base URL, for the two reads the requests screen
+   * makes: `GET /orders/{id}` for an order's state and `GET /tags` for who may
+   * review. Both are free and unauthenticated by decision, so the browser may
+   * call them with no key and no payment.
+   *
+   * Defaults to `contentUrl` without its trailing `/content`, because the same
+   * process answers both — `apps/mcp` serves the content store at
+   * `/content/{sha256}` and the orders API beside it. That default applies
+   * only when the content URL actually ends in `/content`; anything else has
+   * to say where the API is, because guessing would turn a wrong base URL into
+   * a silent 404 on a screen about somebody's money.
+   */
+  readonly apiUrl: string;
 }
 
 export type WebChainConfig = MockChainConfig | TestnetChainConfig;
@@ -169,12 +183,24 @@ export function configFromEnv(env: Env): WebChainConfig {
     };
   }
 
+  // Read in the order a person would fix them, so the first complaint is
+  // about the first thing missing rather than whichever field a later
+  // addition happened to need early.
+  const ordersTopicId = required(env, "VITE_HANDOFF_ORDERS_TOPIC_ID");
+  const mirrorNodeUrl = serviceUrl(env, "VITE_HEDERA_MIRROR_NODE_URL", DEFAULT_MIRROR_NODE_URL);
+  const contentUrl = serviceUrl(env, "VITE_CONTENT_URL");
+
   return {
     mode,
     expertAccountIdPrefill,
-    ordersTopicId: required(env, "VITE_HANDOFF_ORDERS_TOPIC_ID"),
-    mirrorNodeUrl: serviceUrl(env, "VITE_HEDERA_MIRROR_NODE_URL", DEFAULT_MIRROR_NODE_URL),
-    contentUrl: serviceUrl(env, "VITE_CONTENT_URL"),
+    ordersTopicId,
+    mirrorNodeUrl,
+    contentUrl,
     escrowAccountId: accountIdFrom("VITE_HANDOFF_ESCROW_ACCOUNT_ID", required(env, "VITE_HANDOFF_ESCROW_ACCOUNT_ID")),
+    apiUrl: serviceUrl(
+      env,
+      "VITE_HANDOFF_API_URL",
+      contentUrl.endsWith("/content") ? contentUrl.slice(0, -"/content".length) : undefined,
+    ),
   };
 }

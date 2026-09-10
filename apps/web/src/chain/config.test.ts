@@ -93,6 +93,7 @@ describe("configFromEnv", () => {
     VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242",
     VITE_CONTENT_URL: "https://content.example/store/",
     VITE_HANDOFF_ESCROW_ACCOUNT_ID: "0.0.999",
+    VITE_HANDOFF_API_URL: "https://api.example",
   };
 
   it("requires the topic, the content URL and the escrow account on testnet, and carries nothing the mock needs", () => {
@@ -106,6 +107,7 @@ describe("configFromEnv", () => {
       mirrorNodeUrl: "https://testnet.mirrornode.hedera.com/api/v1",
       contentUrl: "https://content.example/store",
       escrowAccountId: "0.0.999",
+      apiUrl: "https://api.example",
     });
   });
 
