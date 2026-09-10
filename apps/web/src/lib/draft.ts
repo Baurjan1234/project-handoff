@@ -16,12 +16,16 @@ export type WorkspaceStep = "notes" | "verdict" | "sign";
 
 export interface Draft {
   readonly notes: string;
-  readonly defects: readonly string[];
+  /**
+   * One sentence per issue. The published `defects[]` is derived from these
+   * by position, so the draft holds the readable thing and never the code.
+   */
+  readonly issues: readonly string[];
   readonly verdict: Verdict | null;
   readonly step: WorkspaceStep;
 }
 
-export const EMPTY_DRAFT: Draft = { notes: "", defects: [], verdict: null, step: "notes" };
+export const EMPTY_DRAFT: Draft = { notes: "", issues: [], verdict: null, step: "notes" };
 
 export interface DraftStore {
   load(orderId: string): Draft;
@@ -37,12 +41,12 @@ export function parseDraft(value: unknown): Draft {
   if (typeof value !== "object" || value === null) return EMPTY_DRAFT;
   const record = value as Record<string, unknown>;
   const notes = typeof record["notes"] === "string" ? record["notes"] : "";
-  const defects = Array.isArray(record["defects"])
-    ? record["defects"].filter((d): d is string => typeof d === "string")
-    : [];
+  // `defects` is the older name, from before issues carried their sentence.
+  const listed = Array.isArray(record["issues"]) ? record["issues"] : Array.isArray(record["defects"]) ? record["defects"] : [];
+  const issues = listed.filter((d): d is string => typeof d === "string");
   const verdict = VERDICTS.find((v) => v === record["verdict"]) ?? null;
   const step = STEPS.find((s) => s === record["step"]) ?? "notes";
-  return { notes, defects, verdict, step };
+  return { notes, issues, verdict, step };
 }
 
 interface StorageLike {

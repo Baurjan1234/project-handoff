@@ -14,8 +14,8 @@ describe("drafts", () => {
   it("survive a reload and are cleared once signed", () => {
     const storage = memoryStorage();
     const store = draftStore(() => storage);
-    store.save("ord", { notes: "n", defects: ["A"], verdict: "reject", step: "sign" });
-    expect(store.load("ord")).toEqual({ notes: "n", defects: ["A"], verdict: "reject", step: "sign" });
+    store.save("ord", { notes: "n", issues: ["Missing receipt"], verdict: "reject", step: "sign" });
+    expect(store.load("ord")).toEqual({ notes: "n", issues: ["Missing receipt"], verdict: "reject", step: "sign" });
     store.clear("ord");
     expect(store.load("ord")).toEqual(EMPTY_DRAFT);
   });
@@ -40,9 +40,16 @@ describe("drafts", () => {
   });
 
   it("takes only a shape it wrote", () => {
-    expect(parseDraft({ notes: 1, defects: ["A", 2], verdict: "maybe", step: "elsewhere" })).toEqual({
+    expect(parseDraft({ notes: 1, issues: ["A", 2], verdict: "maybe", step: "elsewhere" })).toEqual({
       notes: "",
-      defects: ["A"],
+      issues: ["A"],
+      verdict: null,
+      step: "notes",
+    });
+    // A draft written before issues carried their sentence still opens.
+    expect(parseDraft({ notes: "n", defects: ["FN-2-DATE"] })).toEqual({
+      notes: "n",
+      issues: ["FN-2-DATE"],
       verdict: null,
       step: "notes",
     });
