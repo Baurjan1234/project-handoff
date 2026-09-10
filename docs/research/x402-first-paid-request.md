@@ -127,7 +127,37 @@ expecting x402 version 1's top-level `scheme` and `network`. See
 `x402-blocky402-wire-verified.md`, which was itself wrong about that shape and is now
 corrected.
 
-## The payer must be the operator, until the requester-signed lock ships
+## RESOLVED 2026-09-10 — the requester-signed lock shipped, and a non-operator payer works
+
+Everything in the section below described `main` before
+`docs/decisions/2026-09-08-requester-signs-the-fund-lock.md` was implemented. It is kept
+because the measurement is what justified the change, not because it still describes the
+build. **"One shared resource server, many payers" is no longer impossible.**
+
+Measured 2026-09-10, resource server on `HANDOFF_CHAIN=testnet`, payer `0.0.10376659`
+against operator `0.0.10376667` — the pairing that failed `INVALID_SIGNATURE` every time
+below.
+
+| Leg | Transaction | Effect |
+|---|---|---|
+| Service fee | `0.0.7162784@1789035889.401371961` | `0.0.10376659` -0.5 HBAR, receiver `0.0.10376656` +0.5. Facilitator is the fee payer |
+| Fund lock | `0.0.10376659@1789035890.122059080` | `0.0.10376659` **-100262336** tinybars, escrow `0.0.10422187` **+100000000**. Memo `ord_6d566a82d4b1449aafc8902870c1690f` |
+| Envelope | `0.0.10376667@1789035890.459600259` | orders topic `0.0.10421643`, sequence 14 |
+
+Three things this settles that no unit test could:
+
+- **The requester pays their own gas.** The transaction id's account is theirs, so the
+  262336 tinybars of node fee came out of their balance, not ours. `freezeWith` really
+  does preserve a transaction id set beforehand.
+- **The operator is absent from the transfer list.** Across the whole order it spent
+  `0.0059` HBAR — the HCS submit, nothing else. Before this change it spent the entire
+  order value.
+- **The superfluous operator signature is harmless.** `execute` signs with the client's
+  operator (`Transaction.cjs:1668`); the network ignored a signature it had not asked
+  for rather than returning `INVALID_SIGNATURE`. This was the one open question the
+  code comment in `packages/chain/src/fund-lock.ts` flagged, and it is now closed.
+
+## Superseded — the payer must be the operator, until the requester-signed lock ships
 
 Measured 2026-09-09, running the stdio MCP process against a local resource server on
 `HANDOFF_CHAIN=testnet`. Every teammate about to test `handoff_verify` from their own

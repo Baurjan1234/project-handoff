@@ -328,18 +328,20 @@ expert web app itself; custodial key management is a weeks-scale project.
   KeyList is the demo requester's session key. One escrow account per order, holding
   the requester's own key, is the production shape and is roadmap
   (`docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`).
-- **The requester funds the escrow, and that has not been proven on testnet yet.**
+- **The requester funds the escrow.** Proven on testnet 2026-09-10 with a payer who is
+  not the operator, which is the case `main` could not do at all.
   `lockFunds` is gone. The server builds the transfer, the requester's own key signs it
   on their own machine, and the server validates the returned bytes against what it
   asked for before submitting them
   (`docs/decisions/2026-09-08-requester-signs-the-fund-lock.md`). So "funds lock up
   front" now means the requester's funds, and the drainability that came with a
   platform-funded escrow is gone with it.
-  **What is proven and what is not:** the whitelist, the decoder and the builder are
-  unit-tested, including that the requester rather than the operator ends up the fee
-  payer. A real testnet run with a payer who is *not* the operator has not happened
-  yet. Until it does, say "implemented, not yet demonstrated end to end" rather than
-  claiming the run.
+  The run, on the mirror node: fund lock `0.0.10376659@1789035890.122059080`, SUCCESS,
+  memoed `ord_6d566a82d4b1449aafc8902870c1690f`, debiting the requester `0.0.10376659`
+  by `-100262336` tinybars — the order value plus their own gas — and crediting the
+  escrow `0.0.10422187` by `100000000`. The operator `0.0.10376667` appears nowhere in
+  that transfer list; across the whole order it spent `0.0059` HBAR, the cost of
+  submitting the HCS envelope. Details in `docs/research/x402-first-paid-request.md`.
 - **Escrowed funds have no return path.** `TIMEOUT` is a label in the lifecycle state
   machine and nothing else: no process watches order deadlines, `ORDER_DEADLINE_EXPIRE`
   is fired by nothing outside its own unit test, and `packages/chain/src/escrow.ts` has
