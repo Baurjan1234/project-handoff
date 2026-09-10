@@ -11,12 +11,21 @@
  *
  * **HBAR is the amount; dollars are a label.** Every decision, comparison
  * and published field uses the tinybar value from the schema's money
- * module. Nothing here is ever hashed, published, or compared, and nothing
+ * module, and `TINYBARS_PER_HBAR` is imported from there rather than
+ * restated: a bound that exists twice is a bound that will disagree with
+ * itself. Nothing here is ever hashed, published, or compared, and nothing
  * here becomes a float: cents are bigint and the division rounds once, at
  * the end, to the nearest cent.
+ *
+ * The engineering agreements say every tinybar and HBAR conversion lives in
+ * one module in the schema package. This is a fiat *display*, which that
+ * module does not cover, so it sits here for now and is P4's to adopt: the
+ * rules audit flagged the placement, and moving `tinybarsToCents` into
+ * `packages/schema/src/money.ts` is a change to the treaty rather than to
+ * this app.
  */
 
-const TINYBARS_PER_HBAR = 100_000_000n;
+import { TINYBARS_PER_HBAR } from "@handoff/schema";
 
 export interface HbarRate {
   /** Numerator: US cents. */
