@@ -14,7 +14,13 @@ set -uo pipefail
 
 BASE="${SMOKE_BASE:-http://localhost:${PORT:-4099}}"
 
+# requester_account_id is required, and the body is parsed before the gate now,
+# so a body without it is a 400 and never reaches a 402. Any well-formed account
+# id will do here: nothing is signed and nothing is settled by this script.
+SMOKE_REQUESTER="${SMOKE_REQUESTER:-0.0.10376659}"
+
 order='{"spec":"smoke","artifact_base64":"eA==","cert_tag":"cpa-us",
+        "requester_account_id":"'"$SMOKE_REQUESTER"'",
         "price_hbar":"200","deadline":"2026-09-14T00:00:00Z",
         "claim_timeout_seconds":3600}'
 
@@ -28,11 +34,11 @@ fi
 say "health"
 curl -s "$BASE/health"; echo
 
-say "unpaid: expect 402, and a feePayer fetched from the live facilitator"
+say "unpaid: expect 402, a feePayer from the live facilitator, and a fund lock to sign"
 curl -s -D - -o /dev/null -X POST "$BASE/orders" \
   -H 'Content-Type: application/json' -d "$order" | grep -iE '^(HTTP|payment-required)'
 
-say "the same 402, decoded"
+say "the same 402, decoded — note fund_lock beside the x402 challenge"
 curl -s -X POST "$BASE/orders" -H 'Content-Type: application/json' -d "$order" |
   python3 -m json.tool
 
