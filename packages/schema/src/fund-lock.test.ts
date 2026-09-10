@@ -10,12 +10,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FundLockError, type LockFundsParams } from "./adapter.js";
 import { formatTinybars, parseTinybars } from "./money.js";
-import {
-  FUND_LOCK_VALID_SECONDS,
-  MOCK_ESCROW_ACCOUNT_ID,
-  MockChainAdapter,
-  signFundLock,
-} from "./mock.js";
+import { FUND_LOCK_VALID_SECONDS } from "./fund-lock.js";
+import { MOCK_ESCROW_ACCOUNT_ID, MockChainAdapter, signFundLock } from "./mock.js";
 
 const REQUESTER = "0.0.4004";
 const START = 1_757_000_000_000;

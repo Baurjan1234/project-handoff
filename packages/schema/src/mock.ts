@@ -32,27 +32,16 @@ import type {
   UnsignedFundLock,
 } from "./adapter.js";
 import { formatTinybars, parseTinybars } from "./money.js";
+import {
+  assertFundLockMatches,
+  FUND_LOCK_VALID_SECONDS,
+  utcSecondsFrom,
+  type FundLockFacts,
+  type FundLockLeg,
+} from "./fund-lock.js";
 
-/**
- * Hedera's default transaction validity is 120 seconds and its maximum is 180.
- * The real adapter sets 180 explicitly, because between our 402, the client's
- * preflight mirror read and the facilitator's `/verify` the default is a
- * genuine expiry path rather than an edge case. The mock uses the same number
- * so callers exercise the same window.
- */
-export const FUND_LOCK_VALID_SECONDS = 180;
-
-/**
- * One hbar leg, the way a real `TransferTransaction` carries them.
- *
- * Signed tinybars: negative debits an account, positive credits one, and the
- * legs of a transfer net to zero. The money module already parses a leading
- * minus and `MIN_TINYBARS` is negative, so direction needs no field of its own.
- */
-interface FakeHbarTransfer {
-  readonly accountId: string;
-  readonly amountTinybars: string;
-}
+/** One hbar leg. Same shape the shared whitelist reads. */
+type FakeHbarTransfer = FundLockLeg;
 
 /**
  * The mock's stand-in for a frozen `TransferTransaction`. Never protobuf.
@@ -84,10 +73,6 @@ interface FakeTransfer {
  * real adapter both.
  */
 export const MOCK_ESCROW_ACCOUNT_ID = "MOCK-escrow-shared";
-
-function utcSecondsFrom(epochMillis: number): string {
-  return `${new Date(Math.floor(epochMillis / 1000) * 1000).toISOString().slice(0, 19)}Z`;
-}
 
 function encodeFakeTransfer(transfer: FakeTransfer): string {
   return btoa(JSON.stringify(transfer));
@@ -124,7 +109,27 @@ function decodeFakeTransfer(transactionBytes: string): FakeTransfer {
   if (!isFakeTransfer(parsed)) {
     throw new FundLockError("unparseable", "the signed fund lock is missing fields");
   }
+  // Whether these bytes are a transfer at all is the decoder's question, not
+  // the whitelist's — the real adapter answers it by asking the SDK what it
+  // parsed. Both raise `not-a-transfer` before any facts exist.
+  if (parsed.kind !== "transfer") {
+    throw new FundLockError("not-a-transfer", `expected a transfer, got ${parsed.kind}`);
+  }
   return parsed;
+}
+
+/** The mock's decoded transfer, in the shape the shared whitelist reads. */
+function factsOf(transfer: FakeTransfer): FundLockFacts {
+  return {
+    feePayer: transfer.feePayer,
+    transfers: transfer.transfers,
+    memo: transfer.memo,
+    validUntil: transfer.validUntil,
+    signedBy: transfer.signedBy,
+    // The mock invents its own signatures, so it can name who signed. The real
+    // adapter cannot — see `FundLockFacts.signerIdentity`.
+    signerIdentity: "account",
+  };
 }
 
 /**
@@ -136,148 +141,6 @@ export function signFundLock(transactionBytes: string, signerAccountId: string):
   const transfer = decodeFakeTransfer(transactionBytes);
   if (transfer.signedBy.includes(signerAccountId)) return transactionBytes;
   return encodeFakeTransfer({ ...transfer, signedBy: [...transfer.signedBy, signerAccountId] });
-}
-
-/**
- * A tinybar figure read out of the returned bytes.
- *
- * The money module is right to throw on a string that is not a tinybar
- * integer, but a `MoneyError` out of the whitelist is a tamper that arrives at
- * the caller as something other than a `FundLockError` — no `reason`, nothing
- * to map to a 400. Untrusted input gets the refusal it earned instead.
- */
-function claimedTinybars(value: string): bigint {
-  try {
-    return parseTinybars(value);
-  } catch {
-    throw new FundLockError(
-      "wrong-amount",
-      `the transfer's amount ${JSON.stringify(value)} is not a tinybar figure`,
-    );
-  }
-}
-
-/**
- * The whitelist. Everything the returned bytes are allowed to be, checked
- * against what the server asked for — never against what the bytes claim.
- *
- * Signature *validity* is not checked, here or in the real adapter. The
- * network checks it, and a bad one fails at consensus with nothing moved.
- */
-function assertFundLockMatches(
-  transfer: FakeTransfer,
-  expected: LockFundsParams,
-  escrowAccountId: string,
-  nowMillis: number,
-): void {
-  if (transfer.kind !== "transfer") {
-    throw new FundLockError("not-a-transfer", `expected a transfer, got ${transfer.kind}`);
-  }
-
-  // Before the money checks, because the escrow is one shared account: without
-  // this, (requester, price, escrow) is the whole whitelist and a lock built
-  // for one order satisfies any other order at the same price.
-  if (transfer.memo !== expected.orderId) {
-    throw new FundLockError(
-      "wrong-order",
-      `the fund lock is memoed ${JSON.stringify(transfer.memo)}, not order ${expected.orderId}`,
-    );
-  }
-
-  // Parse every leg before classifying any of them. `expected` is ours, so it
-  // parses or the caller has a bug. The legs came back over the wire and are
-  // strings only — "abc", "1e9", "010000000000" and a 20-digit value all
-  // satisfy `isFakeTransfer` and all make the money module throw. A MoneyError
-  // escaping here reaches a handler as an unmapped 500 with no reason on it,
-  // which is exactly the case this whitelist exists to name.
-  const legs = transfer.transfers.map((leg) => ({
-    accountId: leg.accountId,
-    amount: claimedTinybars(leg.amountTinybars),
-  }));
-
-  // The count check comes first, because a third leg is the tamper and every
-  // check below reads "the" debit and "the" credit as though there is one of
-  // each. A lock we issued has exactly two: the requester debited, the escrow
-  // credited.
-  const debits = legs.filter((leg) => leg.amount < 0n);
-  const credits = legs.filter((leg) => leg.amount > 0n);
-  if (legs.length !== 2 || debits.length !== 1 || credits.length !== 1) {
-    throw new FundLockError(
-      "extra-transfers",
-      `a fund lock is one debit and one credit; this moves ${legs.length} legs ` +
-        `(${legs.map((leg) => `${leg.accountId} ${leg.amount.toString()}`).join(", ")})`,
-    );
-  }
-
-  // Non-null: the length checks above prove there is exactly one of each.
-  const debit = debits[0] as { accountId: string; amount: bigint };
-  const credit = credits[0] as { accountId: string; amount: bigint };
-  const price = parseTinybars(expected.amountTinybars);
-
-  if (debit.accountId !== expected.requesterAccountId) {
-    throw new FundLockError(
-      "wrong-debited-account",
-      `the debited account is ${debit.accountId}, not the requester ${expected.requesterAccountId}`,
-    );
-  }
-  if (transfer.feePayer !== expected.requesterAccountId) {
-    throw new FundLockError(
-      "wrong-fee-payer",
-      `the fee payer is ${transfer.feePayer}, not the requester ${expected.requesterAccountId}`,
-    );
-  }
-  if (credit.accountId !== escrowAccountId) {
-    throw new FundLockError(
-      "wrong-escrow-account",
-      `the credited account is ${credit.accountId}, not the escrow ${escrowAccountId}`,
-    );
-  }
-  // Both sides, not just the credit. A lock that credits the escrow correctly
-  // while debiting more than the order is priced at is still the caller losing
-  // money they did not agree to lose.
-  if (credit.amount !== price || debit.amount !== -price) {
-    throw new FundLockError(
-      "wrong-amount",
-      `the transfer debits ${debit.amount.toString()} and credits ${credit.amount.toString()} ` +
-        `tinybars, not the ${expected.amountTinybars} the order is priced at`,
-    );
-  }
-  if (transfer.signedBy.length === 0) {
-    throw new FundLockError("unsigned", "the fund lock came back without a signature");
-  }
-  if (!transfer.signedBy.includes(expected.requesterAccountId)) {
-    throw new FundLockError(
-      "wrong-signer",
-      `the fund lock is signed by ${transfer.signedBy.join(", ")}, not by the requester ${expected.requesterAccountId}`,
-    );
-  }
-  // The window is the one field with nothing in `expected` to compare against,
-  // so it is bounded rather than matched: it must lie inside the window this
-  // adapter would have issued had it built the lock now. Reading the claim and
-  // only asking "has it passed?" accepts a forged `validUntil` of the year
-  // 3000 — in the real adapter the signature covers the field and the network
-  // refuses it, but this fixture is what P1 implements from and a mock that
-  // waves the tamper through teaches the wrong contract.
-  const claimedValidUntil = Date.parse(transfer.validUntil);
-  if (Number.isNaN(claimedValidUntil)) {
-    throw new FundLockError(
-      "unparseable",
-      `the fund lock's validity window ${JSON.stringify(transfer.validUntil)} is not an instant`,
-    );
-  }
-  if (claimedValidUntil <= nowMillis) {
-    throw new FundLockError(
-      "expired",
-      `the fund lock stopped being submittable at ${transfer.validUntil}`,
-    );
-  }
-  if (claimedValidUntil > nowMillis + FUND_LOCK_VALID_SECONDS * 1000) {
-    throw new FundLockError(
-      "window-too-long",
-      `the fund lock claims to stay submittable until ${transfer.validUntil}, which is ` +
-        `longer than the ${FUND_LOCK_VALID_SECONDS}s this adapter issues`,
-    );
-  }
 }
 
 export class MockChainError extends Error {
@@ -426,7 +289,7 @@ export class MockChainAdapter implements ChainAdapter, RequesterFundedEscrow {
     const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
     const transfer = decodeFakeTransfer(signedTransactionBytes);
 
-    assertFundLockMatches(transfer, expected, escrowAccountId, this.#now());
+    assertFundLockMatches(factsOf(transfer), expected, escrowAccountId, this.#now());
 
     // Nothing above remembers an in-flight transaction — that is the point of
     // the stateless shape — so replay is the network's to refuse, and it does:
