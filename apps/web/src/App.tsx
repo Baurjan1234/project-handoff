@@ -7,15 +7,19 @@ import { FAKE_CERT_TAG, MockPlatform, withSimulatedMirrorLag } from "./chain/moc
 import { TestnetOrderSource } from "./chain/testnetOrders";
 import { ClaimDialog } from "./components/ClaimDialog";
 import { MoneyUnitProvider } from "./components/Money";
+import { NewRequestDialog } from "./components/NewRequestDialog";
 import { Shell, type ExpertIdentity } from "./components/Shell";
 import { browserDrafts } from "./lib/draft";
 import { useNow } from "./lib/useNow";
 import type { ExpertOrder, InboxEntry } from "./orders/order";
 import type { OrderSource } from "./orders/source";
 import { useClaimFlow } from "./orders/useClaimFlow";
+import { draftProblems, EMPTY_DRAFT, requestQuote, type QuoteOutcome, type RequestDraft } from "./requests/create";
+import { useMyRequests, type MyRequestsWiring } from "./requests/useMyRequests";
 import { useRoute, type Route } from "./router";
 import { ConnectScreen, type ConnectOutcome } from "./screens/ConnectScreen";
 import { InboxScreen } from "./screens/InboxScreen";
+import { MyRequestsScreen } from "./screens/MyRequestsScreen";
 import { OrderScreen } from "./screens/OrderScreen";
 import { WorkspaceScreen } from "./screens/WorkspaceScreen";
 import { describeConnectError, type ExpertConnection } from "./session/connect";
@@ -203,6 +207,28 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
   const [entries, setEntries] = useState<readonly InboxEntry[] | null>(null);
   const [documents, setDocuments] = useState<ReadonlyMap<string, string>>(new Map());
 
+  // The requester's side of the same account. Only testnet has one: the
+  // reads are of real payments into a real escrow, and the mock has neither,
+  // so mock mode gets an honest empty screen rather than fabricated rows.
+  const requestsWiring = useMemo<MyRequestsWiring | null>(
+    () =>
+      booted.config.mode === "testnet"
+        ? {
+            mirrorNodeUrl: booted.config.mirrorNodeUrl,
+            apiUrl: booted.config.apiUrl,
+            requesterAccountId: booted.identity.accountId,
+            escrowAccountId: booted.config.escrowAccountId,
+          }
+        : null,
+    [booted.config, booted.identity.accountId],
+  );
+  const requests = useMyRequests(route.kind === "requests" ? requestsWiring : null);
+
+  const [draft, setDraft] = useState<RequestDraft>(EMPTY_DRAFT);
+  const [composing, setComposing] = useState(false);
+  const [quote, setQuote] = useState<QuoteOutcome | null>(null);
+  const [quoting, setQuoting] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
       setEntries(await booted.source.list());
@@ -294,7 +320,9 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
         disconnectHeld={held}
         wide={route.kind === "workspace"}
         openCount={openCount}
+        active={route.kind === "requests" ? "requests" : "inbox"}
         onInbox={() => navigate({ kind: "inbox" })}
+        onRequests={() => navigate({ kind: "requests" })}
       >
         {body}
         <ClaimDialog
@@ -308,13 +336,70 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
           }}
           onClose={() => setClaiming(null)}
         />
+        <NewRequestDialog
+          open={composing}
+          onOpenChange={(next) => {
+            if (!next && !quoting) closeCompose();
+          }}
+          draft={draft}
+          onDraft={setDraft}
+          tags={requests.tags}
+          problems={draftProblems(draft, now)}
+          outcome={quote}
+          busy={quoting}
+          onQuote={() => void askForPrice()}
+          onClose={closeCompose}
+        />
       </Shell>
     </MoneyUnitProvider>
   );
 
+  function closeCompose() {
+    setComposing(false);
+    // The quote is dropped with the panel: an order id the service minted and
+    // nobody paid for is not a thing to keep on screen, and the next ask
+    // mints a fresh one. The typed draft stays, so reopening resumes it.
+    setQuote(null);
+  }
+
+  async function askForPrice() {
+    if (requestsWiring === null) return;
+    setQuoting(true);
+    try {
+      setQuote(
+        await requestQuote({
+          apiUrl: requestsWiring.apiUrl,
+          draft,
+          requesterAccountId: requestsWiring.requesterAccountId,
+        }),
+      );
+    } finally {
+      setQuoting(false);
+    }
+  }
+
   function renderRoute() {
     const go = (r: Route) => navigate(r);
     switch (route.kind) {
+      case "requests":
+        return (
+          <MyRequestsScreen
+            requests={requests.requests}
+            statuses={requests.statuses}
+            now={now}
+            failure={requests.failure}
+            live={requestsWiring !== null}
+            onRefresh={requests.refresh}
+            onNew={
+              requestsWiring === null
+                ? undefined
+                : () => {
+                    setQuote(null);
+                    setComposing(true);
+                  }
+            }
+          />
+        );
       case "inbox":
         return (
           <InboxScreen
