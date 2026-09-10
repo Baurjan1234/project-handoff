@@ -14,6 +14,7 @@ import { NotesEditor } from "../components/NotesEditor";
 import { PublishedStatus } from "../components/PublishedStatus";
 import { SignDialog } from "../components/SignDialog";
 import type { ExpertIdentity } from "../components/Shell";
+import { Skeleton } from "../components/Skeleton";
 import { Stepper, type StepperStep } from "../components/Stepper";
 import { VERDICT_WORDS, VerdictPicker } from "../components/VerdictPicker";
 import { clockWords, isPast } from "../lib/clock";
@@ -24,6 +25,9 @@ import { hashNotes } from "../sign/notes";
 import { previewAttestation } from "../sign/preview";
 import { describeError } from "../sign/runSign";
 import type { SignFlow } from "../sign/useSignFlow";
+
+/** Ragged line lengths, so the placeholder reads as prose rather than a table. */
+const DOCUMENT_SKELETON_LINES = ["w-[92%]", "w-[80%]", "w-[86%]", "w-[68%]", "w-[74%]"] as const;
 
 const STEPS: readonly StepperStep[] = [
   { label: "Notes", hint: "What you found" },
@@ -211,9 +215,12 @@ export function WorkspaceScreen({
                   {documentWords !== null && <span className="text-[11px] text-faint tabular-nums">{documentWords} words</span>}
                 </div>
                 {artifactText === null ? (
-                  <div className="grid gap-2.5 p-8" aria-busy>
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 12}%` }} />
+                  // The paper, before it has words on it. Same primitive as the
+                  // inbox rows, so one wait looks like the other.
+                  <div className="grid gap-3 p-8" aria-busy role="status">
+                    <span className="sr-only">Fetching the document.</span>
+                    {DOCUMENT_SKELETON_LINES.map((width, i) => (
+                      <Skeleton key={width} className={`h-3.5 ${width}`} delayMs={i * 110} />
                     ))}
                   </div>
                 ) : (
