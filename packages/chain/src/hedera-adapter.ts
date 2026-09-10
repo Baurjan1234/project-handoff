@@ -5,6 +5,7 @@ import type {
   CreateScheduleParams,
   EscrowRef,
   LockFundsParams,
+  UnsignedFundLock,
   ReadMessagesOptions,
   ScheduleRef,
   SignScheduleResult,
@@ -13,7 +14,7 @@ import type {
   TxRef,
 } from "@handoff/schema";
 import { executeDirectPayout } from "./direct-payout.js";
-import { fundEscrow } from "./escrow.js";
+import { buildFundLock, submitFundLock } from "./fund-lock.js";
 import { submitTopicMessage, submitTopicMessageAsPayer } from "./hcs.js";
 import { fetchMirrorTopicMessages, fetchMirrorTransaction, toMirrorTransactionId } from "./mirror.js";
 import { PendingPayoutStore } from "./pending-payout.js";
@@ -33,17 +34,21 @@ import { PendingPayoutStore } from "./pending-payout.js";
  *
  * **One shared escrow account — settled, no longer an open question.** Provisioned
  * once out of band (escrow.ts's createEscrowAccount, run separately, not by this
- * class); every order locks funds into it, so `lockFunds` is a plain transfer in and
+ * class); every order locks funds into it, so the fund lock is a plain transfer in and
  * always returns the same `escrowAccountId`. Per-order escrow (with the requester's
  * own public key genuinely in the KeyList) is roadmap, not this week — see
  * ../../../docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md. The
  * third KeyList key is the demo requester's session key; say that out loud if a judge
  * asks who holds it.
  *
- * `lockFunds`'s transfer is signed by whatever the constructor's `client` is
- * authorized as. If that's meant to be the requester's own signature, the caller
- * must construct this adapter with a client whose operator matches
- * `requesterAccountId` — this class does not itself hold or request the requester's key.
+ * **The escrow is funded by the requester, not by us.** `buildFundLock` freezes a
+ * transfer whose debited account and fee payer are both the requester and hands
+ * back the bytes; the requester signs them on their own machine with the key that
+ * already signs the x402 fee; `submitFundLock` validates the returned bytes against
+ * what was asked for and submits them. This class never holds the requester's key
+ * and never signs their transfer. It replaced `lockFunds`, which signed as the
+ * constructor's `client` — the platform operator — and so funded the escrow out of
+ * our own account and refused any payer who was not the operator.
  */
 export interface HederaChainAdapterConfig {
   client: Client;
@@ -133,15 +138,27 @@ export class HederaChainAdapter implements ChainAdapter {
     }));
   }
 
-  async lockFunds(params: LockFundsParams): Promise<EscrowRef> {
-    const result = await fundEscrow(
-      this.config.client,
-      AccountId.fromString(params.requesterAccountId),
-      this.config.escrowAccountId,
-      params.amountTinybars,
-    );
+  /**
+   * Freeze the transfer the requester will sign. The server never signs it.
+   *
+   * See fund-lock.ts and
+   * ../../../docs/decisions/2026-09-08-requester-signs-the-fund-lock.md.
+   */
+  async buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock> {
+    return buildFundLock(this.config.client, this.config.escrowAccountId, params);
+  }
 
-    return { transactionId: result.transactionId, escrowAccountId: this.config.escrowAccountId.toString() };
+  /** Validate the returned bytes against what was asked for, then submit them. */
+  async submitFundLock(
+    expected: LockFundsParams,
+    signedTransactionBytes: string,
+  ): Promise<EscrowRef> {
+    return submitFundLock(
+      this.config.client,
+      this.config.escrowAccountId,
+      expected,
+      signedTransactionBytes,
+    );
   }
 
   /** Tracks the payout locally — no Hedera schedule is created. See module doc above. */

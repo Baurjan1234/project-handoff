@@ -34,6 +34,14 @@ const INPUT: OrderInput = {
   claimTimeoutSeconds: 3600,
 };
 
+const FUND_LOCK = {
+  order_id: "ord_test",
+  escrow_account_id: "0.0.5005",
+  transaction_bytes: "AAAA",
+  memo: "ord_test",
+  valid_until: "2026-09-14T00:03:00Z",
+};
+
 interface Call {
   readonly headers: Record<string, string>;
   readonly body: string;
@@ -51,7 +59,10 @@ function gatedService(second: { status: number; body: unknown }) {
     });
 
     if (calls.length === 1) {
-      return new Response(JSON.stringify(challenge), {
+      // The fund lock rides in the body beside the challenge, never in the
+      // header — that field is ours, not @x402/core's. The client needs both
+      // halves or it cannot fund the escrow.
+      return new Response(JSON.stringify({ ...challenge, fund_lock: FUND_LOCK }), {
         status: 402,
         headers: { [PAYMENT_REQUIRED_HEADER]: encodePaymentRequired(challenge) },
       });
@@ -63,7 +74,10 @@ function gatedService(second: { status: number; body: unknown }) {
   return { fetchImpl, calls };
 }
 
-const stubSigner: PaymentSigner = { async sign() { return "SIGNED"; } };
+const stubSigner: PaymentSigner = {
+  async sign() { return "SIGNED"; },
+  async signFundLock() { return "SIGNED-LOCK"; },
+};
 
 describe("the handoff_verify client", () => {
   it("pays the price it was quoted and retries", async () => {
@@ -82,8 +96,18 @@ describe("the handoff_verify client", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]?.headers[PAYMENT_SIGNATURE_HEADER]).toBeUndefined();
     expect(calls[1]?.headers[PAYMENT_SIGNATURE_HEADER]).toBe("SIGNED");
-    // The order itself is unchanged between the unpaid and paid attempts.
-    expect(calls[0]?.body).toBe(calls[1]?.body);
+    // The order itself is unchanged between the unpaid and paid attempts. The
+    // paid one carries two extra fields and nothing else: the id the 402
+    // minted and the lock signed against it. If any priced field could drift
+    // between the quote and the retry, the signed lock would stop matching the
+    // order it was built for.
+    const unpaid = JSON.parse(calls[0]?.body ?? "{}") as Record<string, unknown>;
+    const paid = JSON.parse(calls[1]?.body ?? "{}") as Record<string, unknown>;
+    const { order_id: orderId, signed_fund_lock: signedLock, ...rest } = paid;
+
+    expect(rest).toEqual(unpaid);
+    expect(orderId).toBe(FUND_LOCK.order_id);
+    expect(signedLock).toBe("SIGNED-LOCK");
   });
 
   it("signs the requirements it was quoted, not requirements of its own", async () => {
@@ -96,6 +120,9 @@ describe("the handoff_verify client", () => {
         async sign(requirements) {
           seen.push(requirements);
           return "SIGNED";
+        },
+        async signFundLock() {
+          return "SIGNED-LOCK";
         },
       },
       fetch: fetchImpl,
@@ -156,7 +183,10 @@ describe("the handoff_verify client", () => {
 
 
 describe("the preflight gate", () => {
-  const signing: PaymentSigner = { async sign() { return "signed"; } };
+  const signing: PaymentSigner = {
+    async sign() { return "signed"; },
+    async signFundLock() { return "signed-lock"; },
+  };
 
   it("refuses before the payment is built, with the requester's sentence", async () => {
     let signed = false;
@@ -166,7 +196,10 @@ describe("the preflight gate", () => {
       postOrder(INPUT, {
         baseUrl: "http://service",
         fetch: fetchImpl,
-        signer: { async sign() { signed = true; return "signed"; } },
+        signer: {
+          async sign() { signed = true; return "signed"; },
+          async signFundLock() { return "signed-lock"; },
+        },
         async preflight() {
           return { ok: false, reply: "Your account holds 42 HBAR. Nothing was charged." };
         },

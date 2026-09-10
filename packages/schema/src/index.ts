@@ -4,6 +4,7 @@ export * from "./canonical.js";
 export * from "./claim.js";
 export * from "./constants.js";
 export * from "./envelope.js";
+export * from "./fund-lock.js";
 export * from "./mock.js";
 export * from "./money.js";
 export * from "./primitives.js";

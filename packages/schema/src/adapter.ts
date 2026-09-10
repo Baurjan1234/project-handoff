@@ -86,7 +86,7 @@ export interface TransactionRecord {
   readonly consensusTimestamp: string;
 }
 
-export interface ChainAdapter {
+export interface ChainAdapter extends RequesterFundedEscrow {
   /** Hard rule 5, in the type system. */
   readonly network: "testnet";
 
@@ -105,7 +105,7 @@ export interface ChainAdapter {
    */
   publishClaim(topicId: string, claimantAccountId: string, contents: string): Promise<ConsensusRef>;
 
-  lockFunds(params: LockFundsParams): Promise<EscrowRef>;
+  // The fund lock arrives via `RequesterFundedEscrow`, which this extends.
 
   createSchedule(params: CreateScheduleParams): Promise<ScheduleRef>;
   /** Idempotent. Signing an already-executed schedule must never pay twice. */
@@ -117,17 +117,18 @@ export interface ChainAdapter {
 }
 
 /**
- * PROPOSAL, not yet part of `ChainAdapter`. See
- * `docs/decisions/` once Nasaa rules on it; until then this interface is
- * implemented by `MockChainAdapter` alone and nothing in the money path calls
- * it.
+ * The fund lock, as `ChainAdapter` carries it. Kept as its own interface so
+ * the two methods can be documented together; every adapter implements it.
  *
- * `lockFunds` debits whatever account the adapter's client signs as, which in
- * every server-side deployment is the platform operator. So the escrow is
- * funded by us, not by the requester, and a public endpoint is drainable: the
- * caller spends the x402 fee and we spend the whole order value. This
- * interface is the fix. It splits the lock into a build the server does and a
- * signature only the requester can produce.
+ * Decided in `docs/decisions/2026-09-08-requester-signs-the-fund-lock.md`,
+ * approved by Nasaa on 2026-09-08.
+ *
+ * It replaces `lockFunds`, which debited whatever account the adapter's client
+ * signed as — in every server-side deployment the platform operator. So the
+ * escrow was funded by us, not by the requester, and a public endpoint was
+ * drainable: the caller spent the x402 fee and we spent the whole order value.
+ * This splits the lock into a build the server does and a signature only the
+ * requester can produce.
  *
  * 1. `buildFundLock` freezes a transfer whose debited account **and fee payer**
  *    are both the requester, so one signature covers both, and hands back the

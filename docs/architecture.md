@@ -109,8 +109,11 @@ sequenceDiagram
     participant V as Verifier and schedule admin
 
     R->>M: handoff_verify with class, cert tag, price, deadline
+    M-->>R: 402: service fee due, plus an unsigned fund lock and the order id
+    Note over R,M: the requester signs both on their own machine; no key reaches the server
+    R->>M: retry with PAYMENT-SIGNATURE, order id and the signed fund lock
     M->>S: store artifact, take hash
-    M->>H: lock funds in escrow, publish order envelope on HCS
+    M->>H: submit the requester-signed lock, publish order envelope on HCS
     H-->>M: transaction ids
     M-->>R: order id, escrow tx, topic id
     E->>H: publish claim message on the orders topic, from the expert's own account
@@ -221,7 +224,7 @@ replacement.
 
 ```mermaid
 flowchart TB
-  P["POSTED<br/>lock funds into the shared escrow<br/>publish a payee-less envelope"]
+  P["POSTED<br/>submit the requester-signed fund lock<br/>publish a payee-less envelope"]
   C["CLAIMED<br/>payee now known<br/>payout recorded, nothing on-chain yet"]
   D["DELIVERED → SETTLED<br/>verifier + schedule-admin co-sign ONE<br/>TransferTransaction, submitted directly"]
   P --> C --> D

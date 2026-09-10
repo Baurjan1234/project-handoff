@@ -24,7 +24,7 @@ describe("createExpertChain", () => {
     chain.close();
   });
 
-  it("exposes only the expert's slice — no signSchedule, createSchedule, deleteSchedule or lockFunds", () => {
+  it("exposes only the expert's slice — no signSchedule, createSchedule, deleteSchedule or fund lock", () => {
     const { chain } = build();
     const keys = Object.keys(chain).sort();
 
@@ -32,7 +32,8 @@ describe("createExpertChain", () => {
     expect(keys).not.toContain("signSchedule");
     expect(keys).not.toContain("createSchedule");
     expect(keys).not.toContain("deleteSchedule");
-    expect(keys).not.toContain("lockFunds");
+    expect(keys).not.toContain("buildFundLock");
+    expect(keys).not.toContain("submitFundLock");
     chain.close();
   });
 

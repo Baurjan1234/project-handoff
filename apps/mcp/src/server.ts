@@ -16,9 +16,17 @@
  */
 
 import * as z from "zod";
-import { hbarToTinybars, sha256Hex, Utc, type ChainAdapter } from "@handoff/schema";
+import {
+  formatTinybars,
+  FundLockError,
+  FundLockSubmitError,
+  hbarToTinybars,
+  sha256Hex,
+  Utc,
+  type ChainAdapter,
+} from "@handoff/schema";
 import type { ContentStore } from "./content.js";
-import { postReviewOrder } from "./order.js";
+import { defaultOrderId, OrderError, postReviewOrder } from "./order.js";
 import { gate, headerLookup, settle, type GateConfig } from "./x402/gate.js";
 import type { Facilitator } from "./x402/facilitator.js";
 import type { CertTagOption } from "./config.js";
@@ -59,6 +67,8 @@ export interface ServerDeps {
   readonly ordersTopicId: string;
   readonly attestationsTopicId: string;
   readonly certTags: readonly CertTagOption[];
+  /** Injectable so tests are deterministic. Minted at the 402. */
+  readonly newOrderId?: () => string;
 }
 
 /**
@@ -104,6 +114,26 @@ const OrderRequestBody = z.strictObject({
   ),
   deadline: Utc,
   claim_timeout_seconds: z.int().positive(),
+  /**
+   * The order id this call is for, minted by the 402 and echoed back.
+   *
+   * Absent on the first call, because there is no order yet. Required on the
+   * paid retry: it is the memo inside the signed fund lock, and the only thing
+   * binding those bytes to this order — the escrow is one shared account, so
+   * without it two orders at the same price from the same requester are
+   * satisfied by the same lock.
+   */
+  order_id: z
+    .string()
+    .regex(/^ord_[0-9a-f]{32}$/, "not an order id this service minted")
+    .optional(),
+  /**
+   * The fund lock the requester signed, base64.
+   *
+   * Untrusted, and never parsed here. `submitFundLock` validates it against
+   * the parameters the server holds before anything executes.
+   */
+  signed_fund_lock: z.string().min(1).optional(),
 });
 
 const json = { "Content-Type": "application/json" } as const;
@@ -262,6 +292,34 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
 
   const gateDeps = { facilitator: deps.facilitator, config: deps.gateConfig };
 
+  // The body is parsed before the gate now, because the 402 has to carry a
+  // fund lock and a lock cannot be built without the price, the requester and
+  // an order id. The deliberate consequence: a malformed body returns 400
+  // rather than 402. Nothing is charged either way — the caller never gets far
+  // enough to pay — but the status changes and the tests say so.
+  const parsed = OrderRequestBody.safeParse(parseJson(request.body.toString("utf8")));
+  if (!parsed.success) {
+    return {
+      status: 400,
+      headers: json,
+      body: { error: "invalid order", detail: z.treeifyError(parsed.error) },
+    };
+  }
+
+  // The tag is the routing, so an unknown one is refused before a price is
+  // ever quoted. Nothing has been charged at this point and the reply says so.
+  if (!deps.certTags.some((tag) => tag.code === parsed.data.cert_tag)) {
+    return {
+      status: 400,
+      headers: json,
+      body: {
+        error: "unknown credential tag",
+        message: unknownTagReply(parsed.data.cert_tag, deps.certTags),
+        available: deps.certTags,
+      },
+    };
+  }
+
   let outcome;
   try {
     outcome = await gate(headerLookup(request.headers), "/orders", gateDeps);
@@ -277,30 +335,36 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
   }
 
   if (outcome.kind === "payment-required") {
-    return { status: outcome.status, headers: outcome.headers, body: outcome.body };
-  }
-
-  const parsed = OrderRequestBody.safeParse(parseJson(request.body.toString("utf8")));
-  if (!parsed.success) {
-    // Paid but unusable. We have not settled, so nothing was taken.
+    // The 402 mints the order id and hands back the transfer the requester
+    // will sign. Both travel in the JSON body beside the x402 challenge rather
+    // than inside it: `accepts` is @x402/core's shape and ours to leave alone.
+    const orderId = (deps.newOrderId ?? defaultOrderId)();
+    let fundLock;
+    try {
+      fundLock = await deps.chain.buildFundLock({
+        orderId,
+        amountTinybars: formatTinybars(hbarToTinybars(parsed.data.price_hbar)),
+        requesterAccountId: parsed.data.requester_account_id,
+      });
+    } catch (error) {
+      return {
+        status: 500,
+        headers: json,
+        body: { error: "could not build the fund lock", detail: (error as Error).message },
+      };
+    }
     return {
-      status: 400,
-      headers: json,
-      body: { error: "invalid order", detail: z.treeifyError(parsed.error) },
-    };
-  }
-
-  // The tag is the routing, so an unknown one is refused here — after verify,
-  // before settle, before anything is published. Nothing has been charged at
-  // this point and the reply says so.
-  if (!deps.certTags.some((tag) => tag.code === parsed.data.cert_tag)) {
-    return {
-      status: 400,
-      headers: json,
+      status: outcome.status,
+      headers: outcome.headers,
       body: {
-        error: "unknown credential tag",
-        message: unknownTagReply(parsed.data.cert_tag, deps.certTags),
-        available: deps.certTags,
+        ...outcome.body,
+        fund_lock: {
+          order_id: orderId,
+          escrow_account_id: fundLock.escrowAccountId,
+          transaction_bytes: fundLock.transactionBytes,
+          memo: fundLock.memo,
+          valid_until: fundLock.validUntil,
+        },
       },
     };
   }
@@ -335,6 +399,33 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
     };
   }
 
+  // Minted at the 402 and echoed back. Without both of these there is nothing
+  // to submit and nothing binding a lock to this order, so refuse before
+  // settling: the caller still has their money.
+  //
+  // **The caller cannot choose this id, even though they send it.** To post
+  // under some id X they need a lock memoed X, the memo sits inside the signed
+  // body, and only this server mints one — at the 402, as a random uuid. An id
+  // the whitelist has not seen a matching lock for is refused by
+  // `submitFundLock` before anything executes. Replaying a spent lock is
+  // refused too, by the network: DUPLICATE_TRANSACTION inside the receipt
+  // period and TRANSACTION_EXPIRED past it. The shape check above is a cheap
+  // second fence, not the one doing the work.
+  const { order_id: orderId, signed_fund_lock: signedFundLock } = parsed.data;
+  if (orderId === undefined || signedFundLock === undefined) {
+    return {
+      status: 400,
+      headers: json,
+      body: {
+        error: "the paid call carries no signed fund lock",
+        message:
+          "The escrow is funded by your own signature now. Call again without payment to " +
+          "get a fund lock to sign, then retry with order_id and signed_fund_lock. " +
+          "Nothing was charged.",
+      },
+    };
+  }
+
   let posted;
   try {
     posted = await postReviewOrder(
@@ -353,12 +444,81 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
         // The verified account, not the one the body claimed. They are equal
         // by the check above; reading it from the payment keeps that obvious.
         requesterAccountId: outcome.payer,
+        signedFundLock,
+        // The id the 402 minted. Reusing it is what lets the memo inside the
+        // signed bytes match, so a lock built for another order is refused.
+        newOrderId: () => orderId,
       },
     );
   } catch (error) {
-    // Do not settle. The payment is verified but unsubmitted, so the caller
-    // still has their money and can retry. Swallowing this into a settled fee
-    // would charge for a service that did not happen.
+    // Never settle on this path. What differs is what the caller should do
+    // next, and that turns entirely on whether their money moved — so these
+    // are told apart rather than flattened into one 502. A caller who cannot
+    // distinguish "nothing happened" from "your escrow is funded" answers the
+    // second by ordering again, and funds a second escrow for one order.
+
+    // Refused by the whitelist, before anything executed. The caller's own
+    // bytes are wrong and they can rebuild: nothing moved, nothing was taken.
+    if (error instanceof FundLockError) {
+      return {
+        status: 400,
+        headers: json,
+        body: {
+          error: "the fund lock was refused",
+          reason: error.reason,
+          message:
+            `The fund lock did not match the order it was issued for (${error.reason}). ` +
+            `Call again without payment to get a fresh one. Nothing was charged.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // Submitted and refused by the network. DUPLICATE_TRANSACTION is the one
+    // that means the escrow *is* funded — by an earlier submission of these
+    // same bytes — so it must never read as "try again".
+    if (error instanceof FundLockSubmitError) {
+      const funded = error.status === "DUPLICATE_TRANSACTION";
+      return {
+        status: 502,
+        headers: json,
+        body: {
+          error: "the fund lock did not settle",
+          network_status: error.status,
+          transaction_id: error.transactionId ?? "",
+          escrow_funded: funded,
+          message: funded
+            ? `This fund lock was already submitted, so the escrow is funded. Read ` +
+              `${error.transactionId} on a mirror node before doing anything else — ` +
+              `ordering again would lock a second time for the same order.`
+            : `The network refused the fund lock with ${error.status}. Nothing was ` +
+              `charged and no funds moved.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // The lock landed and the order did not finish. The requester's money has
+    // moved; say so, and hand back the id that proves it.
+    if (error instanceof OrderError && error.escrowTransactionId !== undefined) {
+      return {
+        status: 502,
+        headers: json,
+        body: {
+          error: "the funds are locked but the order did not post",
+          transaction_id: error.escrowTransactionId,
+          escrow_funded: true,
+          message:
+            `Your ${parsed.data.price_hbar} HBAR is in escrow (${error.escrowTransactionId}) ` +
+            `and the order did not finish publishing. Do not order again — that would lock ` +
+            `a second time. The service fee was not charged.`,
+          detail: error.message,
+        },
+      };
+    }
+
+    // Everything else: the payment is verified but unsettled, so the caller
+    // still has their money and can retry.
     return {
       status: 502,
       headers: json,
@@ -393,7 +553,7 @@ export async function handle(request: HttpRequest, deps: ServerDeps): Promise<Ht
       // Threaded, never swallowed. Settlement state is read from a mirror
       // node; these are how you find it.
       transaction_ids: {
-        lock_funds: posted.transactionIds.lockFunds,
+        fund_lock: posted.transactionIds.fundLock,
         submit_envelope: posted.transactionIds.submitEnvelope,
         service_fee: settled?.receipt.transaction ?? "",
       },
