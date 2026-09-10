@@ -37,6 +37,16 @@ destinations, one line each, not a reading list.
 
 Mainnet endpoints are deliberately absent. Hard rule 5.
 
+## Handoff — our own public surfaces
+
+| What | Where |
+|---|---|
+| Docs site | https://docs.the-handoff.xyz |
+| MCP endpoint, for a client's `.mcp.json` (SSE) | https://the-handoff.xyz/mcp |
+| MCP client on npm | https://www.npmjs.com/package/@hedera-handoff/mcp-client |
+
+The expert app links to the docs site from its navbar (`apps/web/src/components/Navbar.tsx`).
+
 ## Tooling
 
 | What | Where |
