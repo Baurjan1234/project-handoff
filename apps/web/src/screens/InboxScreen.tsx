@@ -7,6 +7,7 @@ import { Copyable } from "../components/Copyable";
 import { HashscanLink } from "../components/HashscanLink";
 import { Escrow } from "../components/Money";
 import { Mono } from "../components/Mono";
+import { Skeleton } from "../components/Skeleton";
 import { claimWindowWords, clockWords, isPast } from "../lib/clock";
 import { askSummary, type ExpertOrder, type InboxEntry } from "../orders/order";
 
@@ -51,18 +52,7 @@ export function InboxScreen({
   const [sort, setSort] = useState<InboxSort>("expiring");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  if (entries === null) {
-    return (
-      <div className="grid gap-3" aria-busy>
-        <SectionLabel>Open reviews</SectionLabel>
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-          {[0, 1].map((i) => (
-            <div key={i} className="h-[76px] animate-pulse border-b border-border bg-secondary last:border-b-0" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (entries === null) return <InboxSkeleton />;
 
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const live = entries.filter((e) => !isPast(e.order.envelope.deadline, nowSeconds));
@@ -141,6 +131,73 @@ export function InboxScreen({
         <Watching entries={lost} now={now} />
       )}
     </div>
+  );
+}
+
+/**
+ * The first read, in the shape of the list it becomes. The heading and its
+ * sentence are true before any order arrives, so they are printed rather
+ * than greyed: only the rows are unknown, and only the rows are placeholder.
+ * Three of them, because a list of one reads as a result.
+ *
+ * Rule 3, and rule 9: this is an ordinary wait, so it says so once for a
+ * screen reader and otherwise stays quiet. No spinner, no message, no jump
+ * when the real rows land — the row below is the same row, measured the same.
+ */
+function InboxSkeleton() {
+  return (
+    <div className="grid gap-7" aria-busy role="status">
+      <span className="sr-only">Looking for reviews you can take.</span>
+      <section className="grid gap-2.5">
+        <div>
+          <SectionLabel>Open reviews</SectionLabel>
+          <p className="mt-1 text-[13px] text-muted-foreground">Reviews matching your credential. Pick one to begin.</p>
+        </div>
+        <List>
+          {[0, 1, 2].map((i) => (
+            <RowSkeleton key={i} delayMs={i * 140} />
+          ))}
+        </List>
+      </section>
+    </div>
+  );
+}
+
+/**
+ * One row of the inbox before it has a title: the same rail, the same dot,
+ * the same three-fact meta line, the same amount and button on the right, at
+ * the same height. What lands is this row with words in it, so nothing moves.
+ * The rail is `border` rather than the row's azure, because a colour here
+ * would claim a state that is not known yet.
+ */
+function RowSkeleton({ delayMs }: { delayMs: number }) {
+  return (
+    <li className="border-b border-border last:border-b-0">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-l-[3px] border-l-border pr-5">
+        <div className="flex min-w-0 flex-1 items-start gap-4 py-4 pl-5">
+          <Skeleton className="mt-1.5 size-2 shrink-0 rounded-full" delayMs={delayMs} />
+          {/* Heights are the loaded row's own: the serif title line, then the
+              meta line, whose height the credential pill sets. Same sum, so
+              the list does not jump when the words arrive. */}
+          <div className="grid min-w-0 flex-1 gap-2.5">
+            <Skeleton className="h-[18px] w-[min(62%,340px)]" delayMs={delayMs} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="h-3.5 w-28" delayMs={delayMs + 60} />
+              <Skeleton className="h-3.5 w-44" delayMs={delayMs + 80} />
+              <Skeleton className="h-3.5 w-16" delayMs={delayMs + 100} />
+              <Skeleton className="h-[22px] w-28 rounded-full" delayMs={delayMs + 120} />
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-4 py-4">
+          <div className="grid justify-items-end gap-1.5">
+            <Skeleton className="h-[18px] w-20" delayMs={delayMs + 60} />
+            <Skeleton className="h-2.5 w-24" delayMs={delayMs + 90} />
+          </div>
+          <Skeleton className="h-8 w-[68px] rounded-lg" delayMs={delayMs + 140} />
+        </div>
+      </div>
+    </li>
   );
 }
 

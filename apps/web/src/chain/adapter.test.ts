@@ -18,6 +18,7 @@ const testnetConfig: WebChainConfig = {
   mirrorNodeUrl: "https://testnet.mirrornode.hedera.com/api/v1",
   contentUrl: "https://content.example",
   escrowAccountId: "0.0.999",
+  apiUrl: "https://api.example",
 };
 
 // A fabricated key. The bytes are a pattern, not a key to anything.

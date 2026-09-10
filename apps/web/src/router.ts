@@ -1,19 +1,25 @@
 /**
- * Three routes, and everything else is state rendered inside them. The
+ * Four routes, and everything else is state rendered inside them. The
  * order id is in the URL so a refresh lands where the expert was and a
- * specific order is deep-linkable, which the recording will want. Three
+ * specific order is deep-linkable, which the recording will want. Four
  * routes do not justify a router library.
+ *
+ * `/requests` is the requester's side of the same account: what this account
+ * paid for, rather than what it can review. A separate path rather than a
+ * panel, so a reload keeps the tab it was on.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
 export type Route =
   | { readonly kind: "inbox" }
+  | { readonly kind: "requests" }
   | { readonly kind: "order"; readonly orderId: string }
   | { readonly kind: "workspace"; readonly orderId: string };
 
 export function parseRoute(pathname: string): Route {
   const parts = pathname.split("/").filter((p) => p.length > 0);
+  if (parts[0] === "requests" && parts[1] === undefined) return { kind: "requests" };
   if (parts[0] === "orders" && parts[1] !== undefined) {
     const orderId = decodeURIComponent(parts[1]);
     if (parts[2] === "review") return { kind: "workspace", orderId };
@@ -26,6 +32,8 @@ export function routePath(route: Route): string {
   switch (route.kind) {
     case "inbox":
       return "/";
+    case "requests":
+      return "/requests";
     case "order":
       return `/orders/${encodeURIComponent(route.orderId)}`;
     case "workspace":

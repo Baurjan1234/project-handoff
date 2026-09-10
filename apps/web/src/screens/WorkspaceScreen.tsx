@@ -14,6 +14,7 @@ import { NotesEditor } from "../components/NotesEditor";
 import { PublishedStatus } from "../components/PublishedStatus";
 import { SignDialog } from "../components/SignDialog";
 import type { ExpertIdentity } from "../components/Shell";
+import { Skeleton } from "../components/Skeleton";
 import { Stepper, type StepperStep } from "../components/Stepper";
 import { VERDICT_WORDS, VerdictPicker } from "../components/VerdictPicker";
 import { clockWords, isPast } from "../lib/clock";
@@ -24,6 +25,9 @@ import { hashNotes } from "../sign/notes";
 import { previewAttestation } from "../sign/preview";
 import { describeError } from "../sign/runSign";
 import type { SignFlow } from "../sign/useSignFlow";
+
+/** Ragged line lengths, so the placeholder reads as prose rather than a table. */
+const DOCUMENT_SKELETON_LINES = ["w-[92%]", "w-[80%]", "w-[86%]", "w-[68%]", "w-[74%]"] as const;
 
 const STEPS: readonly StepperStep[] = [
   { label: "Notes", hint: "What you found" },
@@ -159,27 +163,34 @@ export function WorkspaceScreen({
 
   return (
     <div className="grid lg:h-[calc(100dvh-3.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]">
-      {/* The order's own bar: back, title, state, clock, money. */}
-      <div className="flex h-[52px] items-center gap-4 border-b border-border bg-card px-4 sm:px-6">
-        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-muted-foreground" onClick={onBackToInbox}>
-          <ArrowLeft data-icon="inline-start" aria-hidden />
-          Inbox
-        </Button>
-        <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
-        <span className="hidden min-w-0 flex-1 truncate font-serif text-sm font-semibold sm:block">{order.title}</span>
-        <span className="flex-1 sm:hidden" />
-        <div className="flex shrink-0 items-center gap-3">
-          <Badge variant="outline" className={signed ? "border-paid/20 bg-paid/5 text-paid" : "border-urgent/20 bg-urgent/5 text-urgent"}>
-            {statusWords}
-          </Badge>
-          <span className="text-xs font-semibold whitespace-nowrap">
-            Sign by <span className="tabular-nums">{clockWords(signBy, now)}</span>
-          </span>
-          <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-[13px] font-semibold text-paid" />
+      {/* The order's own bar: back, title, state, clock, money. The white runs edge to
+          edge like the navbar's; the row inside shares the navbar's gutter and cap, so
+          Inbox sits under the wordmark. */}
+      <div className="border-b border-border bg-card">
+        <div className="mx-auto flex h-[52px] max-w-6xl items-center gap-4 px-4 sm:px-6">
+          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-muted-foreground" onClick={onBackToInbox}>
+            <ArrowLeft data-icon="inline-start" aria-hidden />
+            Inbox
+          </Button>
+          <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+          <span className="hidden min-w-0 flex-1 truncate font-serif text-sm font-semibold sm:block">{order.title}</span>
+          <span className="flex-1 sm:hidden" />
+          <div className="flex shrink-0 items-center gap-3">
+            <Badge variant="outline" className={signed ? "border-paid/20 bg-paid/5 text-paid" : "border-urgent/20 bg-urgent/5 text-urgent"}>
+              {statusWords}
+            </Badge>
+            <span className="text-xs font-semibold whitespace-nowrap">
+              Sign by <span className="tabular-nums">{clockWords(signBy, now)}</span>
+            </span>
+            <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-[13px] font-semibold text-paid" />
+          </div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden">
+      {/* Only the panes are inset, on the bar's gutter and cap, so the paper's edge sits
+          under the wordmark too. Below lg they stack and carry their own padding, where
+          an outer gutter would only double it. */}
+      <div className="mx-auto grid w-full max-w-6xl lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden lg:px-6">
         {/* The paper. It stays. */}
         <section className="border-b border-border lg:overflow-y-auto lg:border-r lg:border-b-0">
           <div className="grid gap-6 px-5 py-7 sm:px-10 sm:py-8">
@@ -211,9 +222,12 @@ export function WorkspaceScreen({
                   {documentWords !== null && <span className="text-[11px] text-faint tabular-nums">{documentWords} words</span>}
                 </div>
                 {artifactText === null ? (
-                  <div className="grid gap-2.5 p-8" aria-busy>
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 12}%` }} />
+                  // The paper, before it has words on it. Same primitive as the
+                  // inbox rows, so one wait looks like the other.
+                  <div className="grid gap-3 p-8" aria-busy role="status">
+                    <span className="sr-only">Fetching the document.</span>
+                    {DOCUMENT_SKELETON_LINES.map((width, i) => (
+                      <Skeleton key={width} className={`h-3.5 ${width}`} delayMs={i * 110} />
                     ))}
                   </div>
                 ) : (

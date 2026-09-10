@@ -43,9 +43,13 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 |---|---|
 | Resource server, x402-gated | https://api.the-handoff.xyz — `/health`, `/tags`, `/orders`, `/content/{sha256}` |
 | Expert app | https://the-handoff.xyz |
+| Docs site | https://docs.the-handoff.xyz |
+| MCP endpoint, for a client's `.mcp.json` (SSE) | https://the-handoff.xyz/mcp |
 | MCP client on npm | https://www.npmjs.com/package/@hedera-handoff/mcp-client |
 | Orders topic on Hashscan | https://hashscan.io/testnet/topic/0.0.10421643 |
 | Escrow account on Hashscan | https://hashscan.io/testnet/account/0.0.10422187 |
+
+The expert app links to the docs site from its navbar (`apps/web/src/components/Navbar.tsx`).
 
 The resource server runs as one systemd process on the team VPS and must stay one —
 payout bookkeeping is per-process. Deploy shape and why:
