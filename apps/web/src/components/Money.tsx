@@ -5,14 +5,14 @@ export function priceWords(priceTinybars: string): string {
   return tinybarsToDisplay(parseTinybars(priceTinybars));
 }
 
-/** The escrow treatment: the amount, and that it is locked. */
-export function Escrow({ priceTinybars, size = "md" }: { priceTinybars: string; size?: "md" | "lg" }) {
+/** The escrow treatment: the amount in mono green, and that it is locked. */
+export function Escrow({ priceTinybars, size = "md", align = "right" }: { priceTinybars: string; size?: "md" | "lg"; align?: "left" | "right" }) {
   return (
-    <span className="grid gap-0.5">
-      <span className={`font-semibold tracking-tight tabular-nums ${size === "lg" ? "text-2xl" : "text-base"}`}>
+    <span className={`grid gap-0.5 ${align === "right" ? "text-right" : ""}`}>
+      <span className={`font-mono font-semibold text-paid tabular-nums ${size === "lg" ? "text-2xl" : "text-[15px]"}`}>
         {priceWords(priceTinybars)}
       </span>
-      <span className="text-xs text-muted-foreground">locked in escrow</span>
+      <span className="text-[11px] text-faint">locked in escrow</span>
     </span>
   );
 }
