@@ -3,7 +3,7 @@ import { encodeAttestation } from "./attestation.js";
 import { encodeClaim, tryDecodeClaim } from "./claim.js";
 import { SCHEMA_VERSION } from "./constants.js";
 import { encodeEnvelope } from "./envelope.js";
-import { MockChainAdapter, MockChainError } from "./mock.js";
+import { MockChainAdapter, MockChainError, signFundLock } from "./mock.js";
 
 const hash = (c: string) => c.repeat(64);
 
@@ -156,11 +156,16 @@ describe("schedules", () => {
 describe("transaction ids are threaded, not swallowed", () => {
   it("returns a retrievable record for every operation", async () => {
     const submit = await chain.submitMessage("topic-1", "a");
-    const lock = await chain.lockFunds({
+    const lockParams = {
       orderId: "order-1",
       amountTinybars: "20000000000",
       requesterAccountId: "0.0.4004",
-    });
+    };
+    const built = await chain.buildFundLock(lockParams);
+    const lock = await chain.submitFundLock(
+      lockParams,
+      signFundLock(built.transactionBytes, lockParams.requesterAccountId),
+    );
     const created = await chain.createSchedule(schedule);
 
     for (const id of [submit.transactionId, lock.transactionId, created.transactionId]) {

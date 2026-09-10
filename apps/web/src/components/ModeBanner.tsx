@@ -1,20 +1,14 @@
 import type { ChainMode } from "../chain/config";
 
 /**
- * Which chain this screen is talking to. A thin strip rather than a box, but
- * on every screen: after the cutover the mock is a test fixture and never
- * appears in a demo or a recording, and a screen that looks real while showing
- * MOCK- ids is the exact failure the recording rule names.
+ * The mock strip, on every screen while the mock is in use: after the
+ * cutover the mock is a test fixture and never appears in a demo or a
+ * recording, and a screen that looks real while showing MOCK- ids is the
+ * exact failure the recording rule names. On testnet the corner badge says
+ * which chain this is, and there is nothing to warn about.
  */
 export function ModeBanner({ mode }: { mode: ChainMode }) {
-  if (mode === "testnet") {
-    return (
-      <div className="flex items-center justify-center gap-2 border-b border-emerald-200/60 bg-emerald-50 px-4 py-1.5 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-        <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
-        Hedera testnet
-      </div>
-    );
-  }
+  if (mode === "testnet") return null;
   return (
     <div
       role="status"

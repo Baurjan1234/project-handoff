@@ -78,10 +78,12 @@ are not in this repo and an agent never needs them to build.
   review → sign); attestation format; allowlist registry with on-HCS events and cert
   gating; mirror-node settlement reads with tx IDs threaded through.
 - **Tier 2 (only after Tier 1 is green):** expert-side fleet pre-analysis; plain web
-  requester form; second-opinion audit; reject-rate reputation signal; budget prompt.
+  requester form; second-opinion audit; reject-rate reputation signal; budget prompt;
+  World ID Selfie Check at sign time (post-freeze track, decided
+  `docs/decisions/2026-09-09-world-selfie-check-goes-ahead-post-freeze.md`).
 - **Tier 3 (never build this week):** dispute jury and its UI; reject→RFQ fix market;
   a working `execution` demo path; redline class; custodial web2 wrap; fiat rails;
-  World ID; any token; general MCP-to-MCP negotiation.
+  any token; general MCP-to-MCP negotiation.
 
 If a task would land in Tier 3, stop and say so rather than building it. Tier 3 items
 exist as schema fields and slides, not code.
@@ -215,14 +217,15 @@ Two constraints that hold regardless of how anything else moves:
 Each package and app carries a short CLAUDE.md naming what it owns, its contract with
 the schema package, and what it must never do. Read yours before touching the lane.
 
-`.mcp.json` is checked in with four remote servers. Cloning the repo is the whole
-setup, apart from two one-time steps below.
+`.mcp.json` is checked in with five servers. Cloning the repo is the whole setup, apart
+from two one-time steps below.
 
 | Server | What it is for |
 |---|---|
+| `handoff` | Our own tool, `npx @hedera-handoff/mcp-client`. Orders from the hosted service at `https://api.the-handoff.xyz`. Needs `X402_PAYER_ACCOUNT_ID` and `X402_PAYER_PRIVATE_KEY` in your shell; without them the reads still work. **It signs on your machine — the key never reaches the service** |
 | `hedera` | The official hosted Agent Kit, testnet. Builds transaction bytes; it never signs, never submits, and never sees a private key |
 | `hedera-docs` | Hedera's own documentation search |
-| `linear` | The board. Read and update issues; never depend on it at build time |
+| `linear` | The board. Project **"Project handoff"** (`project-handoff-dbc693664e86`). Read and update issues; never depend on it at build time |
 | `context7` | Live docs for everything that is not Hedera: Next.js, Tailwind, shadcn, Supabase, the MCP SDK, zod, vitest |
 
 **Never recall a Hedera SDK call from memory.** Look it up through `hedera-docs` or
@@ -237,6 +240,12 @@ Two one-time steps after cloning:
 
 Signing stays in `packages/chain`. The Hedera server hands back unsigned bytes on
 purpose, so no agent session can move funds on its own.
+
+**The resource server runs once, hosted, and everyone points at it.** Running your own is
+for working on the service itself and needs the vault-only platform keys. It must stay a
+single process: payout bookkeeping is an in-memory map. The client is published to npm so
+ordering needs no clone —
+`docs/decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
 
 ## Seats
 
@@ -351,6 +360,19 @@ as a subagent so the diff stays out of your session.
       `TransferTransaction` directly. Say "the platform co-signs and the money moves",
       never "the schedule fires". `docs/research/schedule-create-keylist-blocker.md`,
       `docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md`.
+- [ ] **Does `/requests` in `apps/web` stay?** **Nasaa's alone to rule, and unratified as
+      of 2026-09-10.** A "My requests" tab was built on `jack/sign-action` at P3's
+      repeated request. It crosses two stated lines: `docs/ux-philosophy.md` puts the
+      requester web form at Tier 2 with "do not build it this week", and `apps/web`'s
+      own lane file said "do not add a wallet, seed phrase, or requester UI". It is
+      narrower than that Tier 2 item — no key is accepted or stored, no payment or
+      fund-lock call is made from the browser, the create panel makes only the first
+      free unpaid `POST /orders` and hands the finish to `handoff_verify`, and the list
+      is a mirror read of the requester's own escrow payments rather than a server's
+      word. The rules audit confirmed it breaches the tier line and found nothing else.
+      **Until P4 rules, this does not go on camera and does not merge to `main`;** if the
+      answer is no, the route gets deleted rather than the tab hidden. Rationale and the
+      two cross-lane blockers are in `apps/web/CLAUDE.md`.
 - [x] ~~**Who presents at live judging round 2**, Tue Sep 15.~~ Nasaa, claimed 2026-09-05
       and recorded in `docs/team-seats.md`. Deck and Q&A prep tracked on the board.
 - [x] ~~**Does the x402 gate cover only order posting**, or reads as well?~~ Order

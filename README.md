@@ -153,11 +153,60 @@ pnpm typecheck && pnpm test         # what CI runs, plus a gitleaks scan
 facilitator. It is not a unit test on purpose: CI should not go red because somebody else's
 service is down.
 
-**Where this is, as of the last commit to this file.** The gate is live end to end up to
-the point of signing: the 402 quotes a fee payer fetched from the real facilitator, and a
-malformed payment comes back with the facilitator's own rejection reason. The client-side
-signer and the real chain adapter are the two pieces still landing. This paragraph is the
-first thing to correct when they do.
+**Where this is, as of the last commit to this file.** The whole requester path runs on
+testnet: an agent calls `handoff_verify`, the service fee settles through the live
+facilitator, the order value locks in escrow and the envelope reaches the orders topic,
+each with a transaction id you can read on a mirror node. The expert path claims, reviews
+and signs. What is not wired is the payout: `createSchedule` tracks it in memory rather
+than creating a Hedera schedule, so an attestation is published and paid by hand.
+
+## Ordering from your own agent
+
+**Nothing to clone.** The client is published, so any agent session on any machine can
+order from the running service:
+
+```bash
+claude mcp add handoff \
+  -e HANDOFF_SERVICE_URL=https://api.the-handoff.xyz \
+  -e X402_PAYER_ACCOUNT_ID=0.0.xxxxxx \
+  -e X402_PAYER_PRIVATE_KEY=your-ecdsa-key \
+  -- npx -y @hedera-handoff/mcp-client
+```
+
+Then restart the session: tools appear at startup, never mid-session. `handoff_verify`
+posts an order and `handoff_status` reads one back.
+
+**Your account must be ECDSA**, and it needs the service fee plus the order value plus a
+little gas. Get testnet accounts from [portal.hedera.com](https://portal.hedera.com/) and
+check the key type rather than assuming the portal default — a preflight read tells you
+before anything is signed, but it is the commonest way to lose an evening.
+
+**Your key never leaves your machine.** This client is the half that signs, and it signs
+twice: the x402 service fee, and the fund lock whose debited account and fee payer are
+both you. Only the signatures go over the wire. The service validates the returned bytes
+against what it asked for and submits them; it holds no key of yours. That is why this
+runs beside you rather than on a server, and it is why "no clone" and "the key stays
+local" are compatible at all —
+`docs/decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
+
+### Running your own service instead
+
+Only needed if you are working on the service itself. It requires the two platform keys
+and the Supabase service key, which are vault-only.
+
+```bash
+pnpm --filter @handoff/mcp start        # the resource server, :4021
+```
+
+Then point the client at it with `HANDOFF_SERVICE_URL=http://localhost:4021`. Four values
+in `.env` have to match everyone else's or you will be alone on your own chain:
+`HANDOFF_ORDERS_TOPIC_ID`, `HANDOFF_ATTESTATIONS_TOPIC_ID`, `HANDOFF_ESCROW_ACCOUNT_ID`
+and `X402_RECEIVER_ACCOUNT_ID`. Ask P1 rather than provisioning your own, and set
+`HANDOFF_CHAIN=testnet` — it ships as `mock`.
+
+Check stderr before ordering. `x402 payer: 0.0.…` means the key parsed and the curve is
+right; `payment signer: none` or `x402 payer unavailable` names which is wrong.
+`credentials: cpa-us` means the service answered, so you are pointed at something running.
 
 ## Known limits
 

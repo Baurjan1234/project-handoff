@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, ShieldCheck, User } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChainMode } from "../chain/config";
 import { HashscanLink } from "../components/HashscanLink";
+import { Logo } from "../components/Logo";
 import { ModeBanner } from "../components/ModeBanner";
+import { TestnetBadge } from "../components/TestnetBadge";
 import { parseAccountId } from "../session/accountId";
 import {
   assessConnect,
@@ -23,6 +25,12 @@ import { lookupAccount, type AccountLookup } from "../session/mirrorAccount";
 export type ConnectOutcome = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 export type LookupFn = (accountId: string, signal: AbortSignal) => Promise<AccountLookup>;
+
+/** What the preview card says once the account id checks out. Null when nothing is known. */
+export interface CredentialPreview {
+  readonly label: string;
+  readonly tag: string;
+}
 
 /**
  * How the key field hides what is typed. "masked" is a text field drawn as
@@ -62,6 +70,7 @@ export function ConnectScreen({
   notice,
   onConnect,
   lookup = defaultLookup,
+  credential = null,
 }: {
   mode: ChainMode;
   prefill: string | null;
@@ -70,6 +79,8 @@ export function ConnectScreen({
   onConnect: (connection: ExpertConnection) => Promise<ConnectOutcome>;
   /** Testnet only. Injected so the screen is testable without a network. */
   lookup?: LookupFn;
+  /** The credential this build grants, shown once the id checks out. */
+  credential?: CredentialPreview | null;
 }) {
   const [accountIdText, setAccountIdText] = useState(prefill ?? "");
   const [keyShape, setKeyShape] = useState<KeyShape | null>(null);
@@ -142,6 +153,7 @@ export function ConnectScreen({
       error={error}
       notice={notice}
       busy={busy}
+      credential={credential}
       keyRef={keyRef}
       onAccountIdChange={setAccountIdText}
       onKeyChange={(text) => setKeyShape(text === "" ? null : describePrivateKey(text))}
@@ -237,6 +249,7 @@ export function ConnectCard({
   error,
   notice,
   busy,
+  credential = null,
   keyRef,
   onAccountIdChange,
   onKeyChange,
@@ -254,6 +267,7 @@ export function ConnectCard({
   error: string | null;
   notice: string | null;
   busy: boolean;
+  credential?: CredentialPreview | null;
   keyRef?: RefObject<HTMLInputElement | null>;
   onAccountIdChange: (text: string) => void;
   onKeyChange: (text: string) => void;
@@ -261,6 +275,9 @@ export function ConnectCard({
   onConnect: () => void;
 }) {
   const testnet = mode === "testnet";
+  // The Hedera panel opens by itself when an id is already there, from a
+  // reload or a prefill; otherwise it waits behind its toggle.
+  const [open, setOpen] = useState(accountIdText !== "");
   const onEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -271,170 +288,242 @@ export function ConnectCard({
   const keyRejected = keyShape !== null && !keyShape.ok;
   // A rejected shape is shown under the field, once, in red; not again below the button.
   const blockers = keyRejected ? assessment.blockers.filter((blocker) => blocker !== keyShape.reason) : assessment.blockers;
+  // The id checks out: on the mock when it parses, on testnet when the network found it.
+  const idChecksOut = assessment.accountId !== null && (!testnet || (lookup?.status === "found" && !lookup.deleted));
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="flex min-h-dvh flex-col bg-background">
       <ModeBanner mode={mode} />
 
-      <header className="mx-auto max-w-md px-4 pt-6 pb-2 sm:px-6">
-        <h1 className="text-lg font-semibold tracking-tight">
-          Handoff <span className="font-normal text-muted-foreground">expert</span>
-        </h1>
-      </header>
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
+        <section
+          className="grid w-full max-w-[480px] gap-0 rounded-2xl bg-card px-6 pt-11 pb-9 shadow-[0_2px_12px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.03)] sm:px-10"
+          aria-labelledby="connect-title"
+        >
+          <div className="mb-8 flex justify-center">
+            <Logo size="lg" />
+          </div>
 
-      <main className="mx-auto grid max-w-md gap-4 px-4 pt-4 pb-12 sm:px-6">
-        {notice !== null && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {notice}
-          </p>
-        )}
+          <h1 id="connect-title" className="text-center font-serif text-[22px] leading-tight font-semibold tracking-tight">
+            Sign in as an expert
+          </h1>
+          <p className="mt-1.5 mb-7 text-center text-sm leading-relaxed text-muted-foreground">Review work, sign your verdict, get paid.</p>
 
-        <section className="grid gap-5 rounded-2xl border border-border/60 bg-card p-5 shadow-xs sm:p-6" aria-labelledby="connect-title">
-          <div className="grid gap-1.5">
-            <h2 id="connect-title" className="text-base font-semibold tracking-tight">
-              Connect your account
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {testnet
-                ? "Handoff pays you for signed verdicts. To sign, this app needs the Hedera testnet account you will be paid to, and the private key that proves it is yours."
-                : "Handoff pays you for signed verdicts. Enter the account id the demo signs as. On the mock chain nothing is real."}
+          {notice !== null && (
+            <p role="status" className="mb-5 rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground">
+              {notice}
             </p>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="connect-account-id">Account id</Label>
-            <Input
-              id="connect-account-id"
-              value={accountIdText}
-              onChange={(event) => onAccountIdChange(event.target.value)}
-              onKeyDown={onEnter}
-              disabled={busy}
-              placeholder="0.0.12345"
-              autoComplete="off"
-              spellCheck={false}
-              aria-describedby={testnet ? "connect-account-help connect-account-status" : "connect-account-help"}
-              className="h-10 rounded-xl font-mono"
-            />
-            <Helper id="connect-account-help">
-              Like an account number. It is public: the Hedera portal and Hashscan both show it.
-            </Helper>
-            {testnet && (
-              <div id="connect-account-status" role="status" className="min-h-5">
-                <LookupChip lookup={lookup} pending={lookupPending} onRetry={onRetryLookup} />
-              </div>
-            )}
-          </div>
-
-          {testnet ? (
-            <div className="grid gap-2">
-              <Label htmlFor="connect-private-key">Private key</Label>
-              <Input
-                id="connect-private-key"
-                ref={keyRef}
-                type={keyField === "masked" ? "text" : "password"}
-                style={keyField === "masked" ? MASKED : undefined}
-                onChange={(event) => onKeyChange(event.target.value)}
-                onKeyDown={onEnter}
-                disabled={busy}
-                placeholder="Paste the key. It shows as dots."
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                data-1p-ignore
-                data-lpignore="true"
-                aria-invalid={keyRejected || undefined}
-                aria-describedby="connect-key-help connect-key-shape"
-                className="h-10 rounded-xl font-mono"
-              />
-              <p
-                id="connect-key-shape"
-                role="status"
-                className={`min-h-4 text-xs ${keyRejected ? "text-destructive" : "text-muted-foreground"}`}
-              >
-                {keyShape === null ? "" : describeKeyShape(keyShape)}
-              </p>
-              <Helper id="connect-key-help">
-                Your private key is your signature. It stays in this tab, in memory only: not saved, not sent
-                anywhere, never shown, forgotten when you disconnect or close the tab. It signs your verdict and
-                nothing else. It is never a schedule key, so it cannot touch the money in escrow.
-              </Helper>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-xs leading-relaxed text-muted-foreground">
-              Mock chain. Nothing is signed here, so there is no key to enter. Every id you will see is fabricated,
-              and this screen is never recorded.
-            </div>
           )}
 
-          {testnet && (
-            <details className="group text-xs text-muted-foreground">
-              <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-                <ChevronRight className="size-3.5 transition group-open:rotate-90" aria-hidden />
-                Where do I find these?
-              </summary>
-              <p className="mt-2 leading-relaxed">
-                The{" "}
-                <a
-                  href={PORTAL_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline decoration-border underline-offset-4 hover:text-foreground"
+          {/* Not wired yet. Nothing behind it until the team says what sign-in means. */}
+          <Button type="button" size="lg" className="h-[52px] w-full rounded-[10px] text-[15px] font-semibold hover:bg-azure-hover" title="Not available yet">
+            <User className="size-[18px]" aria-hidden />
+            Sign in
+          </Button>
+          <p className="mt-2.5 text-center text-xs leading-snug text-faint">Sign in with your email to start reviewing.</p>
+
+          <div className="my-6 flex items-center gap-3" aria-hidden>
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-medium tracking-[0.05em] whitespace-nowrap text-faint uppercase">or bring your own key</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="connect-hedera-panel"
+            onClick={() => setOpen((o) => !o)}
+            className="flex h-[52px] w-full items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] border-border text-[13px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <Lock className="size-3.5" aria-hidden />
+            Connect with your Hedera account
+            <ChevronDown className={`size-3 transition-transform duration-300 ${open ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+
+          <div
+            id="connect-hedera-panel"
+            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+            inert={!open}
+          >
+            <div className="overflow-hidden">
+              <div className="grid gap-4 pt-5">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {testnet
+                    ? "Handoff pays you for signed verdicts. To sign, this app needs the Hedera testnet account you will be paid to, and the private key that proves it is yours."
+                    : "Handoff pays you for signed verdicts. Enter the account id the demo signs as. On the mock chain nothing is real."}
+                </p>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="connect-account-id" className="text-[13px] font-semibold">
+                    Account id
+                  </Label>
+                  <Input
+                    id="connect-account-id"
+                    value={accountIdText}
+                    onChange={(event) => onAccountIdChange(event.target.value)}
+                    onKeyDown={onEnter}
+                    disabled={busy}
+                    placeholder="0.0.12345"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-describedby={testnet ? "connect-account-help connect-account-status" : "connect-account-help"}
+                    className="h-11 rounded-[10px] bg-secondary font-mono text-[13px] focus-visible:ring-primary/20"
+                  />
+                  <Helper id="connect-account-help">
+                    Like an account number. It is public: the Hedera portal and Hashscan both show it.
+                  </Helper>
+                  {testnet && (
+                    <div id="connect-account-status" role="status" className="min-h-5">
+                      <LookupChip lookup={lookup} pending={lookupPending} onRetry={onRetryLookup} />
+                    </div>
+                  )}
+                </div>
+
+                {testnet ? (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="connect-private-key" className="text-[13px] font-semibold">
+                      Private key
+                    </Label>
+                    <Input
+                      id="connect-private-key"
+                      ref={keyRef}
+                      type={keyField === "masked" ? "text" : "password"}
+                      style={keyField === "masked" ? MASKED : undefined}
+                      onChange={(event) => onKeyChange(event.target.value)}
+                      onKeyDown={onEnter}
+                      disabled={busy}
+                      placeholder="Paste the key. It shows as dots."
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-1p-ignore
+                      data-lpignore="true"
+                      aria-invalid={keyRejected || undefined}
+                      aria-describedby="connect-key-help connect-key-shape"
+                      className="h-11 rounded-[10px] bg-secondary font-mono text-xs tracking-[0.02em] focus-visible:ring-primary/20"
+                    />
+                    <p
+                      id="connect-key-shape"
+                      role="status"
+                      className={`min-h-4 text-xs ${keyRejected ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {keyShape === null ? "Paste once. Held in memory, never stored." : describeKeyShape(keyShape)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-secondary p-4 text-xs leading-relaxed text-muted-foreground">
+                    Mock chain. Nothing is signed here, so there is no key to enter. Every id you will see is fabricated,
+                    and this screen is never recorded.
+                  </div>
+                )}
+
+                {/* The credential, once the id checks out. Grows in; never a modal. */}
+                <div
+                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${idChecksOut && credential !== null ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+                  aria-hidden={!(idChecksOut && credential !== null)}
                 >
-                  Hedera portal
-                </a>{" "}
-                lists your testnet account as a number like 0.0.12345 and, under it, a private key: a long
-                hexadecimal string it tells you to keep secret. Both forms it offers work here, DER (starts with
-                302e or 3030) and plain hex. Paste it rather than typing it. The same page gives out free test HBAR.
-              </p>
-            </details>
-          )}
+                  <div className="overflow-hidden">
+                    <div className="flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-border bg-secondary px-3.5 py-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden>
+                        <ShieldCheck className="size-4" />
+                      </span>
+                      <span className="grid min-w-0">
+                        <span className="text-[13px] font-semibold">{credential?.label ?? ""}</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">{credential?.tag ?? ""}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-          {assessment.warnings.length > 0 && (
-            <ul aria-live="polite" className="grid gap-1 text-xs text-amber-700 dark:text-amber-300">
-              {assessment.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          )}
+                {testnet && (
+                  <details className="group text-xs text-muted-foreground">
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+                      <ChevronRight className="size-3.5 transition group-open:rotate-90" aria-hidden />
+                      Where do I find these?
+                    </summary>
+                    <p className="mt-2 leading-relaxed">
+                      The{" "}
+                      <a
+                        href={PORTAL_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-border underline-offset-4 hover:text-foreground"
+                      >
+                        Hedera portal
+                      </a>{" "}
+                      lists your testnet account as a number like 0.0.12345 and, under it, a private key: a long
+                      hexadecimal string it tells you to keep secret. Both forms it offers work here, DER (starts with
+                      302e or 3030) and plain hex. Paste it rather than typing it. The same page gives out free test HBAR.
+                    </p>
+                  </details>
+                )}
 
-          {error !== null && (
-            <Alert variant="destructive">
-              <AlertTitle>Not connected</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+                {assessment.warnings.length > 0 && (
+                  <ul aria-live="polite" className="grid gap-1 text-xs text-urgent">
+                    {assessment.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
 
-          <div className="grid gap-2">
-            <Button type="button" size="lg" className="h-11 w-full rounded-xl" disabled={!canConnect} onClick={onConnect}>
-              {busy
-                ? "Connecting…"
-                : assessment.accountId === null
-                  ? "Connect"
-                  : `Connect as ${assessment.accountId}`}
-            </Button>
-            {!busy && blockers.length > 0 && (
-              <ul aria-live="polite" className="grid gap-0.5 text-xs text-muted-foreground">
-                {blockers.map((blocker) => (
-                  <li key={blocker}>{blocker}</li>
-                ))}
-              </ul>
-            )}
+                {error !== null && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Not connected</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="grid gap-2">
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    className="h-12 w-full rounded-[10px] border-[1.5px] bg-secondary text-[14px] font-semibold hover:border-primary hover:bg-primary/5"
+                    disabled={!canConnect}
+                    onClick={onConnect}
+                  >
+                    {busy ? "Connecting…" : assessment.accountId === null ? "Continue" : `Continue as ${assessment.accountId}`}
+                  </Button>
+                  {!busy && blockers.length > 0 && (
+                    <ul aria-live="polite" className="grid gap-0.5 text-xs text-muted-foreground">
+                      {blockers.map((blocker) => (
+                        <li key={blocker}>{blocker}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {testnet && (
+                  <div className="flex items-start gap-2 rounded-lg border border-paid/10 bg-paid/5 px-3 py-2.5">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-paid" aria-hidden />
+                    <Helper id="connect-key-help">
+                      Your private key is your signature. It stays in this tab, in memory only: not saved, not sent
+                      anywhere, never shown, forgotten when you disconnect, reload or close the tab. Your account id is
+                      remembered; the key is asked for again. It signs your verdict and nothing else. It is never a
+                      schedule key, so it cannot touch the money in escrow.
+                    </Helper>
+                  </div>
+                )}
+
+                {testnet && (
+                  <p className="text-center text-xs text-faint">
+                    In production a wallet app signs instead. Pasting a key is the testnet shortcut.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-
-          {testnet && (
-            <p className="text-xs text-muted-foreground">
-              In production a wallet app signs instead. Pasting a key is the testnet shortcut.
-            </p>
-          )}
         </section>
 
-        <p className="px-1 text-xs text-muted-foreground">
+        <p className="mt-4 max-w-[480px] text-center text-xs text-faint">
           {testnet
             ? "Testnet only. The account holds test HBAR, not real money. Never paste a key that controls real funds."
             : "Mock chain. Nothing here reaches any network."}
         </p>
       </main>
+
+      <TestnetBadge mode={mode} />
     </div>
   );
 }

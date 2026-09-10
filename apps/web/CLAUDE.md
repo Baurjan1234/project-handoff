@@ -35,8 +35,28 @@ Stack is React, Tailwind and shadcn/ui. Screens get sketched as throwaway HTML
 artifacts, not in a design tool. The review workspace is the one worth mocking carefully.
 
 Build from `docs/ux-philosophy.md` and `docs/design-system.md`. Copy dictionary and the
-two money treatments are binding on camera. Do not add a wallet, seed phrase, or
-requester UI.
+two money treatments are binding on camera. Do not add a wallet or a seed phrase.
+
+**The requester UI line was crossed on 2026-09-10, deliberately and not quietly.**
+This file said "do not add a wallet, seed phrase, or requester UI", and
+`docs/ux-philosophy.md` puts a plain web requester form in Tier 2 with "do not build it
+this week". The seat owner asked for `/requests` three times and reaffirmed after the
+blockers below were put to them, so it was built. **Scope-cut authority is Nasaa's, and
+so is this: P4 rules on whether `/requests` stays, and the honest answer if it goes is to
+delete the route, not to hide the tab.** What was built is narrower than the Tier 2 item:
+
+- **No key was added, and no payment path.** The screen holds exactly the one key this
+  app always held, the connected expert's, and never uses it here. Paying needs two
+  signatures from a requester's own spending key and the panel does not have one.
+- **The create panel makes only the first, free, unpaid call** to `POST /orders`, which
+  needs no key, and hands the finish to `handoff_verify` with the arguments filled in.
+- **The list is a read of the network, not of a server's opinion.** A row exists because
+  this account's own transfer funded the escrow, memoed with the order id.
+
+Two things still block a browser from finishing an order, and both are outside this lane:
+`POST /orders` sends no `Access-Control-Allow-Origin` and answers `OPTIONS` with 405, so
+the preflight fails (P2's lane, or Jack's nginx); and `X402Signer` lives server-side by
+decision and uses Node's `Buffer`, so it does not run in a browser build (P1's lane).
 
 ## Who signs, and how the key gets here
 
@@ -67,12 +87,13 @@ stats) when *nothing to learn* demands one path.
 
 ```
 /                     Inbox       orders I am certified for; claimed-by-others hidden, muted count
+/requests             My requests orders this account paid the escrow for; New request prices one
 /orders/:id           Order       the ask · the vault · Claim → Confirming → Claimed | Someone else claimed this
 /orders/:id/review    Workspace   document on the left, stays put; the right column advances:
                                   notes & defects → verdict → sign → confirming → paid
 ```
 
-Three routes. Everything else is **state rendered inside them**, never a page: lost
+Four routes. Everything else is **state rendered inside them**, never a page: lost
 race, claim expired, deadline passed, payment pending, format-check failure.
 
 - **The document never disappears once opened.** Verdict and Sign happen in the column
@@ -122,3 +143,34 @@ to a screen recipe in `docs/design-system.md`.
 Together with the design system and the flow walkthrough, this is the whole brief. If a
 screen needs something not covered here, ask P4 before building it; scope-cut authority
 sits there.
+
+## Testnet wiring, as built
+
+- `createWebChain`'s testnet branch calls `createExpertChain` from
+  `@handoff/chain/expert`, the only thing this app imports from the chain package. It
+  is a subpath export on purpose: the barrel drags in the platform adapter and the x402
+  signer, which have no business in a browser bundle. The key goes from `SecretKey` into
+  the factory's closure in one read, checked against the mirror node's public key first,
+  so a wrong paste is a `KeyMismatchError` at connect rather than a failed signature on
+  camera.
+- Orders come off the topic through `TestnetOrderSource` (`src/chain/testnetOrders.ts`)
+  and claims are decided by the treaty's `resolveClaims`; the app has no winner rule of
+  its own. A claim is `submitMessage` on the expert's chain, so the payer is the expert.
+- The payout is found, never told: `mirrorPayoutLocator` reads the expert's transfers
+  since the verdict's consensus timestamp and matches the one that moves the order value
+  from the escrow. Read directly from the mirror node, which is allowed; Hashscan is not.
+- Content is `HttpContentStore`: `GET {VITE_CONTENT_URL}/{sha256}` for the ask and the
+  document, `PUT` for the notes, every read checked against its hash. The Supabase
+  service key never reaches this app, so something server-side answers that URL: it is
+  `apps/mcp`, at `/content/{sha256}`, so `VITE_CONTENT_URL=http://localhost:4021/content`
+  against a local resource server. Free, unauthenticated and CORS-open, decided in
+  `../../docs/decisions/2026-09-09-content-reads-are-by-hash-and-unauthenticated.md`; a
+  `PUT` is refused unless the body hashes to the path, and capped at 256KB.
+- The requests screen reads `GET {api}/orders/{id}` and `GET {api}/tags`, both free and
+  unauthenticated, from `VITE_HANDOFF_API_URL`. It defaults to `VITE_CONTENT_URL` without
+  its trailing `/content`, since one process answers both, and refuses to guess when the
+  content URL is shaped otherwise.
+- Testnet needs `VITE_HANDOFF_ORDERS_TOPIC_ID`, `VITE_CONTENT_URL` and
+  `VITE_HANDOFF_ESCROW_ACCOUNT_ID`; `VITE_HEDERA_MIRROR_NODE_URL` is optional and
+  defaults to the public testnet mirror. A URL that mentions mainnet refuses to boot.
+

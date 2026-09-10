@@ -1,50 +1,79 @@
 /**
- * Defect codes as typed, made into defect codes as published.
+ * Issues: what the expert writes, and what actually gets published.
  *
- * Postel's law for the one field the expert types by hand: normalize rather
- * than reject. Uppercase, trimmed, whitespace collapsed into the underscore
- * the placeholder already suggests, so "no monitoring " and "NO_MONITORING"
- * are the same code and neither gets bounced.
+ * The expert writes a sentence per issue. Two different things come out of
+ * it, and keeping them apart is the whole point of this file:
  *
- * The budget is the schema's, in bytes, because HCS limits bytes. The screen
- * says "characters" because that is the word a person counts in, and for the
- * uppercase ASCII codes this convention produces the two are the same number.
- * When they differ (an accented letter costs two), the bytes are what is
- * enforced and the count shown is what is left, so the number on screen
- * never promises room that is not there.
+ * - **The code goes on-chain.** `D-001`, `D-002`, numbered by position, one
+ *   per issue. Short structured codes are what `defects[]` is for, and the
+ *   schema's bounds still decide how many there may be. Renumbering by
+ *   position means the codes are always contiguous, so removing the first
+ *   issue cannot leave a gap or a duplicate.
+ * - **The sentence goes in the notes**, which are stored off-chain and
+ *   delivered to the requester. `composeNotes` is the one place the two are
+ *   joined, so the text the expert sees, the fingerprint on screen and the
+ *   bytes in the content store are the same thing by construction.
+ *
+ * A code without its sentence is unreadable, which is why the sentence
+ * cannot be optional and why it travels with the notes rather than being
+ * dropped. Postel's law for the field a person types: trim it and collapse
+ * runs of whitespace rather than rejecting it.
  */
 
-import { byteLength, DEFECT_CODE_MAX_BYTES, DEFECTS_MAX_ITEMS } from "@handoff/schema";
+import { DEFECTS_MAX_ITEMS } from "@handoff/schema";
 
-export function normalizeDefectCode(input: string): string {
-  return input.trim().toUpperCase().replace(/\s+/g, "_");
+/** Long enough for a sentence, short enough to stay a label. Characters, not bytes. */
+export const ISSUE_TEXT_MAX_CHARS = 120;
+
+export { DEFECTS_MAX_ITEMS };
+
+export function normalizeIssue(input: string): string {
+  return input.trim().replace(/\s+/g, " ").slice(0, ISSUE_TEXT_MAX_CHARS);
 }
 
-export interface DefectBudget {
+/** The published code for the issue at this position. One-based, zero-padded. */
+export function issueCode(index: number): string {
+  return `D-${String(index + 1).padStart(3, "0")}`;
+}
+
+/** What goes in `defects[]`: one short code per issue, in order. */
+export function issueCodes(issues: readonly string[]): readonly string[] {
+  return issues.map((_, index) => issueCode(index));
+}
+
+export interface IssueBudget {
   readonly listed: number;
   readonly maxItems: number;
-  /** Budget left for the code being typed, in the unit the screen names. Negative when over. */
+  readonly full: boolean;
+  /** Characters left in the sentence being typed. Negative when over. */
   readonly charactersLeft: number;
   readonly over: boolean;
-  readonly full: boolean;
 }
 
-export function defectBudget(defects: readonly string[], draft: string): DefectBudget {
-  const used = byteLength(normalizeDefectCode(draft));
+export function issueBudget(issues: readonly string[], draft: string): IssueBudget {
+  const used = draft.trim().length;
   return {
-    listed: defects.length,
+    listed: issues.length,
     maxItems: DEFECTS_MAX_ITEMS,
-    charactersLeft: DEFECT_CODE_MAX_BYTES - used,
-    over: used > DEFECT_CODE_MAX_BYTES,
-    full: defects.length >= DEFECTS_MAX_ITEMS,
+    full: issues.length >= DEFECTS_MAX_ITEMS,
+    charactersLeft: ISSUE_TEXT_MAX_CHARS - used,
+    over: used > ISSUE_TEXT_MAX_CHARS,
   };
 }
 
-/** "2 of 8 · 35 characters left" */
-export function budgetWords(budget: DefectBudget): string {
-  const left =
-    budget.charactersLeft < 0
-      ? `${-budget.charactersLeft} over · shorten this defect code`
-      : `${budget.charactersLeft} characters left`;
-  return `${budget.listed} of ${budget.maxItems} · ${left}`;
+/** "2 of 8 issues" */
+export function issueCountWords(budget: IssueBudget): string {
+  return `${budget.listed} of ${budget.maxItems} ${budget.listed === 1 ? "issue" : "issues"}`;
+}
+
+/**
+ * The notes as they are stored, hashed and delivered: what the expert wrote,
+ * then the issues under their codes. One function, so the fingerprint on
+ * screen is the fingerprint of the bytes that get published.
+ */
+export function composeNotes(notes: string, issues: readonly string[]): string {
+  const written = notes.trim();
+  if (issues.length === 0) return written;
+  const listed = issues.map((text, index) => `${issueCode(index)} ${normalizeIssue(text)}`).join("\n");
+  return written === "" ? `Issues\n${listed}` : `${written}\n\nIssues\n${listed}`;
 }

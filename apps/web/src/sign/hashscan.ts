@@ -27,3 +27,7 @@ export function hashscanTransactionUrl(transactionId: string): string | null {
 export function hashscanAccountUrl(accountId: string): string | null {
   return isMockId(accountId) ? null : `${HASHSCAN_TESTNET_BASE}/account/${accountId}`;
 }
+
+export function hashscanTopicUrl(topicId: string): string | null {
+  return isMockId(topicId) ? null : `${HASHSCAN_TESTNET_BASE}/topic/${topicId}`;
+}

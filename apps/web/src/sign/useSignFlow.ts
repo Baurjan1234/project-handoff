@@ -6,9 +6,19 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { describeError, runSign, type SignRequest, type SignRunDeps } from "./runSign";
+import {
+  describeError,
+  runSign,
+  type SignRequest,
+  type SignRunDeps,
+} from "./runSign";
 import type { OrderForSigning, SignedAttestation } from "./sign";
-import { watchSettlement, type PayoutLocator, type SettlementReader, type SettlementState } from "./settlement";
+import {
+  watchSettlement,
+  type PayoutLocator,
+  type SettlementReader,
+  type SettlementState,
+} from "./settlement";
 
 export type { SignRequest } from "./runSign";
 
@@ -23,7 +33,8 @@ export type SignStatus =
 export interface SignFlowDeps extends SignRunDeps {
   /** Mirror reads. The adapter itself, or in mock mode the adapter behind a simulated lag. */
   readonly reader: SettlementReader;
-  readonly locatePayout: (order: OrderForSigning) => PayoutLocator;
+  /** Where the payout's transaction id comes from. Knows the order and when the verdict was published. */
+  readonly locatePayout: (order: OrderForSigning, signed: SignedAttestation) => PayoutLocator;
 }
 
 export interface SignFlow {
@@ -51,7 +62,11 @@ export function useSignFlow(deps: SignFlowDeps): SignFlow {
   useEffect(() => stopWatching, [stopWatching]);
 
   const watch = useCallback(
-    (order: OrderForSigning, signed: SignedAttestation, resumeFrom?: SettlementState) => {
+    (
+      order: OrderForSigning,
+      signed: SignedAttestation,
+      resumeFrom?: SettlementState,
+    ) => {
       stopWatching();
       const controller = new AbortController();
       watching.current = controller;
@@ -61,7 +76,7 @@ export function useSignFlow(deps: SignFlowDeps): SignFlow {
       watchSettlement({
         attestationTransactionId: signed.transactionId,
         reader: deps.reader,
-        payout: deps.locatePayout(order),
+        payout: deps.locatePayout(order, signed),
         signal: controller.signal,
         ...(resumeFrom === undefined ? {} : { resumeFrom }),
         onChange: (state) => {
@@ -73,7 +88,13 @@ export function useSignFlow(deps: SignFlowDeps): SignFlow {
         // puts the retry on screen instead of a spinner.
         if (controller.signal.aborted) return;
         setSettlement((current) =>
-          current === null ? null : { ...current, phase: "stalled", lastReadError: describeError(error) },
+          current === null
+            ? null
+            : {
+                ...current,
+                phase: "stalled",
+                lastReadError: describeError(error),
+              },
         );
       });
     },
@@ -83,6 +104,7 @@ export function useSignFlow(deps: SignFlowDeps): SignFlow {
   const sign = useCallback(
     async (request: SignRequest) => {
       setStatus({ kind: "signing" });
+
       setPlatformIssue(null);
       lastOrder.current = request.order;
       await runSign(request, deps, {

@@ -87,15 +87,40 @@ describe("configFromEnv", () => {
     }
   });
 
-  it("requires a real topic on testnet, and carries nothing the mock needs", () => {
+  const testnet = {
+    VITE_EXPERT_ACCOUNT_ID: expert,
+    VITE_CHAIN: "testnet",
+    VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242",
+    VITE_CONTENT_URL: "https://content.example/store/",
+    VITE_HANDOFF_ESCROW_ACCOUNT_ID: "0.0.999",
+    VITE_HANDOFF_API_URL: "https://api.example",
+  };
+
+  it("requires the topic, the content URL and the escrow account on testnet, and carries nothing the mock needs", () => {
     expect(() => configFromEnv({ VITE_CHAIN: "testnet" })).toThrow(/VITE_HANDOFF_ORDERS_TOPIC_ID/);
-    expect(
-      configFromEnv({
-        VITE_EXPERT_ACCOUNT_ID: expert,
-        VITE_CHAIN: "testnet",
-        VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242",
-        VITE_MOCK_PRICE_HBAR: "1",
-      }),
-    ).toEqual({ mode: "testnet", expertAccountIdPrefill: expert, ordersTopicId: "0.0.4242" });
+    expect(() => configFromEnv({ VITE_CHAIN: "testnet", VITE_HANDOFF_ORDERS_TOPIC_ID: "0.0.4242" })).toThrow(/VITE_CONTENT_URL/);
+    expect(() => configFromEnv({ ...testnet, VITE_HANDOFF_ESCROW_ACCOUNT_ID: "" })).toThrow(/VITE_HANDOFF_ESCROW_ACCOUNT_ID/);
+    expect(configFromEnv({ ...testnet, VITE_MOCK_PRICE_HBAR: "1" })).toEqual({
+      mode: "testnet",
+      expertAccountIdPrefill: expert,
+      ordersTopicId: "0.0.4242",
+      mirrorNodeUrl: "https://testnet.mirrornode.hedera.com/api/v1",
+      contentUrl: "https://content.example/store",
+      escrowAccountId: "0.0.999",
+      apiUrl: "https://api.example",
+    });
+  });
+
+  it("takes a mirror node from the environment, and refuses one that is not https or mentions mainnet", () => {
+    const custom = configFromEnv({ ...testnet, VITE_HEDERA_MIRROR_NODE_URL: "https://mirror.example/api/v1/" });
+    expect(custom.mode === "testnet" && custom.mirrorNodeUrl).toBe("https://mirror.example/api/v1");
+    expect(() => configFromEnv({ ...testnet, VITE_HEDERA_MIRROR_NODE_URL: "https://mainnet-public.mirrornode.hedera.com/api/v1" })).toThrow(/mainnet/);
+    expect(() => configFromEnv({ ...testnet, VITE_CONTENT_URL: "http://content.example" })).toThrow(/https/);
+    expect(() => configFromEnv({ ...testnet, VITE_CONTENT_URL: "not a url" })).toThrow(/not a URL/);
+  });
+
+  it("allows plain http for a content server on localhost, for development", () => {
+    const dev = configFromEnv({ ...testnet, VITE_CONTENT_URL: "http://localhost:8787/content" });
+    expect(dev.mode === "testnet" && dev.contentUrl).toBe("http://localhost:8787/content");
   });
 });

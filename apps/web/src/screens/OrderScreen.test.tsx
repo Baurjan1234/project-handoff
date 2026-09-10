@@ -51,7 +51,7 @@ describe("OrderScreen", () => {
   });
 
   it("replaces the button when someone else claimed it, with no red and no retry", () => {
-    const html = render({ kind: "open" }, claimFlow({ kind: "decided", confirmation: confirmation("someone-else", { kind: "someone-else" }) }));
+    const html = render({ kind: "open" }, claimFlow({ kind: "decided", confirmation: confirmation("someone-else", { kind: "someone-else", holderSignBy: SIGN_BY, youClaimed: true }) }));
     expect(html).toContain("Someone else claimed this.");
     expect(html).not.toMatch(/<button[^>]*>Claim<\/button>/);
     expect(html).not.toContain('data-variant="destructive"');
@@ -60,7 +60,7 @@ describe("OrderScreen", () => {
   });
 
   it("says the same when the inbox already knew", () => {
-    expect(render({ kind: "someone-else" })).toContain("Someone else claimed this.");
+    expect(render({ kind: "someone-else", holderSignBy: SIGN_BY, youClaimed: true })).toContain("Someone else claimed this.");
   });
 
   it("refuses Claim too close to the deadline, and after it", () => {

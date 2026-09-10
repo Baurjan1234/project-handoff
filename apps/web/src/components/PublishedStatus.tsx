@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import type { ChainMode } from "../chain/config";
 import { MIRROR_EXPECTED_LAG_MS, type SettlementState } from "../sign/settlement";
 import type { OrderForSigning, SignedAttestation } from "../sign/sign";
-import { priceWords } from "./Money";
+import { Amount } from "./Money";
 import { Mono } from "./Mono";
 import { ProofRow } from "./ProofRow";
 
@@ -11,6 +11,10 @@ export const PUBLISHED_STAMP = "Published · signed by you, attributable forever
 
 function seconds(ms: number): string {
   return `${Math.floor(ms / 1000)} s`;
+}
+
+function Label({ children }: { children: string }) {
+  return <p className="text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">{children}</p>;
 }
 
 /**
@@ -43,31 +47,35 @@ export function PublishedStatus({
   const paid = settlement.phase === "settled" && settlement.payout !== null;
   const failed = settlement.phase === "failed";
   const pending = settlement.phase === "stalled";
-  const price = priceWords(order.envelope.price_tinybars);
 
   return (
-    <section className="grid gap-6" aria-live="polite">
-      <div className="grid gap-2 rounded-2xl border border-border/60 bg-card p-5 shadow-xs sm:p-6">
-        <p className="font-serif text-xl leading-tight tracking-tight">{PUBLISHED_STAMP}</p>
-        <p className="text-sm text-muted-foreground">
-          From your account <Mono>{expertAccountId}</Mono>, at <Mono>{signed.consensusTimestamp}</Mono>.
+    <section className="grid gap-4" aria-live="polite">
+      <div className="grid gap-2 rounded-xl border border-border bg-card p-4">
+        <Label>Published</Label>
+        <p className="font-serif text-lg leading-tight font-semibold tracking-tight">{PUBLISHED_STAMP}</p>
+        <p className="text-xs text-muted-foreground">
+          From your account <Mono className="text-xs">{expertAccountId}</Mono>, at <Mono className="text-xs">{signed.consensusTimestamp}</Mono>.
         </p>
         <ProofRow transactionId={signed.transactionId} />
       </div>
 
-      <div className="grid gap-2 rounded-2xl border border-border/60 bg-card p-5 shadow-xs sm:p-6">
+      <div className="grid gap-2 rounded-xl border border-border bg-card p-4">
+        <Label>Payment</Label>
         {paid && settlement.payout !== null ? (
           <>
-            <p className="text-xl font-semibold tracking-tight tabular-nums">
-              Paid · {price} <span className="font-normal text-muted-foreground">to your account</span>{" "}
+            <p className="text-lg font-semibold tracking-tight tabular-nums">
+              <span className="font-mono text-paid">
+                Paid · <Amount tinybars={order.envelope.price_tinybars} className="font-mono text-paid" />
+              </span>{" "}
+              <span className="font-normal text-muted-foreground">to your account</span>{" "}
               <Mono className="text-base">{expertAccountId}</Mono>
             </p>
             <ProofRow transactionId={settlement.payoutTransactionId} at={settlement.payout.consensusTimestamp} />
           </>
         ) : failed ? (
           <>
-            <p className="text-lg font-semibold tracking-tight text-destructive">Could not pay out</p>
-            <p className="text-sm">
+            <p className="text-base font-semibold tracking-tight text-destructive">Could not pay out</p>
+            <p className="text-[13px]">
               Your verdict was published but failed the format check, which should have been caught before
               signing. Contact us.
             </p>
@@ -79,26 +87,26 @@ export function PublishedStatus({
           </>
         ) : pending ? (
           <>
-            <p className="text-lg font-semibold tracking-tight">Published · payment pending</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base font-semibold tracking-tight">Published · payment pending</p>
+            <p className="text-[13px] text-muted-foreground">
               Your verdict is recorded. Payment lands when the service recovers.
               {settlement.lastReadError !== null ? ` Last read failed: ${settlement.lastReadError}.` : ""}
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              <Button type="button" variant="outline" className="rounded-xl" onClick={onCheckAgain}>
+              <Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={onCheckAgain}>
                 Check again
               </Button>
-              <span className="text-xs text-muted-foreground">Nothing is re-signed or re-sent.</span>
+              <span className="text-[11px] text-faint">Nothing is re-signed or re-sent.</span>
             </div>
             <ProofRow transactionId={settlement.payoutTransactionId} reserved />
           </>
         ) : (
           <>
-            <p className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-              <span className="size-2 animate-pulse rounded-full bg-foreground/60" aria-hidden />
+            <p className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden />
               Confirming
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               {verdictSeen ? "Payment is being released. " : "Waiting for the network to confirm. "}
               Usually about {expected} seconds
               {settlement.slow ? ", taking longer than usual" : ""}.{" "}
@@ -110,7 +118,7 @@ export function PublishedStatus({
         )}
 
         {platformIssue !== null && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
+          <p className="text-xs text-urgent">
             {mode === "mock" ? "The stand-in platform failed" : "The platform reported a problem"}: {platformIssue}.
             Your verdict stands regardless.
           </p>

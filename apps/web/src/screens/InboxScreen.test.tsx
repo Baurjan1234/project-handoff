@@ -9,7 +9,7 @@ const yours: InboxEntry = {
   order: order({ title: "Mine already" }),
   claim: { kind: "yours", claimedAtEpochSeconds: 0, signBy: SIGN_BY },
 };
-const theirs: InboxEntry = { order: order({ title: "Not for you" }), claim: { kind: "someone-else" } };
+const theirs: InboxEntry = { order: order({ title: "Not for you" }), claim: { kind: "someone-else", holderSignBy: SIGN_BY, youClaimed: false } };
 const expired: InboxEntry = {
   order: order({ title: "Too late", envelope: { ...order().envelope, deadline: utc(new Date(2026, 8, 8, 17, 0, 0)) } }),
   claim: { kind: "open" },
@@ -42,8 +42,32 @@ describe("InboxScreen", () => {
   it("says a sentence when empty, and a skeleton while loading", () => {
     expect(renderToStaticMarkup(<InboxScreen entries={[]} now={NOW} onOpen={() => {}} />)).toContain("No work right now.");
     const loading = renderToStaticMarkup(<InboxScreen entries={null} now={NOW} onOpen={() => {}} />);
-    expect(loading).toContain("animate-pulse");
+    expect(loading).toContain("aria-busy");
     expect(loading).not.toContain("No work");
+    // An empty list and a list still arriving must not look the same.
+    expect(loading).not.toContain("No work right now.");
+  });
+
+  it("loads as rows, not as bars: the placeholder is the row it becomes", () => {
+    const loading = renderToStaticMarkup(<InboxScreen entries={null} now={NOW} onOpen={() => {}} />);
+    // Three rows, each carrying the row's own parts: dot, title, three meta
+    // facts, the credential pill, the amount over its label, and the button.
+    expect(loading.match(/class="skeleton/g)?.length).toBe(3 * 9);
+    expect(loading.match(/<li/g)?.length).toBe(3);
+    // The heading is true before any order lands, so it is printed, not greyed.
+    expect(loading).toContain("Open reviews");
+    expect(loading).toContain("Pick one to begin");
+    // Rule 3: nothing spins, and the wait says so once for a screen reader.
+    expect(loading).not.toMatch(/animate-spin|Loading\.\.\./);
+    expect(loading).toContain("Looking for reviews you can take.");
+    expect(expectNoBannedWords(loading)).toEqual([]);
+  });
+
+  it("staggers the sweep so the list reads as one wave", () => {
+    const loading = renderToStaticMarkup(<InboxScreen entries={null} now={NOW} onOpen={() => {}} />);
+    expect(loading).toContain("--skeleton-delay:0ms");
+    expect(loading).toContain("--skeleton-delay:140ms");
+    expect(loading).toContain("--skeleton-delay:280ms");
   });
 
   it("takes the task line for the row, without the FAKE label", () => {

@@ -37,6 +37,24 @@ destinations, one line each, not a reading list.
 
 Mainnet endpoints are deliberately absent. Hard rule 5.
 
+## Ours — running now
+
+| What | Where |
+|---|---|
+| Resource server, x402-gated | https://api.the-handoff.xyz — `/health`, `/tags`, `/orders`, `/content/{sha256}` |
+| Expert app | https://the-handoff.xyz |
+| Docs site | https://docs.the-handoff.xyz |
+| MCP endpoint, for a client's `.mcp.json` (SSE) | https://the-handoff.xyz/mcp |
+| MCP client on npm | https://www.npmjs.com/package/@hedera-handoff/mcp-client |
+| Orders topic on Hashscan | https://hashscan.io/testnet/topic/0.0.10421643 |
+| Escrow account on Hashscan | https://hashscan.io/testnet/account/0.0.10422187 |
+
+The expert app links to the docs site from its navbar (`apps/web/src/components/Navbar.tsx`).
+
+The resource server runs as one systemd process on the team VPS and must stay one —
+payout bookkeeping is per-process. Deploy shape and why:
+`decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
+
 ## Tooling
 
 | What | Where |
@@ -47,28 +65,29 @@ Mainnet endpoints are deliberately absent. Hard rule 5.
 | Context7 overview | https://www.trevorlasn.com/blog/context7-mcp |
 | Supabase dashboard | https://supabase.com/dashboard |
 
-## World — TENTATIVE, parked
+## World — Tier 2, post-freeze track
 
-**Nothing here is in scope.** Parked pending the Sep 9 gate, NAS-34, and revisited only if
-that gate passes. Reasoning in `decisions/2026-09-05-world-selfie-check-gated.md`. Kept
-here so a decision to proceed costs minutes rather than an afternoon of re-research.
+**Gate passed Sep 9.** World ID Selfie Check is go, as a post-freeze parallel track
+(Sep 11–13). Decision: `decisions/2026-09-09-world-selfie-check-goes-ahead-post-freeze.md`.
+Sandbox access re-requested Sep 9, invitations sent to team members.
 
 | What | Where |
 |---|---|
 | The requirements themselves | https://ethglobal.com/events/ethonline2026/prizes/world |
 | Sandbox access form | https://forms.gle/mqbaiwMvX5MzmKdY8 |
+| World docs root | https://docs.world.org/ |
 | Selfie Check credential | https://docs.world.org/world-id/credentials/11 |
 | Selfie Check sandbox testing | https://docs.world.org/world-id/sandbox/testing-selfie-check |
 | IDKit, Selfie Check beta | https://docs.world.org/world-id/idkit/credentials#selfie-check-beta |
 | World developer portal | https://developer.world.org |
+| World App ID | `app_341b64cd709768b28bdc499d24b786bc` |
+| World RP ID (action) | `rp_7fc1e764680cd730` |
+| AgentKit integration guide | https://docs.world.org/agents/agent-kit/integrate |
+| AgentBook registration (step 2) | https://docs.world.org/agents/agent-kit/integrate#step-2-register-the-agent-in-agentbook |
 
-**Deliberately excluded: everything AgentKit.** That prize is Continuity-track only and we
-are Building from Scratch, so those docs are noise. If somebody adds them later, this line
-is why they should not.
-
-**Notebook trigger.** These stay out of the shared notebook until the gate passes, so it
-keeps answering Hedera and x402 questions rather than diluting. If it passes, add the four
-`docs.world.org` and `developer.world.org` rows and nothing else.
+**AgentKit Continuity prize is unavailable** — Continuity-track only and we are Building
+from Scratch. The AgentKit docs are kept here as reference for the AgentBook registration
+pattern, which may inform how we register the expert's identity, not as a build target.
 
 ## Event
 

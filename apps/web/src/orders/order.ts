@@ -14,11 +14,14 @@ export interface ExpertOrder extends OrderForSigning {
   readonly title: string;
   /** "What the requester is asking." The task description, from the content store. */
   readonly ask: string;
-  /** How big the document is, for the row. Its size is not access-controlled; its text is. */
-  readonly documentWords: number;
+  /**
+   * How big the document is, for the row. Null when the store cannot say
+   * before the claim; the workspace counts the document itself once it has it.
+   */
+  readonly documentWords: number | null;
 }
 
-/** What the mirror says about who holds this order. */
+/** What the network says about who holds this order, per the treaty's claim rule. */
 export type ClaimState =
   | { readonly kind: "open" }
   | {
@@ -28,7 +31,20 @@ export type ClaimState =
       /** Never past the order deadline. */
       readonly signBy: string;
     }
-  | { readonly kind: "someone-else" };
+  | {
+      readonly kind: "someone-else";
+      /**
+       * When the holder's window runs out. At that point the order returns to
+       * the inbox and anyone may claim it again, first come. A claim that
+       * raced and lost holds no position and no priority: the treaty's rule
+       * says a claim that lost stays lost, so nothing here is a queue.
+       */
+      readonly holderSignBy: string;
+      /** This expert claimed it and lost. True only when the topic says so. */
+      readonly youClaimed: boolean;
+    }
+  /** The claim window expired twice. Nobody can claim it again. */
+  | { readonly kind: "closed" };
 
 export interface InboxEntry {
   readonly order: ExpertOrder;
@@ -38,4 +54,23 @@ export interface InboxEntry {
 export function countWords(text: string): number {
   const words = text.trim().split(/\s+/).filter((w) => w.length > 0);
   return words.length;
+}
+
+/** The ask's task line, without its FAKE label, for a row or a title. */
+export function askSummary(ask: string): string {
+  const lines = ask
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !/^FAKE\b/.test(l));
+  const task = lines.find((l) => /^Task\b/i.test(l)) ?? lines[0] ?? "";
+  return task.replace(/^Task\s*(\(FAKE\))?\s*:\s*/i, "");
+}
+
+/** A title when the store gave none: the ask's first sentence, cut to a line. */
+export function titleFromAsk(ask: string, orderId: string): string {
+  const summary = askSummary(ask);
+  if (summary === "") return `Order ${orderId}`;
+  const sentence = summary.split(/(?<=[.!?])\s/)[0] ?? summary;
+  const title = sentence.replace(/[.!?]$/, "");
+  return title.length > 72 ? `${title.slice(0, 69).trimEnd()}…` : title;
 }

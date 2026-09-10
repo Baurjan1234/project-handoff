@@ -72,14 +72,14 @@ const keyInput = (html: string) => html.match(/<input[^>]*id="connect-private-ke
 describe("ConnectCard on the mock", () => {
   it("asks for the account id only and says nothing is signed", () => {
     const html = card({ mode: "mock", keyShape: null });
-    expect(html).toContain("Connect your account");
+    expect(html).toContain("Sign in as an expert");
     expect(html).toContain("MOCK CHAIN");
     expect(html).toContain("On the mock chain nothing is real.");
     expect(html).toContain("Nothing is signed here");
     expect(html).not.toContain("Hedera testnet account");
     expect(html).not.toContain("connect-private-key");
     expect(html).not.toContain("Private key");
-    expect(html).toContain(`Connect as ${ACCOUNT}`);
+    expect(html).toContain(`Continue as ${ACCOUNT}`);
     // The button is live. (Tailwind's `disabled:` variants are class names, not the attribute.)
     expect(html).not.toMatch(/<button[^>]*\sdisabled=""/);
   });
@@ -112,7 +112,7 @@ describe("ConnectCard on testnet", () => {
     const html = card({ lookup: found });
     expect(html).toMatch(/id="connect-account-id"[^>]*value="0\.0\.12345"/);
     expect(html).not.toMatch(/id="connect-account-id"[^>]*inputmode=/i);
-    expect(html).toContain(`Connect as ${ACCOUNT}`);
+    expect(html).toContain(`Continue as ${ACCOUNT}`);
     expect(html).toContain(`hashscan.io/testnet/account/${ACCOUNT}`);
   });
 
@@ -132,7 +132,7 @@ describe("ConnectCard on testnet", () => {
     expect(unreachable).toContain("Retry");
     // A DER key through an unreachable mirror node: warned, not blocked.
     expect(unreachable).toContain("the first signature will fail and say so");
-    expect(unreachable).toContain(`Connect as ${ACCOUNT}`);
+    expect(unreachable).toContain(`Continue as ${ACCOUNT}`);
   });
 
   it("disables the button and lists why, in the expert's order", () => {
@@ -141,7 +141,7 @@ describe("ConnectCard on testnet", () => {
       keyShape: null,
       assessment: assessConnect({ mode: "testnet", accountIdText: "", keyShape: null, lookup: null }),
     });
-    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Connect<\/button>/);
+    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Continue<\/button>/);
     expect(html).toContain("Enter your account id, like 0.0.12345.");
     expect(html).toContain("Paste the private key of the account above.");
   });
@@ -201,7 +201,7 @@ describe("ConnectScreen", () => {
     const html = renderToStaticMarkup(
       <ConnectScreen mode="mock" prefill={ACCOUNT} notice={null} onConnect={async () => ({ ok: true })} />,
     );
-    expect(html).toContain(`Connect as ${ACCOUNT}`);
+    expect(html).toContain(`Continue as ${ACCOUNT}`);
     expect(html).not.toContain("connect-private-key");
   });
 

@@ -1,22 +1,32 @@
-import { hashscanAccountUrl, hashscanTransactionUrl } from "../sign/hashscan";
+import { Link2 } from "lucide-react";
+import { hashscanAccountUrl, hashscanTopicUrl, hashscanTransactionUrl } from "../sign/hashscan";
 
 /**
  * Garnish. Renders nothing for a mock id, because mock ids 404 and must never
  * be on camera, and says out loud that Hashscan may lag behind what the app
  * actually reads.
  */
-export function HashscanLink({ kind, id }: { kind: "transaction" | "account"; id: string }) {
-  const href = kind === "transaction" ? hashscanTransactionUrl(id) : hashscanAccountUrl(id);
+export function HashscanLink({
+  kind,
+  id,
+  label = "View on Hashscan",
+}: {
+  kind: "transaction" | "account" | "topic";
+  id: string;
+  label?: string;
+}) {
+  const href = kind === "transaction" ? hashscanTransactionUrl(id) : kind === "account" ? hashscanAccountUrl(id) : hashscanTopicUrl(id);
   if (href === null) return null;
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="text-[0.6875rem] text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground"
+      className="inline-flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-primary"
       title="Hashscan is a viewer. It can lag behind what this screen reads."
     >
-      View on Hashscan ↗
+      <Link2 className="size-[11px]" aria-hidden />
+      {label}
     </a>
   );
 }

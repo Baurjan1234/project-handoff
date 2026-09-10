@@ -56,6 +56,13 @@ Newest last.
 - [Platform-key env names live in the app, chain exports a string-taking factory](2026-09-08-platform-key-env-names-live-in-the-app.md) — closes the layout-rule gap the cutover hit
 - [Custody, email onboarding and non-Hedera wallets stay out](2026-09-08-custody-onboarding-and-wallets-stay-out.md) — three already ruled, one open question for **Nasaa**
 
+### 2026-09-09
+
+- [World Selfie Check: go, but after the Sep 11 freeze](2026-09-09-world-selfie-check-goes-ahead-post-freeze.md) — supersedes the Sep 5 gate, World ID is now Tier 2
+- [The requester signs the fund lock; the platform stops funding the escrow](2026-09-08-requester-signs-the-fund-lock.md) — closes a gap the one-shared-escrow decision left open, **breaking change to `ChainAdapter`**
+- [Content reads and writes are by-hash and unauthenticated](2026-09-09-content-reads-are-by-hash-and-unauthenticated.md) — unblocks the expert app's document, adds a clause to Known limits
+
 ### 2026-09-10
 
-- [Registration exists, keyed on the Hedera account id](2026-09-10-registration-keyed-on-the-hedera-account.md) — supersedes item 2 of the entry above, two open questions for **Nasaa**
+- [One hosted resource server, and a client published to npm](2026-09-10-one-hosted-resource-server-and-a-published-client.md) — supersedes the Sep 8 "nothing needs deploying" finding; ordering no longer needs a clone
+- [Registration exists, keyed on the Hedera account id](2026-09-10-registration-keyed-on-the-hedera-account.md) — supersedes item 2 of the Sep 8 custody ruling, two open questions for **Nasaa**

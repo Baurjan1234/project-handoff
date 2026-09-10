@@ -40,7 +40,6 @@ const deps: ServerDeps = {
   content: new InMemoryContentStore(),
   ordersTopicId: "0.0.orders",
   attestationsTopicId: "0.0.attestations",
-  requesterAccountId: "0.0.10376659",
   certTags: [{ code: "cpa-us", label: "Licensed reviewer" }],
 };
 
@@ -57,16 +56,42 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
+/** Enough of an order that the 402 can price it and build a lock for it. */
+function orderBody(): string {
+  return JSON.stringify({
+    requester_account_id: "0.0.10376659",
+    spec: "Review the attached report.",
+    artifact_base64: Buffer.from("FAKE report.").toString("base64"),
+    cert_tag: "cpa-us",
+    price_hbar: "200",
+    deadline: `${new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 19)}Z`,
+    claim_timeout_seconds: 3600,
+  });
+}
+
 describe("the socket layer", () => {
   it("serves a real 402 over HTTP, header and body agreeing", async () => {
-    const response = await fetch(`${origin}/orders`, { method: "POST", body: "{}" });
+    // A real order body, because the 402 now has to build a fund lock and
+    // cannot do that without a price, a requester and an order id. An empty
+    // body is a 400 — see the next test.
+    const response = await fetch(`${origin}/orders`, { method: "POST", body: orderBody() });
 
     expect(response.status).toBe(402);
     const header = response.headers.get(PAYMENT_REQUIRED_HEADER.toLowerCase());
     expect(header).toBeTruthy();
-    expect(JSON.parse(Buffer.from(header ?? "", "base64").toString("utf8"))).toEqual(
-      await response.json(),
-    );
+
+    // The header is the x402 challenge and the body is its v1 fallback plus
+    // the fund lock, which is ours and not @x402/core's. Everything the two
+    // share still agrees; `accepts` is what a client reads.
+    const { fund_lock: fundLock, ...challenge } = (await response.json()) as Record<string, unknown>;
+    expect(JSON.parse(Buffer.from(header ?? "", "base64").toString("utf8"))).toEqual(challenge);
+    expect(fundLock).toMatchObject({ order_id: expect.stringMatching(/^ord_/) });
+  });
+
+  it("refuses a body it cannot price, rather than quoting for it", async () => {
+    const response = await fetch(`${origin}/orders`, { method: "POST", body: "{}" });
+
+    expect(response.status).toBe(400);
   });
 
   it("serves health", async () => {

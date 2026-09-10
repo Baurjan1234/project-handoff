@@ -1,6 +1,6 @@
 import { PrivateKey } from "@hiero-ledger/sdk";
 import { describe, expect, it } from "vitest";
-import { createExpertChain } from "./expert-chain.js";
+import { createExpertChain, KeyMismatchError } from "./expert-chain.js";
 
 /**
  * The point of these tests is the leak checks. apps/web holds this object in React
@@ -24,7 +24,7 @@ describe("createExpertChain", () => {
     chain.close();
   });
 
-  it("exposes only the expert's slice — no signSchedule, createSchedule, deleteSchedule or lockFunds", () => {
+  it("exposes only the expert's slice — no signSchedule, createSchedule, deleteSchedule or fund lock", () => {
     const { chain } = build();
     const keys = Object.keys(chain).sort();
 
@@ -32,7 +32,8 @@ describe("createExpertChain", () => {
     expect(keys).not.toContain("signSchedule");
     expect(keys).not.toContain("createSchedule");
     expect(keys).not.toContain("deleteSchedule");
-    expect(keys).not.toContain("lockFunds");
+    expect(keys).not.toContain("buildFundLock");
+    expect(keys).not.toContain("submitFundLock");
     chain.close();
   });
 
@@ -84,5 +85,59 @@ describe("createExpertChain", () => {
         mirrorNodeUrl: "https://testnet.mirrornode.hedera.com/api/v1",
       }),
     ).toThrow();
+  });
+});
+
+describe("createExpertChain, the key against the account", () => {
+  const mirrorNodeUrl = "https://testnet.mirrornode.hedera.com/api/v1";
+
+  it("accepts a raw hex key when told the curve, and refuses one when not", () => {
+    const ecdsa = PrivateKey.generateECDSA();
+    const chain = createExpertChain({
+      accountId: "0.0.12345",
+      privateKeyDer: ecdsa.toStringRaw(),
+      keyType: "ECDSA_SECP256K1",
+      mirrorNodeUrl,
+    });
+    expect(chain.network).toBe("testnet");
+    chain.close();
+
+    expect(() =>
+      createExpertChain({ accountId: "0.0.12345", privateKeyDer: ecdsa.toStringRaw(), mirrorNodeUrl }),
+    ).toThrow(/which curve/);
+  });
+
+  it("accepts the key that produces the account's public key, raw or DER, with or without 0x", () => {
+    const key = PrivateKey.generateED25519();
+    for (const expected of [key.publicKey.toStringRaw(), key.publicKey.toStringDer(), `0x${key.publicKey.toStringRaw()}`]) {
+      const chain = createExpertChain({
+        accountId: "0.0.777",
+        privateKeyDer: key.toStringDer(),
+        expectedPublicKey: expected,
+        mirrorNodeUrl,
+      });
+      chain.close();
+    }
+  });
+
+  it("refuses a key that does not belong to the account, naming the account and never the key", () => {
+    const pasted = PrivateKey.generateECDSA();
+    const actual = PrivateKey.generateECDSA();
+    let caught: unknown;
+    try {
+      createExpertChain({
+        accountId: "0.0.777",
+        privateKeyDer: pasted.toStringDer(),
+        expectedPublicKey: actual.publicKey.toStringRaw(),
+        mirrorNodeUrl,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(KeyMismatchError);
+    const message = (caught as Error).message;
+    expect(message).toContain("0.0.777");
+    expect(message).not.toContain(pasted.toStringRaw());
+    expect(message).not.toContain(pasted.toStringDer().slice(-16));
   });
 });

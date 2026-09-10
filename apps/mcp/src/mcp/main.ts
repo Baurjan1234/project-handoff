@@ -9,12 +9,19 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpServer } from "./server.js";
 import { fetchTags, UnwiredSigner, type PaymentSigner, type PreflightCheck } from "./client.js";
 import { createX402Signer } from "@handoff/chain";
+import { formatTinybars, hbarToTinybars } from "@handoff/schema";
 import { preflight } from "../preflight.js";
 import type { CertTagOption } from "../config.js";
 
-const baseUrl = process.env["HANDOFF_SERVICE_URL"]?.trim() ?? "http://localhost:4021";
+// `||`, not `??`: `.env.example` ships these keys with an empty value, and an
+// empty string is a set variable. Under `??` the default never fires and the
+// base url becomes "", which fails every fetch with "Failed to parse URL from
+// /tags" — a message that names neither the variable nor the file. The
+// resource-server half in ../config.ts already reads it this way, and its
+// comment says one variable moves both.
+const baseUrl = process.env["HANDOFF_SERVICE_URL"]?.trim() || "http://localhost:4021";
 const mirrorNodeUrl =
-  process.env["HEDERA_MIRROR_NODE_URL"]?.trim() ?? "https://testnet.mirrornode.hedera.com/api/v1";
+  process.env["HEDERA_MIRROR_NODE_URL"]?.trim() || "https://testnet.mirrornode.hedera.com/api/v1";
 
 // stderr, because stdout is the JSON-RPC channel.
 console.error(`handoff_verify -> ${baseUrl}`);
@@ -53,12 +60,17 @@ if (payerAccountId && payerKey && !isPlaceholder(payerAccountId)) {
       maxAmountTinybars: process.env["X402_MAX_FEE_TINYBARS"]?.trim() || "100000000",
     });
     // The fee is the server's to state, so the amount comes from the quote and
-    // never from configuration here. The order value is the caller's and is
-    // not this account's problem: the escrow is funded server-side from the
-    // requester account, so this checks the fee alone.
-    check = async (requirements) =>
+    // never from configuration here. The order value is the caller's and comes
+    // from the order they just asked for — this account funds the escrow with
+    // its own signature now, so both come out of the same balance and both are
+    // checked before anything is signed.
+    check = async (requirements, priceHbar) =>
       preflight(
-        { payerAccountId, feeTinybars: requirements.amount },
+        {
+          payerAccountId,
+          feeTinybars: requirements.amount,
+          escrowTinybars: formatTinybars(hbarToTinybars(priceHbar)),
+        },
         { mirrorNodeUrl },
       );
     console.error(`x402 payer: ${payerAccountId}`);
@@ -118,9 +130,17 @@ if (certTags.length > 0) {
   console.error(`credentials: ${certTags.map((tag) => tag.code).join(", ")}`);
 }
 
+const requesterAccountId =
+  payerAccountId && !isPlaceholder(payerAccountId) ? payerAccountId : undefined;
+
 serveStdio(() =>
   createMcpServer({
     baseUrl,
+    // The account that signs the fee is the account that funds the escrow.
+    // One variable, both uses, so they cannot drift apart. Absent when no
+    // payer is wired up: that build's signer refuses at the 402, so the body
+    // is never parsed and there is no account to leave out.
+    ...(requesterAccountId === undefined ? {} : { requesterAccountId }),
     signer,
     certTags,
     ...(check === undefined ? {} : { preflight: check }),

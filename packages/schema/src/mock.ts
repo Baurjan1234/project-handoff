@@ -15,6 +15,7 @@
  * them and that logic has to be exercised.
  */
 
+import { assertFundLockMemoFits, FundLockError, FundLockSubmitError } from "./adapter.js";
 import type {
   ChainAdapter,
   ConsensusRef,
@@ -27,7 +28,119 @@ import type {
   TopicMessage,
   TransactionRecord,
   TxRef,
+  UnsignedFundLock,
 } from "./adapter.js";
+import { formatTinybars, parseTinybars } from "./money.js";
+import {
+  assertFundLockMatches,
+  FUND_LOCK_VALID_SECONDS,
+  utcSecondsFrom,
+  type FundLockFacts,
+  type FundLockLeg,
+} from "./fund-lock.js";
+
+/** One hbar leg. Same shape the shared whitelist reads. */
+type FakeHbarTransfer = FundLockLeg;
+
+/**
+ * The mock's stand-in for a frozen `TransferTransaction`. Never protobuf.
+ *
+ * **A list, not a from/to pair.** A single pair cannot express the tamper this
+ * whitelist exists for: a second credit riding along to an account of the
+ * caller's choosing, with the debit inflated to keep the legs netting to zero.
+ * While the shape was a pair, `extra-transfers` was a rejection reason nothing
+ * could produce, and a payload carrying extra legs validated and submitted.
+ */
+interface FakeTransfer {
+  readonly kind: string;
+  readonly feePayer: string;
+  readonly transfers: readonly FakeHbarTransfer[];
+  /** Carries `order_id`. The only thing binding a lock to one order. */
+  readonly memo: string;
+  readonly validUntil: string;
+  readonly signedBy: readonly string[];
+}
+
+/**
+ * The one escrow account, as decided in
+ * `docs/decisions/2026-09-07-one-shared-escrow-account-this-week.md`.
+ *
+ * A per-order account was easier to write and made the whitelist look
+ * stronger than it is: `to` matching `MOCK-escrow-${orderId}` bound the lock
+ * to an order for free, and the real adapter credits one constant account, so
+ * that binding does not exist there. The memo does it instead, here and in the
+ * real adapter both.
+ */
+export const MOCK_ESCROW_ACCOUNT_ID = "MOCK-escrow-shared";
+
+function encodeFakeTransfer(transfer: FakeTransfer): string {
+  return btoa(JSON.stringify(transfer));
+}
+
+function isHbarTransfer(value: unknown): value is FakeHbarTransfer {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate["accountId"] === "string" && typeof candidate["amountTinybars"] === "string";
+}
+
+function isFakeTransfer(value: unknown): value is FakeTransfer {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate["kind"] === "string" &&
+    typeof candidate["feePayer"] === "string" &&
+    Array.isArray(candidate["transfers"]) &&
+    candidate["transfers"].every(isHbarTransfer) &&
+    typeof candidate["memo"] === "string" &&
+    typeof candidate["validUntil"] === "string" &&
+    Array.isArray(candidate["signedBy"]) &&
+    candidate["signedBy"].every((entry) => typeof entry === "string")
+  );
+}
+
+function decodeFakeTransfer(transactionBytes: string): FakeTransfer {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(atob(transactionBytes));
+  } catch {
+    throw new FundLockError("unparseable", "the signed fund lock is not decodable");
+  }
+  if (!isFakeTransfer(parsed)) {
+    throw new FundLockError("unparseable", "the signed fund lock is missing fields");
+  }
+  // Whether these bytes are a transfer at all is the decoder's question, not
+  // the whitelist's — the real adapter answers it by asking the SDK what it
+  // parsed. Both raise `not-a-transfer` before any facts exist.
+  if (parsed.kind !== "transfer") {
+    throw new FundLockError("not-a-transfer", `expected a transfer, got ${parsed.kind}`);
+  }
+  return parsed;
+}
+
+/** The mock's decoded transfer, in the shape the shared whitelist reads. */
+function factsOf(transfer: FakeTransfer): FundLockFacts {
+  return {
+    feePayer: transfer.feePayer,
+    transfers: transfer.transfers,
+    memo: transfer.memo,
+    validUntil: transfer.validUntil,
+    signedBy: transfer.signedBy,
+    // The mock invents its own signatures, so it can name who signed. The real
+    // adapter cannot — see `FundLockFacts.signerIdentity`.
+    signerIdentity: "account",
+  };
+}
+
+/**
+ * The requester side of the exchange, so a test or the web demo seeder can
+ * play it. In the real flow this happens on the requester's machine with the
+ * key that already signs the x402 fee, and the server never has it.
+ */
+export function signFundLock(transactionBytes: string, signerAccountId: string): string {
+  const transfer = decodeFakeTransfer(transactionBytes);
+  if (transfer.signedBy.includes(signerAccountId)) return transactionBytes;
+  return encodeFakeTransfer({ ...transfer, signedBy: [...transfer.signedBy, signerAccountId] });
+}
 
 export class MockChainError extends Error {
   constructor(message: string) {
@@ -63,6 +176,8 @@ export class MockChainAdapter implements ChainAdapter {
   readonly #schedules = new Map<string, MockSchedule>();
   readonly #scheduleKeys = new Map<string, string>();
   readonly #transactions = new Map<string, TransactionRecord>();
+  /** Signed fund-lock bytes to the id they were submitted as. Replay, as the network sees it. */
+  readonly #fundLocks = new Map<string, string>();
 
   constructor(options: MockChainAdapterOptions = {}) {
     this.#now = options.now ?? Date.now;
@@ -119,10 +234,78 @@ export class MockChainAdapter implements ChainAdapter {
     return options.limit === undefined ? found : found.slice(0, options.limit);
   }
 
-  async lockFunds(params: LockFundsParams): Promise<EscrowRef> {
+  /**
+   * Builds the transfer the requester will sign. See
+   * `RequesterFundedEscrow`.
+   *
+   * The mock's "bytes" are base64 JSON, not protobuf, and its signature is a
+   * marker rather than a real one. That is on purpose: what this fixture has
+   * to exercise is the *shape* of the exchange and every way it can be
+   * refused, so `submitFundLock` has something to reject. Signature
+   * cryptography belongs to the network and to `packages/chain`.
+   */
+  async buildFundLock(params: LockFundsParams): Promise<UnsignedFundLock> {
+    // Before anything is frozen. An id that will not fit the memo is a lock
+    // that cannot be built, and the requester should learn that here rather
+    // than as MEMO_TOO_LONG at precheck after they have paid the x402 fee.
+    const memo = assertFundLockMemoFits(params.orderId);
+    const validUntil = utcSecondsFrom(this.#now() + FUND_LOCK_VALID_SECONDS * 1000);
+    const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
+
+    return {
+      escrowAccountId,
+      memo,
+      transactionBytes: encodeFakeTransfer({
+        kind: "transfer",
+        feePayer: params.requesterAccountId,
+        transfers: [
+          {
+            accountId: params.requesterAccountId,
+            amountTinybars: formatTinybars(-parseTinybars(params.amountTinybars)),
+          },
+          { accountId: escrowAccountId, amountTinybars: params.amountTinybars },
+        ],
+        memo,
+        validUntil,
+        signedBy: [],
+      }),
+      validUntil,
+    };
+  }
+
+  async submitFundLock(
+    expected: LockFundsParams,
+    signedTransactionBytes: string,
+  ): Promise<EscrowRef> {
+    assertFundLockMemoFits(expected.orderId);
+    const escrowAccountId = MOCK_ESCROW_ACCOUNT_ID;
+    const transfer = decodeFakeTransfer(signedTransactionBytes);
+
+    assertFundLockMatches(factsOf(transfer), expected, escrowAccountId, this.#now());
+
+    // Nothing above remembers an in-flight transaction — that is the point of
+    // the stateless shape — so replay is the network's to refuse, and it does:
+    // a transaction id resubmitted inside the 180-second receipt period comes
+    // back DUPLICATE_TRANSACTION. Modelled here so a caller written against
+    // this interface meets the case before testnet does.
+    //
+    // Keyed on the signed bytes. Real Hedera keys on payer plus validStart;
+    // `signFundLock` is idempotent, so for the replay this guards the two
+    // agree.
+    const alreadySubmitted = this.#fundLocks.get(signedTransactionBytes);
+    if (alreadySubmitted !== undefined) {
+      throw new FundLockSubmitError(
+        "DUPLICATE_TRANSACTION",
+        alreadySubmitted,
+        `this fund lock was already submitted as ${alreadySubmitted}; the escrow is ` +
+          `funded and locking again would take the requester's money twice`,
+      );
+    }
+
     const transactionId = this.#nextTxId();
+    this.#fundLocks.set(signedTransactionBytes, transactionId);
     this.#record(transactionId, this.#timestamp());
-    return { transactionId, escrowAccountId: `MOCK-escrow-${params.orderId}` };
+    return { transactionId, escrowAccountId };
   }
 
   async createSchedule(params: CreateScheduleParams): Promise<ScheduleRef> {

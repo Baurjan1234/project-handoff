@@ -1,40 +1,68 @@
 import { describe, expect, it } from "vitest";
-import { DEFECT_CODE_MAX_BYTES, DEFECTS_MAX_ITEMS, DefectCode } from "@handoff/schema";
-import { budgetWords, defectBudget, normalizeDefectCode } from "./defects";
+import { DEFECTS_MAX_ITEMS } from "@handoff/schema";
+import {
+  composeNotes,
+  issueBudget,
+  issueCode,
+  issueCodes,
+  issueCountWords,
+  ISSUE_TEXT_MAX_CHARS,
+  normalizeIssue,
+} from "./defects";
 
-describe("normalizeDefectCode", () => {
-  it("uppercases, trims and collapses spaces instead of rejecting", () => {
-    expect(normalizeDefectCode("  no   monitoring ")).toBe("NO_MONITORING");
-    expect(normalizeDefectCode("fn-2-date")).toBe("FN-2-DATE");
-    expect(normalizeDefectCode("NO_MONITORING")).toBe("NO_MONITORING");
+describe("issueCode", () => {
+  it("numbers by position, so codes are contiguous whatever is removed", () => {
+    expect(issueCode(0)).toBe("D-001");
+    expect(issueCode(9)).toBe("D-010");
+    expect(issueCodes(["a", "b", "c"])).toEqual(["D-001", "D-002", "D-003"]);
+    // Remove the first: the rest renumber rather than leaving a gap.
+    expect(issueCodes(["b", "c"])).toEqual(["D-001", "D-002"]);
   });
 
-  it("produces a code the verifier accepts", () => {
-    expect(DefectCode.safeParse(normalizeDefectCode(" missing sig ")).success).toBe(true);
+  it("produces codes the verifier accepts, well inside the schema's bound", async () => {
+    const { DefectCode } = await import("@handoff/schema");
+    expect(DefectCode.safeParse(issueCode(0)).success).toBe(true);
+    expect(issueCodes(Array.from({ length: DEFECTS_MAX_ITEMS }, (_, i) => `issue ${i}`))).toHaveLength(DEFECTS_MAX_ITEMS);
   });
 });
 
-describe("defectBudget", () => {
-  it("counts in characters, from the schema's bound, never a number of its own", () => {
-    const budget = defectBudget(["A", "B"], "NO_MONITORING");
+describe("normalizeIssue", () => {
+  it("trims and collapses instead of rejecting, and never exceeds the cap", () => {
+    expect(normalizeIssue("  Missing   receipt  ")).toBe("Missing receipt");
+    expect(normalizeIssue("x".repeat(ISSUE_TEXT_MAX_CHARS + 20))).toHaveLength(ISSUE_TEXT_MAX_CHARS);
+  });
+});
+
+describe("issueBudget", () => {
+  it("counts issues against the schema's bound and characters against the sentence cap", () => {
+    const budget = issueBudget(["one", "two"], "Missing receipt");
     expect(budget.maxItems).toBe(DEFECTS_MAX_ITEMS);
-    expect(budget.charactersLeft).toBe(DEFECT_CODE_MAX_BYTES - "NO_MONITORING".length);
-    expect(budgetWords(budget)).toBe(`2 of ${DEFECTS_MAX_ITEMS} · ${DEFECT_CODE_MAX_BYTES - 13} characters left`);
-    expect(budgetWords(budget)).not.toContain("byte");
+    expect(budget.charactersLeft).toBe(ISSUE_TEXT_MAX_CHARS - "Missing receipt".length);
+    expect(issueCountWords(budget)).toBe(`2 of ${DEFECTS_MAX_ITEMS} issues`);
+    expect(issueCountWords(issueBudget(["one"], ""))).toBe(`1 of ${DEFECTS_MAX_ITEMS} issue`);
+    expect(issueBudget(Array.from({ length: DEFECTS_MAX_ITEMS }, () => "x"), "").full).toBe(true);
+    expect(issueBudget([], "x".repeat(ISSUE_TEXT_MAX_CHARS + 1)).over).toBe(true);
+  });
+});
+
+describe("composeNotes", () => {
+  it("is what gets stored, hashed and delivered: the writing, then the issues under their codes", () => {
+    expect(composeNotes("Footnote 2 dates the filing early.", ["Missing receipt", "Over policy limit"])).toBe(
+      "Footnote 2 dates the filing early.\n\nIssues\nD-001 Missing receipt\nD-002 Over policy limit",
+    );
   });
 
-  it("charges an accented letter what HCS charges it, so the count never overpromises", () => {
-    const budget = defectBudget([], "É");
-    expect(budget.charactersLeft).toBe(DEFECT_CODE_MAX_BYTES - 2);
+  it("is the writing alone when there are no issues", () => {
+    expect(composeNotes("  All figures foot.  ", [])).toBe("All figures foot.");
   });
 
-  it("says over budget with the instruction, not a code", () => {
-    const budget = defectBudget([], "X".repeat(DEFECT_CODE_MAX_BYTES + 3));
-    expect(budget.over).toBe(true);
-    expect(budgetWords(budget)).toContain("3 over · shorten this defect code");
+  it("still delivers the issues when the expert wrote nothing else", () => {
+    expect(composeNotes("", ["Missing receipt"])).toBe("Issues\nD-001 Missing receipt");
   });
 
-  it("knows when the list is full", () => {
-    expect(defectBudget(Array.from({ length: DEFECTS_MAX_ITEMS }, (_, i) => `D${i}`), "").full).toBe(true);
+  it("carries the sentence the code alone could not, so a code is never orphaned", () => {
+    const composed = composeNotes("Checked all 23.", ["Missing receipt — R. Chen equipment claim"]);
+    for (const code of issueCodes(["one"])) expect(composed).toContain(code);
+    expect(composed).toContain("R. Chen equipment claim");
   });
 });

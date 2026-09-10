@@ -7,11 +7,17 @@
 - The `handoff_verify` MCP tool: an agent orders a review from any session.
 - **The x402 payment gate in front of it.** This is the qualifying requirement and
   nothing substitutes for it.
-- Order packaging and the fund-lock call.
+- Order packaging, and the fund lock: building it at the 402, signing it client-side,
+  and submitting the signed bytes.
 
 ## The gate, implemented from this
 
-1. Client calls the tool. Server answers **HTTP 402** with payment requirements.
+0. The body is parsed **before** the gate runs, because the 402 carries a fund lock and
+   a lock needs a price, a requester and an order id. A malformed body is a 400, not a
+   402, and an unknown cert tag is refused before a price is ever quoted.
+1. Client calls the tool. Server answers **HTTP 402** with payment requirements, plus —
+   in the JSON body, never the `PAYMENT-REQUIRED` header — an unsigned fund lock and the
+   order id it was minted for. `accepts` is `@x402/core`'s shape and not ours to extend.
 2. Client builds a Hedera `TransferTransaction`, partially signs with its own **ECDSA**
    key, and pays no gas.
 3. Client retries with the base64 payload in the **`PAYMENT-SIGNATURE`** header.
@@ -19,7 +25,11 @@
    moves the 402 challenge into a `PAYMENT-REQUIRED` header and returns the settlement
    receipt as `PAYMENT-RESPONSE`. Go through `@x402/core` and never hand-roll a header.
    Verified names and shapes: `../../docs/research/x402-blocky402-wire-verified.md`.
-4. Server posts it to the facilitator's `/verify` and serves on success.
+4. Server posts it to the facilitator's `/verify` and serves on success. The paid retry
+   also carries `order_id` and `signed_fund_lock`; the server validates those bytes
+   against what it asked for and submits them. **The escrow is funded by the requester's
+   own signature — this app never holds their key.** See
+   `../../docs/decisions/2026-09-08-requester-signs-the-fund-lock.md`.
 5. Facilitator co-signs as designated fee payer and `/settle` submits it. Settlement is
    asynchronous and returns a Hedera receipt.
 

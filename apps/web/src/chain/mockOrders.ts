@@ -24,14 +24,15 @@ import {
   type MockChainAdapter,
   type ReadMessagesOptions,
   type TopicMessage,
+  signFundLock,
 } from "@handoff/schema";
 import fakeArtifact from "../../../../assets/demo/fake-quarterly-summary.txt?raw";
 import fakeSpec from "../../../../assets/demo/fake-review-spec.txt?raw";
 import fakeVendorClause from "../../../../assets/demo/fake-vendor-clause.txt?raw";
 import fakeVendorSpec from "../../../../assets/demo/fake-vendor-spec.txt?raw";
 import type { ContentStore } from "../content";
-import { claimsFor, claimStateFor, encodeClaim, type ClaimReader } from "../orders/claim";
-import { countWords, type ExpertOrder, type InboxEntry } from "../orders/order";
+import { claimBody, claimRecordsFor, claimStateFor, type ClaimReader } from "../orders/claim";
+import { countWords, type ClaimState, type ExpertOrder, type InboxEntry } from "../orders/order";
 import type { OrderSource } from "../orders/source";
 import { notesToBytes, sha256HexOfBytes } from "../sign/notes";
 import { FAKE_CERT_TAG } from "./mockPlatform";
@@ -199,15 +200,21 @@ export class MockOrderSource implements OrderSource {
       assertClaimTimeoutFitsWindow(Math.floor(nowMillis / 1000), envelope);
 
       // Lock before publish, same as apps/mcp: a public order with no money
-      // behind it is the worse failure.
-      const escrow = await chain.lockFunds({
+      // behind it is the worse failure. The requester signs it themselves now,
+      // and this seeder plays that role.
+      const lockParams = {
         orderId: envelope.order_id,
         amountTinybars: envelope.price_tinybars,
         requesterAccountId: options.requesterAccountId,
-      });
+      };
+      const unsignedLock = await chain.buildFundLock(lockParams);
+      const escrow = await chain.submitFundLock(
+        lockParams,
+        signFundLock(unsignedLock.transactionBytes, options.requesterAccountId),
+      );
       await chain.submitMessage(options.ordersTopicId, encodeEnvelope(envelope));
       if (fixture.claimedByRival) {
-        await chain.submitMessage(options.ordersTopicId, encodeClaim(envelope.order_id, RIVAL_ACCOUNT_ID));
+        await chain.publishClaim(options.ordersTopicId, RIVAL_ACCOUNT_ID, claimBody(envelope));
       }
       if (fixture.racedByRival) raced.add(envelope.order_id);
 
@@ -226,17 +233,20 @@ export class MockOrderSource implements OrderSource {
     return new MockOrderSource(chain, content, options, orders, raced, reader);
   }
 
+  /** The treaty's rule, with the clock the mock was built with. */
+  #state(order: ExpertOrder, messages: readonly TopicMessage[]): ClaimState {
+    const now = this.#options.now ?? Date.now;
+    return claimStateFor(
+      order.envelope,
+      claimRecordsFor(messages, order.envelope.order_id),
+      this.#options.expertAccountId,
+      Math.floor(now() / 1000),
+    );
+  }
+
   async list(): Promise<readonly InboxEntry[]> {
     const messages = await this.reader.readMessages(this.#options.ordersTopicId);
-    return this.#orders.map((order) => ({
-      order,
-      claim: claimStateFor(
-        claimsFor(messages, order.envelope.order_id),
-        this.#options.expertAccountId,
-        order.envelope.claim_timeout_seconds,
-        order.envelope.deadline,
-      ),
-    }));
+    return this.#orders.map((order) => ({ order, claim: this.#state(order, messages) }));
   }
 
   async claim(order: ExpertOrder): Promise<ConsensusRef> {
@@ -245,21 +255,16 @@ export class MockOrderSource implements OrderSource {
       // The rival was a moment quicker. Their message gets the earlier
       // consensus timestamp, and the mirror will say so.
       this.#racesRun.add(orderId);
-      await this.#chain.submitMessage(this.#options.ordersTopicId, encodeClaim(orderId, RIVAL_ACCOUNT_ID));
+      await this.#chain.publishClaim(this.#options.ordersTopicId, RIVAL_ACCOUNT_ID, claimBody(order.envelope));
     }
-    return this.#chain.submitMessage(this.#options.ordersTopicId, encodeClaim(orderId, this.#options.expertAccountId));
+    return this.#chain.publishClaim(this.#options.ordersTopicId, this.#options.expertAccountId, claimBody(order.envelope));
   }
 
   async document(order: ExpertOrder): Promise<string> {
     // The topic decides, not the caller. Showing the document to a
     // non-claimant would leak access-controlled content.
     const messages = await this.reader.readMessages(this.#options.ordersTopicId);
-    const state = claimStateFor(
-      claimsFor(messages, order.envelope.order_id),
-      this.#options.expertAccountId,
-      order.envelope.claim_timeout_seconds,
-      order.envelope.deadline,
-    );
+    const state = this.#state(order, messages);
     if (state.kind !== "yours") throw new Error("The document opens after a confirmed claim.");
     const bytes = await this.#content.get(order.envelope.artifact_hash_in);
     if (bytes === null) throw new Error("The document is not in the content store.");

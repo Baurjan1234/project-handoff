@@ -44,10 +44,8 @@ export function useClaimFlow(source: OrderSource, expertAccountId: string): Clai
       watching.current = controller;
       confirmClaim({
         topicId: order.topicId,
-        orderId: order.envelope.order_id,
+        order: order.envelope,
         expertAccountId,
-        claimTimeoutSeconds: order.envelope.claim_timeout_seconds,
-        deadline: order.envelope.deadline,
         submitted,
         reader: source.reader,
         signal: controller.signal,
