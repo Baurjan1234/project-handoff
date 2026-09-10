@@ -194,18 +194,9 @@ importers:
         specifier: 4.5.4
         version: 4.5.4
     devDependencies:
-      '@handoff/mcp':
-        specifier: workspace:*
-        version: link:../../apps/mcp
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: 5.0.0
-        version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.13))
 
   packages/schema:
     dependencies:
