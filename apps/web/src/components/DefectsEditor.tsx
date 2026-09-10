@@ -1,4 +1,5 @@
-import { X } from "lucide-react";
+import { useState } from "react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { defectProblems } from "../sign/attestation";
@@ -28,11 +29,13 @@ export function DefectsEditor({
   onDraftChange: (draft: string) => void;
   disabled: boolean;
 }) {
+  const [adding, setAdding] = useState(false);
   const code = normalizeDefectCode(draft);
   const budget = defectBudget(defects, draft);
   const duplicate = defects.includes(code);
   const canAdd = !disabled && code.length > 0 && !budget.full && !budget.over && !duplicate;
   const problems = defectProblems(defects);
+  const inputOpen = adding || draft !== "" || defects.length === 0;
 
   function add(): void {
     if (!canAdd) return;
@@ -41,20 +44,21 @@ export function DefectsEditor({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2">
       {defects.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-label="Defect codes">
+        <ul className="grid gap-1.5" aria-label="Defect codes">
           {defects.map((defect, index) => (
             <li
               key={`${defect}-${index}`}
-              className="inline-flex items-center gap-1 rounded-full bg-muted py-1 pr-1.5 pl-3 font-mono text-xs"
+              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[13px]"
             >
-              {defect}
+              <span className="rounded bg-destructive/10 px-1.5 py-0.5 font-mono text-[11px] font-medium text-destructive">{defect}</span>
+              <span className="flex-1" />
               {!disabled && (
                 <button
                   type="button"
                   aria-label={`Remove ${defect}`}
-                  className="flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+                  className="rounded p-0.5 text-faint transition-colors hover:text-destructive"
                   onClick={() => onChange(defects.filter((_, i) => i !== index))}
                 >
                   <X className="size-3" aria-hidden />
@@ -65,35 +69,61 @@ export function DefectsEditor({
         </ul>
       )}
 
-      {!disabled ? (
-        <div className="flex gap-2">
-          <Input
-            value={draft}
-            placeholder={defects.length === 0 ? "e.g. NO_MONITORING, or leave empty" : "Another code"}
-            aria-label="Defect code"
-            aria-invalid={budget.over || undefined}
-            spellCheck={false}
-            autoCapitalize="characters"
-            className="h-10 rounded-xl font-mono uppercase"
-            onChange={(event) => onDraftChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                add();
-              }
-            }}
-            disabled={budget.full}
-          />
-          <Button type="button" variant="secondary" className="h-10 rounded-xl" onClick={add} disabled={!canAdd}>
-            Add
-          </Button>
-        </div>
-      ) : (
-        defects.length === 0 && <span className="text-sm text-muted-foreground">No defects listed.</span>
+      {!disabled && !budget.full && (
+        inputOpen ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={draft}
+              placeholder={defects.length === 0 ? "e.g. NO_MONITORING, or leave empty" : "Another code"}
+              aria-label="Defect code"
+              aria-invalid={budget.over || undefined}
+              spellCheck={false}
+              autoCapitalize="characters"
+              autoFocus={adding}
+              className="h-9 rounded-lg bg-card font-mono text-xs uppercase"
+              onChange={(event) => onDraftChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  add();
+                }
+                if (event.key === "Escape") {
+                  onDraftChange("");
+                  setAdding(false);
+                }
+              }}
+            />
+            <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-primary text-primary" onClick={add} disabled={!canAdd}>
+              Add
+            </Button>
+            <button
+              type="button"
+              aria-label="Close"
+              className="rounded p-1 text-faint transition-colors hover:text-foreground"
+              onClick={() => {
+                onDraftChange("");
+                setAdding(false);
+              }}
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-faint transition-colors hover:border-faint hover:text-muted-foreground"
+            onClick={() => setAdding(true)}
+          >
+            <Plus className="size-3" aria-hidden />
+            Add defect
+          </button>
+        )
       )}
 
+      {disabled && defects.length === 0 && <span className="text-sm text-muted-foreground">No defects listed.</span>}
+
       {!disabled && (
-        <p className={`text-xs tabular-nums ${budget.over ? "text-destructive" : "text-muted-foreground"}`}>
+        <p className={`text-right text-[11px] tabular-nums ${budget.over ? "text-destructive" : "text-faint"}`}>
           {budgetWords(budget)}
           {duplicate && code.length > 0 ? " · already listed" : ""}
         </p>
