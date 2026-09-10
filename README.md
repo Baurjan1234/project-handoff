@@ -162,43 +162,51 @@ than creating a Hedera schedule, so an attestation is published and paid by hand
 
 ## Ordering from your own agent
 
-Every seat can post a real order from their own machine. Two processes and a one-time
-registration.
-
-**Fill in `.env` first.** Beyond your own account, four values have to match everyone
-else's or you will be alone on your own chain: `HANDOFF_ORDERS_TOPIC_ID`,
-`HANDOFF_ATTESTATIONS_TOPIC_ID`, `HANDOFF_ESCROW_ACCOUNT_ID` and
-`X402_RECEIVER_ACCOUNT_ID`. Ask P1 rather than provisioning your own. `HANDOFF_CHAIN`
-ships as `mock` and has to say `testnet`. The two platform keys and the Supabase service
-key are vault-only.
-
-**Your x402 payer must be the same account as your operator.** `X402_PAYER_ACCOUNT_ID` =
-`HEDERA_ACCOUNT_ID`, same key, and it must be **ECDSA**. This is a limitation, not a
-design: the escrow transfer is debited from the requester and signed by the server's
-operator, so two different accounts is `INVALID_SIGNATURE` at the fund lock. Nothing is
-charged when that happens — the order posts before settlement, so the fee stays
-unsettled. It goes away when `buildFundLock`/`submitFundLock` land in `apps/mcp`
-(`docs/decisions/2026-09-08-requester-signs-the-fund-lock.md`), and until then one
-resource server per developer is the only shape that works. The gotchas behind this are
-in `docs/research/x402-first-paid-request.md`.
+**Nothing to clone.** The client is published, so any agent session on any machine can
+order from the running service:
 
 ```bash
-pnpm --filter @handoff/mcp start        # leave it running: the resource server, :4021
-
-claude mcp add handoff --scope local -- \
-  "$(which node)" --env-file="$PWD/.env" \
-  "$PWD/node_modules/.pnpm/tsx@4.23.13/node_modules/tsx/dist/cli.mjs" \
-  "$PWD/apps/mcp/src/mcp/main.ts"
+claude mcp add handoff \
+  -e HANDOFF_SERVICE_URL=https://api.the-handoff.xyz \
+  -e X402_PAYER_ACCOUNT_ID=0.0.xxxxxx \
+  -e X402_PAYER_PRIVATE_KEY=your-ecdsa-key \
+  -- npx -y @hedera-handoff/mcp-client
 ```
 
-Absolute paths, because the client starts this process from its own working directory,
-and `--env-file` because nothing in the process reads `.env` on its own. Then restart the
-session: the tools appear at startup, never mid-session. `handoff_verify` posts an order
-and `handoff_status` reads one back.
+Then restart the session: tools appear at startup, never mid-session. `handoff_verify`
+posts an order and `handoff_status` reads one back.
+
+**Your account must be ECDSA**, and it needs the service fee plus the order value plus a
+little gas. Get testnet accounts from [portal.hedera.com](https://portal.hedera.com/) and
+check the key type rather than assuming the portal default — a preflight read tells you
+before anything is signed, but it is the commonest way to lose an evening.
+
+**Your key never leaves your machine.** This client is the half that signs, and it signs
+twice: the x402 service fee, and the fund lock whose debited account and fee payer are
+both you. Only the signatures go over the wire. The service validates the returned bytes
+against what it asked for and submits them; it holds no key of yours. That is why this
+runs beside you rather than on a server, and it is why "no clone" and "the key stays
+local" are compatible at all —
+`docs/decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
+
+### Running your own service instead
+
+Only needed if you are working on the service itself. It requires the two platform keys
+and the Supabase service key, which are vault-only.
+
+```bash
+pnpm --filter @handoff/mcp start        # the resource server, :4021
+```
+
+Then point the client at it with `HANDOFF_SERVICE_URL=http://localhost:4021`. Four values
+in `.env` have to match everyone else's or you will be alone on your own chain:
+`HANDOFF_ORDERS_TOPIC_ID`, `HANDOFF_ATTESTATIONS_TOPIC_ID`, `HANDOFF_ESCROW_ACCOUNT_ID`
+and `X402_RECEIVER_ACCOUNT_ID`. Ask P1 rather than provisioning your own, and set
+`HANDOFF_CHAIN=testnet` — it ships as `mock`.
 
 Check stderr before ordering. `x402 payer: 0.0.…` means the key parsed and the curve is
-right; `payment signer: none` or `x402 payer unavailable` names which. `credentials:
-cpa-us` means the resource server answered, so it is running and you are pointed at it.
+right; `payment signer: none` or `x402 payer unavailable` names which is wrong.
+`credentials: cpa-us` means the service answered, so you are pointed at something running.
 
 ## Known limits
 

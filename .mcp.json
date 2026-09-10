@@ -1,5 +1,17 @@
 {
   "mcpServers": {
+    "handoff": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@hedera-handoff/mcp-client"
+      ],
+      "env": {
+        "HANDOFF_SERVICE_URL": "${HANDOFF_SERVICE_URL}",
+        "X402_PAYER_ACCOUNT_ID": "${X402_PAYER_ACCOUNT_ID}",
+        "X402_PAYER_PRIVATE_KEY": "${X402_PAYER_PRIVATE_KEY}"
+      }
+    },
     "hedera": {
       "type": "http",
       "url": "https://agentic-testnet-mcp.hedera.com/mcp",

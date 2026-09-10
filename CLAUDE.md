@@ -214,11 +214,12 @@ Two constraints that hold regardless of how anything else moves:
 Each package and app carries a short CLAUDE.md naming what it owns, its contract with
 the schema package, and what it must never do. Read yours before touching the lane.
 
-`.mcp.json` is checked in with four remote servers. Cloning the repo is the whole
-setup, apart from two one-time steps below.
+`.mcp.json` is checked in with five servers. Cloning the repo is the whole setup, apart
+from two one-time steps below.
 
 | Server | What it is for |
 |---|---|
+| `handoff` | Our own tool, `npx @hedera-handoff/mcp-client`. Orders from the hosted service at `https://api.the-handoff.xyz`. Needs `X402_PAYER_ACCOUNT_ID` and `X402_PAYER_PRIVATE_KEY` in your shell; without them the reads still work. **It signs on your machine — the key never reaches the service** |
 | `hedera` | The official hosted Agent Kit, testnet. Builds transaction bytes; it never signs, never submits, and never sees a private key |
 | `hedera-docs` | Hedera's own documentation search |
 | `linear` | The board. Project **"Project handoff"** (`project-handoff-dbc693664e86`). Read and update issues; never depend on it at build time |
@@ -236,6 +237,12 @@ Two one-time steps after cloning:
 
 Signing stays in `packages/chain`. The Hedera server hands back unsigned bytes on
 purpose, so no agent session can move funds on its own.
+
+**The resource server runs once, hosted, and everyone points at it.** Running your own is
+for working on the service itself and needs the vault-only platform keys. It must stay a
+single process: payout bookkeeping is an in-memory map. The client is published to npm so
+ordering needs no clone —
+`docs/decisions/2026-09-10-one-hosted-resource-server-and-a-published-client.md`.
 
 ## Seats
 
