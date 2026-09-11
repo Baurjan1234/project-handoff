@@ -95,8 +95,10 @@
     line-height: 1.65;
     margin: 0;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
   }
+
+  /* iOS Safari only honours this when html and body both carry it */
+  html, body { overflow-x: hidden; }
 
   /* ── Nav ── */
   nav {
