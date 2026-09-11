@@ -1,0 +1,16 @@
+# Hard rule 2 stays in force: this file only narrows one false positive.
+# The docs site shows readers the config they will paste, so its HTML
+# carries the line `"X402_PAYER_PRIVATE_KEY": "<placeholder>"`. The generic
+# rule reads the placeholder as a value. Both conditions below must hold
+# for a finding to be dropped: the file is a docs page AND the "secret" on
+# that line is the variable's own name or the literal `your-ecdsa-key`.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "docs site placeholders for the x402 payer key"
+condition = "AND"
+paths = ['''^apps/docs/public/[^/]+\.html$''']
+regexTarget = "line"
+regexes = ['''X402_PAYER_PRIVATE_KEY.{0,60}(\$\{?X402_PAYER_PRIVATE_KEY\}?|your-ecdsa-key)''']
