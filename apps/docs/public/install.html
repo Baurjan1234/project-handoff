@@ -484,7 +484,7 @@
 <div class="page-header">
   <div class="breadcrumb">Handoff Docs &rsaquo; Setup</div>
   <h1>Install the MCP server</h1>
-  <p class="subtitle">Add Handoff to your agent in under two minutes. Works with Claude Code, Claude Desktop, or any MCP-compatible client.</p>
+  <p class="subtitle">Add Handoff to your agent in under two minutes. One published npm package, <code>@hedera-handoff/mcp-client</code>, works with Claude Code, Claude Desktop, or any MCP-compatible client.</p>
 </div>
 
 <div class="tab-bar">
@@ -498,30 +498,9 @@
   <div class="step">
     <div class="step-header">
       <div class="step-num">1</div>
-      <h3>Add the Handoff MCP server</h3>
-    </div>
-    <p class="step-desc">Run this command in your terminal. It registers the Handoff server with Claude Code using server-sent events transport.</p>
-    <div class="terminal">
-      <div class="terminal-chrome">
-        <span class="terminal-dot r"></span>
-        <span class="terminal-dot y"></span>
-        <span class="terminal-dot g"></span>
-        <span class="terminal-title">Terminal</span>
-      </div>
-      <div class="terminal-body">
-        <span class="line"><span class="prompt">$</span> <span class="cmd">claude mcp add handoff</span> <span class="flag">--transport sse</span> <span class="url">https://the-handoff.xyz/mcp</span></span>
-        <span class="line">&nbsp;</span>
-        <span class="line"><span class="success">&#10003;</span> <span class="output">Added handoff MCP server with SSE transport</span></span>
-      </div>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="step-header">
-      <div class="step-num">2</div>
       <h3>Set your Hedera testnet credentials</h3>
     </div>
-    <p class="step-desc">Export your testnet account ID and private key. Your account must use an <strong>ECDSA</strong> key (not ED25519) for x402 payments to work.</p>
+    <p class="step-desc">Export your testnet account ID and private key in your shell profile, so the client reads them from the environment rather than from a file you might commit. Your account must use an <strong>ECDSA</strong> key (not ED25519) for x402 payments to work.</p>
     <div class="terminal">
       <div class="terminal-chrome">
         <span class="terminal-dot r"></span>
@@ -532,12 +511,37 @@
       <div class="terminal-body">
         <span class="line"><span class="comment"># Add to your shell profile (~/.zshrc or ~/.bashrc)</span></span>
         <span class="line">&nbsp;</span>
-        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">HEDERA_ACCOUNT_ID</span>=<span class="str">"0.0.YOUR_ACCOUNT"</span></span>
-        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">HEDERA_PRIVATE_KEY</span>=<span class="str">"302e..."</span></span>
+        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">X402_PAYER_ACCOUNT_ID</span>=<span class="str">"0.0.YOUR_ACCOUNT"</span></span>
+        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">X402_PAYER_PRIVATE_KEY</span>=<span class="str">"your-ecdsa-key"</span></span>
       </div>
     </div>
     <div class="callout warn">
       <strong>Don't have a testnet account?</strong> Visit the Hedera Portal to create one for free. The faucet gives you enough test HBAR for several orders. Each order costs 0.5 HBAR (service fee) + 100 HBAR (escrow).
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <h3>Add the Handoff MCP client</h3>
+    </div>
+    <p class="step-desc">Nothing to clone and nothing to build. This registers the published client, <code>@hedera-handoff/mcp-client</code>, with Claude Code. It runs on your machine and signs there &mdash; your key never reaches the service.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line"><span class="prompt">$</span> <span class="cmd">claude mcp add handoff</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">HANDOFF_SERVICE_URL</span>=<span class="url">https://api.the-handoff.xyz</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">X402_PAYER_ACCOUNT_ID</span>=<span class="str">"$X402_PAYER_ACCOUNT_ID"</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">X402_PAYER_PRIVATE_KEY</span>=<span class="str">"$X402_PAYER_PRIVATE_KEY"</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">--</span> <span class="cmd">npx -y @hedera-handoff/mcp-client</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="success">&#10003;</span> <span class="output">Added stdio MCP server handoff to local config</span></span>
+      </div>
     </div>
   </div>
 
@@ -557,9 +561,7 @@
       <div class="terminal-body">
         <span class="line"><span class="prompt">$</span> <span class="cmd">claude mcp list</span></span>
         <span class="line">&nbsp;</span>
-        <span class="line"><span class="label">handoff</span>           <span class="output">sse    https://the-handoff.xyz/mcp</span></span>
-        <span class="line">&nbsp;</span>
-        <span class="line"><span class="output">1 server configured</span></span>
+        <span class="line"><span class="label">handoff</span><span class="output">: npx -y @hedera-handoff/mcp-client - </span><span class="success">&#10003; Connected</span></span>
       </div>
     </div>
   </div>
@@ -645,7 +647,7 @@
       <div class="step-num">2</div>
       <h3>Add the Handoff server</h3>
     </div>
-    <p class="step-desc">Paste this config into your <code>claude_desktop_config.json</code>. Replace the account ID and private key with your Hedera testnet credentials.</p>
+    <p class="step-desc">Paste this config into your <code>claude_desktop_config.json</code>. Replace the account ID and private key with your Hedera testnet credentials. Claude Desktop starts the published client with <code>npx</code>; nothing to clone and nothing to build.</p>
     <div class="terminal">
       <div class="terminal-chrome">
         <span class="terminal-dot r"></span>
@@ -658,10 +660,11 @@
         <span class="line">  <span class="key">"mcpServers"</span>: {</span>
         <span class="line">    <span class="key">"handoff"</span>: {</span>
         <span class="line">      <span class="key">"command"</span>: <span class="str">"npx"</span>,</span>
-        <span class="line">      <span class="key">"args"</span>: [<span class="str">"@handoff/mcp"</span>],</span>
+        <span class="line">      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@hedera-handoff/mcp-client"</span>],</span>
         <span class="line">      <span class="key">"env"</span>: {</span>
-        <span class="line">        <span class="key">"HEDERA_ACCOUNT_ID"</span>: <span class="str">"0.0.YOUR_ACCOUNT"</span>,</span>
-        <span class="line">        <span class="key">"HEDERA_PRIVATE_KEY"</span>: <span class="str">"302e..."</span></span>
+        <span class="line">        <span class="key">"HANDOFF_SERVICE_URL"</span>: <span class="str">"https://api.the-handoff.xyz"</span>,</span>
+        <span class="line">        <span class="key">"X402_PAYER_ACCOUNT_ID"</span>: <span class="str">"0.0.YOUR_ACCOUNT"</span>,</span>
+        <span class="line">        <span class="key">"X402_PAYER_PRIVATE_KEY"</span>: <span class="str">"your-ecdsa-key"</span></span>
         <span class="line">      }</span>
         <span class="line">    }</span>
         <span class="line">  }</span>
@@ -669,7 +672,7 @@
       </div>
     </div>
     <div class="callout warn">
-      <strong>ECDSA keys only.</strong> Your Hedera testnet account must use an ECDSA key (not ED25519) for the x402 payment to work. Check your key type in the Hedera Portal.
+      <strong>ECDSA keys only.</strong> Your Hedera testnet account must use an ECDSA key (not ED25519) for the x402 payment to work. The portal's default is ED25519; the client refuses it with a message saying so. The key stays on your machine &mdash; only signatures go over the wire.
     </div>
   </div>
 
