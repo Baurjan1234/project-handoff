@@ -95,6 +95,7 @@
     line-height: 1.65;
     margin: 0;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
   /* ── Nav ── */
@@ -411,6 +412,17 @@
     .sidebar-left { display: none; }
     .main { padding: 24px 20px; }
     .nav-search { display: none; }
+    .nav-inner { padding: 0 16px; gap: 12px; }
+    .nav-right { gap: 10px; }
+    .hero h1 { font-size: 30px; }
+    .hero p { font-size: 15px; }
+    .flow-tooltip { left: auto; right: 0; max-width: calc(100vw - 72px); }
+  }
+
+  @media (max-width: 420px) {
+    .nav-label { display: none; }
+    .main { padding: 20px 16px; }
+    .hero h1 { font-size: 27px; }
   }
 
   /* ── Hero ── */
@@ -597,7 +609,6 @@
   .pipeline-bar {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 0;
     background: var(--surface);
     border: 1px solid var(--line);
@@ -613,6 +624,11 @@
     padding: 6px 10px;
     min-width: 90px;
   }
+
+  /* auto margins centre the row when it fits and, unlike justify-content,
+     keep the first step reachable when the row scrolls */
+  .pip-step:first-child { margin-left: auto; }
+  .pip-step:last-child { margin-right: auto; }
 
   .pip-num {
     font-size: 11px;
@@ -988,8 +1004,11 @@
   /* ── Install ── */
   .install-steps {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 28px;
   }
+
+  .install-step { min-width: 0; }
 
   .install-step h3 {
     display: flex;
