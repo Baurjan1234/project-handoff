@@ -738,6 +738,31 @@ describe("content, addressed by hash", () => {
     expect(preflight.headers["Access-Control-Allow-Headers"]).toContain("content-type");
   });
 
+  it("answers a preflight on the routes the requests screen uses, not only on content", async () => {
+    const { deps } = harness();
+
+    for (const path of ["/tags", "/orders", "/orders/ord_1"]) {
+      const answer = await handle({ method: "OPTIONS", path, headers: {}, body: Buffer.alloc(0) }, deps);
+      expect(answer.status).toBe(204);
+      expect(answer.headers["Access-Control-Allow-Origin"]).toBe("*");
+      expect(answer.headers["Access-Control-Allow-Methods"]).toContain("POST");
+      expect(answer.headers["Access-Control-Allow-Headers"]).toContain(PAYMENT_SIGNATURE_HEADER);
+    }
+  });
+
+  it("lets a browser read the reviewer list and the 402 it is quoted", async () => {
+    const { deps } = harness();
+
+    const tags = await handle({ method: "GET", path: "/tags", headers: {}, body: Buffer.alloc(0) }, deps);
+    expect(tags.status).toBe(200);
+    expect(tags.headers["Access-Control-Allow-Origin"]).toBe("*");
+
+    const quoted = await handle(post({}, orderBody()), deps);
+    expect(quoted.status).toBe(402);
+    expect(quoted.headers["Access-Control-Allow-Origin"]).toBe("*");
+    expect(quoted.headers["Access-Control-Expose-Headers"]).toContain(PAYMENT_REQUIRED_HEADER);
+  });
+
   it("does not treat a path that is not a hash as content", async () => {
     const { deps } = harness();
 
