@@ -10,7 +10,7 @@ import { Copyable } from "./Copyable";
 import { Mono } from "./Mono";
 import { Amount } from "./Money";
 import type { QuoteOutcome, RequestDraft } from "../requests/create";
-import { handoffVerifyArguments } from "../requests/create";
+import { deadlineForPicker, deadlineFromPicker, handoffVerifyArguments } from "../requests/create";
 import type { CertTag } from "../requests/tags";
 
 /**
@@ -194,13 +194,18 @@ export function NewRequestForm({
           </Labelled>
         </div>
 
-        <Labelled label="Deadline (UTC)">
+        <Labelled label="Deadline">
           <Input
-            value={draft.deadline}
-            onChange={(e) => onDraft({ ...draft, deadline: e.target.value })}
-            placeholder="2026-09-14T00:00:00Z"
+            type="datetime-local"
+            value={deadlineForPicker(draft.deadline)}
+            onChange={(e) => onDraft({ ...draft, deadline: deadlineFromPicker(e.target.value) })}
             className="font-mono text-[13px]"
           />
+          {draft.deadline !== "" && (
+            <p className="text-[11px] text-faint">
+              Your own time zone. The order carries <Mono className="text-[10.5px]">{draft.deadline}</Mono>.
+            </p>
+          )}
         </Labelled>
       </div>
 
