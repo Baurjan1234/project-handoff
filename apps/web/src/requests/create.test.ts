@@ -6,8 +6,12 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_DEADLINE_DAYS,
+  deadlineForPicker,
+  deadlineFromPicker,
   decodeQuote,
   draftProblems,
+  emptyDraft,
   encodeArtifact,
   handoffVerifyArguments,
   orderRequestBody,
@@ -100,6 +104,56 @@ describe("what the form refuses", () => {
       NOW,
     );
     expect(problems.some((p) => p.startsWith("The claim window is too close to the deadline."))).toBe(true);
+  });
+});
+
+describe("what the form opens on", () => {
+  const THREE_DAYS_MS = DEFAULT_DEADLINE_DAYS * 24 * 3_600_000;
+
+  // Asserted against the clock rather than against a literal: the picker and
+  // this default both go through the machine's own time zone, and a literal
+  // would only pass on one of them.
+  it("opens on a deadline three days out, on the hour", () => {
+    const { deadline } = emptyDraft(NOW);
+    expect(deadline).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/);
+    const ahead = Date.parse(deadline) - NOW.getTime();
+    expect(ahead).toBeGreaterThanOrEqual(THREE_DAYS_MS);
+    expect(ahead).toBeLessThanOrEqual(THREE_DAYS_MS + 3_600_000);
+  });
+
+  it("opens on a ten-minute claim window", () => {
+    expect(emptyDraft(NOW).claimTimeoutSeconds).toBe("600");
+  });
+
+  // The point of the defaults: what is left to do is the work, not the clocks.
+  it("leaves only the work, the document and the reviewer to fill in", () => {
+    expect(draftProblems(emptyDraft(NOW), NOW)).toEqual([
+      "Say what you want reviewed.",
+      "Add the work to be reviewed.",
+      "Choose who should review it.",
+    ]);
+  });
+});
+
+describe("the date picker, which speaks local time", () => {
+  it("round-trips a deadline through the picker unchanged", () => {
+    const { deadline } = emptyDraft(NOW);
+    expect(deadlineFromPicker(deadlineForPicker(deadline))).toBe(deadline);
+  });
+
+  it("reads a picked local time as the instant that person meant", () => {
+    const picked = deadlineFromPicker("2026-09-14T09:30");
+    expect(picked).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/);
+    expect(Date.parse(picked)).toBe(new Date("2026-09-14T09:30").getTime());
+  });
+
+  it("has nothing to show, and makes no deadline, out of what is not one", () => {
+    for (const notADeadline of ["", "  ", "tomorrow", "2026-09-14T00:00:00+08:00"]) {
+      expect(deadlineForPicker(notADeadline)).toBe("");
+    }
+    for (const notAPick of ["", "  ", "nonsense"]) {
+      expect(deadlineFromPicker(notAPick)).toBe("");
+    }
   });
 });
 

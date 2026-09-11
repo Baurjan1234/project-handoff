@@ -63,8 +63,17 @@ describe("NewRequestForm, the ask", () => {
     expect(html).toContain("Who should review it?");
     expect(html).toContain("Worth (HBAR)");
     expect(html).toContain("Claim window (seconds)");
-    expect(html).toContain("Deadline (UTC)");
+    expect(html).toContain("Deadline");
     expect(html).toContain("Get the price");
+    expect(expectNoBannedWords(html)).toEqual([]);
+  });
+
+  it("picks the deadline on a calendar and says back the instant it means", () => {
+    const html = render();
+    expect(html).toContain('type="datetime-local"');
+    // The picker shows local time, so the UTC the order carries is on screen
+    // beside it rather than left to be worked out.
+    expect(html).toContain("2026-09-14T00:00:00Z");
     expect(expectNoBannedWords(html)).toEqual([]);
   });
 

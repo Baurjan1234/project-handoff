@@ -54,8 +54,11 @@ delete the route, not to hide the tab.** What was built is narrower than the Tie
   this account's own transfer funded the escrow, memoed with the order id.
 
 Two things still block a browser from finishing an order, and both are outside this lane:
-`POST /orders` sends no `Access-Control-Allow-Origin` and answers `OPTIONS` with 405, so
-the preflight fails (P2's lane, or Jack's nginx); and `X402Signer` lives server-side by
+the hosted service sends no `Access-Control-Allow-Origin` on `/tags`, `/orders/{id}` or
+`POST /orders`, and answers `OPTIONS` with 405, so the browser drops every answer — the
+first visible symptom is an empty reviewer list and a "Choose who should review it." that
+nothing can satisfy (P2's lane, or Jack's nginx; the server-side change is in
+`apps/mcp/src/server.ts` and waits on a redeploy); and `X402Signer` lives server-side by
 decision and uses Node's `Buffer`, so it does not run in a browser build (P1's lane).
 
 ## Who signs, and how the key gets here

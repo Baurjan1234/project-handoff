@@ -14,7 +14,7 @@ import { useNow } from "./lib/useNow";
 import type { ExpertOrder, InboxEntry } from "./orders/order";
 import type { OrderSource } from "./orders/source";
 import { useClaimFlow } from "./orders/useClaimFlow";
-import { draftProblems, EMPTY_DRAFT, requestQuote, type QuoteOutcome, type RequestDraft } from "./requests/create";
+import { draftProblems, emptyDraft, requestQuote, type QuoteOutcome, type RequestDraft } from "./requests/create";
 import { useMyRequests, type MyRequestsWiring } from "./requests/useMyRequests";
 import { useRoute, type Route } from "./router";
 import { ConnectScreen, type ConnectOutcome } from "./screens/ConnectScreen";
@@ -224,7 +224,7 @@ function Ready({ booted, onDisconnect }: { booted: Booted; onDisconnect: () => v
   );
   const requests = useMyRequests(route.kind === "requests" ? requestsWiring : null);
 
-  const [draft, setDraft] = useState<RequestDraft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<RequestDraft>(() => emptyDraft(new Date()));
   const [composing, setComposing] = useState(false);
   const [quote, setQuote] = useState<QuoteOutcome | null>(null);
   const [quoting, setQuoting] = useState(false);

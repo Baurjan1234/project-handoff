@@ -27,7 +27,15 @@ import {
 } from "@handoff/schema";
 import type { ContentStore } from "./content.js";
 import { defaultOrderId, OrderError, postReviewOrder } from "./order.js";
-import { gate, headerLookup, settle, type GateConfig } from "./x402/gate.js";
+import {
+  gate,
+  headerLookup,
+  PAYMENT_REQUIRED_HEADER,
+  PAYMENT_RESPONSE_HEADER,
+  PAYMENT_SIGNATURE_HEADER,
+  settle,
+  type GateConfig,
+} from "./x402/gate.js";
 import type { Facilitator } from "./x402/facilitator.js";
 import type { CertTagOption } from "./config.js";
 import { readOrderStatus } from "./status.js";
@@ -157,7 +165,37 @@ const cors = {
  */
 export const CONTENT_PUT_MAX_BYTES = 256 * 1024;
 
+/**
+ * Every answer is readable from another origin, and every route answers a
+ * preflight. The expert app is a browser build on its own domain, and the
+ * requests screen reads `/tags` and `/orders/{id}` and makes the free first
+ * `POST /orders` from there; without these headers the browser drops the
+ * answer on the floor and the form shows an empty reviewer list. `*` is honest
+ * for the same reason as on `/content`: nothing here is private to an origin,
+ * and the gate charges by payment header, not by who is asking. The two x402
+ * response headers are exposed because a browser cannot read a 402 otherwise.
+ */
+const open = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Expose-Headers": `${PAYMENT_REQUIRED_HEADER}, ${PAYMENT_RESPONSE_HEADER}`,
+} as const;
+
+const preflight = {
+  ...open,
+  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+  "Access-Control-Allow-Headers": `content-type, ${PAYMENT_SIGNATURE_HEADER}, X-PAYMENT`,
+  "Access-Control-Max-Age": "86400",
+} as const;
+
 export async function handle(request: HttpRequest, deps: ServerDeps): Promise<HttpResponse> {
+  if (request.method === "OPTIONS") {
+    return { status: 204, headers: preflight, body: null };
+  }
+  const answer = await route(request, deps);
+  return { ...answer, headers: { ...answer.headers, ...open } };
+}
+
+async function route(request: HttpRequest, deps: ServerDeps): Promise<HttpResponse> {
   // Deliberately free and deliberately not a payment surface. It says the
   // process is up, nothing about the chain or the facilitator, so it cannot
   // become a way to read anything the gate is supposed to charge for.
