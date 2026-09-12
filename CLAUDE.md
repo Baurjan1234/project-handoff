@@ -195,12 +195,15 @@ One pnpm workspace. Libraries in `packages/`, deployables in `apps/`.
 
 ```
 packages/schema     P4 Nasaa      types, envelopes, attestation, money, hashing, ChainAdapter + MockChainAdapter
-packages/chain      P1 Khishgee   escrow, schedule + early-execute, HCS, mirror reads
+packages/chain      P1 Khishgee   escrow, co-signed payout + early-execute, HCS, mirror reads
 packages/content    P1 Khishgee   Supabase adapter behind a storage interface
+packages/accounts   P1 Khishgee   registration and sign-in, keyed on the Hedera account id (MongoDB)
+packages/accounts-client  P1 Khishgee   browser-safe client for the accounts API, consumed by apps/web
 apps/web            P3 Jack       expert app: inbox, review workspace, sign
 apps/mcp            P2 Tseegii    handoff_verify server
 packages/mcp-client P2 Tseegii    the published client, bundled from apps/mcp. What a requester session runs
 apps/requester      P2 Tseegii    empty. The demo requester is an agent session, not a program here
+apps/accounts-api   P1 Khishgee   REST API over packages/accounts
 ```
 
 Two constraints that hold regardless of how anything else moves:
@@ -348,16 +351,16 @@ as a subagent so the diff stays out of your session.
 
 ## Open decisions — ask, do not assume
 
-- [ ] **ScheduleCreate with an unknown payee.** **The docs answer this: the inner
-      transaction must be fully formed, so the payee must be known and schedule-at-claim
-      wins.** See `docs/research/hedera-primitives-verified.md`. Khishgee's spike is now
-      a short empirical confirmation rather than an open question, with Tseegii sitting
-      in because it fixes the MCP calls. If Hedera requires a
-      fully formed inner transfer, the fallback is: funds lock at `POSTED`, the schedule
-      is created at claim time, and the post-to-claim window is protected by the
-      threshold key alone. Decide by end of hour 1, then update the brief's lifecycle,
-      `docs/architecture.md`, and the demo narration to match. Until this is settled, do
-      not hard-code either shape.
+- [x] ~~**ScheduleCreate with an unknown payee.**~~ Answered on the ledger, Sep 8, and
+      the answer was neither branch of the fallback tree: **`ScheduleCreateTransaction`
+      cannot debit a `KeyList` account at all** — `INVALID_SIGNATURE` across eight
+      isolated testnet runs, while the control (a plain co-signed transfer, same account,
+      same two keys) succeeds. So Hedera's Schedule Service is **not used**. Funds still
+      lock at `POSTED`, the payout is still committed **at claim**, and the post-to-claim
+      window is still protected by the threshold key alone — but DELIVERED co-signs one
+      `TransferTransaction` directly. Say "the platform co-signs and the money moves",
+      never "the schedule fires". `docs/research/schedule-create-keylist-blocker.md`,
+      `docs/decisions/2026-09-08-direct-cosigned-payout-replaces-schedulecreate.md`.
 - [ ] **Does `/requests` in `apps/web` stay?** **Nasaa's alone to rule, and unratified as
       of 2026-09-10.** A "My requests" tab was built on `jack/sign-action` at P3's
       repeated request. It crosses two stated lines: `docs/ux-philosophy.md` puts the
