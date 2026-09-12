@@ -60,10 +60,23 @@ Three validations decide whether the money moves, and each is there for a rule:
   on the submit-keyless attestations topic could make a lapsed claim final — locking the
   order to a claimant who never delivered, and defeating the short claim timeout. The
   reader now resolves once on the claims alone and passes `deliveredAt` only when it is
-  the first claimant's own and no reopen has happened. One case is still wrong and is
-  **P4's**: a first claimant who delivers late *after* somebody claimed the reopen should
-  win by the treaty's rule and does not here. It needs `resolveClaims` to see the
-  attestations.
+  the first claimant's own and no reopen has happened.
+- **Three questions this leaves open, all `resolveClaims`, all P4's.** None is a
+  regression — each is the treaty's rule behaving as written — and none blocks this
+  change, but they are the same class and belong in one place:
+  1. A first claimant who delivers late *after* somebody claimed the reopen should win by
+     the treaty's rule and does not here. The reader cannot fix it: only `resolveClaims`
+     knows which claim won.
+  2. **Rule 4 has no time bound.** `claim.ts` reads `deliveredAt !== undefined` and never
+     looks at the value, so a claimant who lost their window can attest a week later and
+     revive the claim, provided nobody took the reopen. It does not check the attestation
+     landed before `order.deadline` either. Strictly better than before this change —
+     it was *anybody's* message, now it is the claimant's own — but unbounded.
+  3. A claimant whose only attestation is a schema violation holds the claim forever:
+     `resolveWithDelivery` finalises on any attestation of theirs, while `settleOrder`
+     pays only on a matching one. So the order never expires, never pays, and the reopen
+     stays shut. The money is already stranded either way — there is no return path — so
+     this is not a money-path regression, but it is the same question.
 - **The payout is decided by the claimant's *earliest matching* attestation.** Settling is
   an idempotent retry, so its answer has to be a function of facts that only grow. Taking
   the last let a claimant publish a divergent attestation after being paid and turn every
