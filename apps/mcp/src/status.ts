@@ -26,8 +26,10 @@ import {
   resolveClaims,
   tryDecodeClaim,
   Verdict as VerdictSchema,
+  type Attestation,
   type ChainAdapter,
   type ClaimRecord,
+  type ClaimResolution,
   type OrderEnvelope,
 } from "@handoff/schema";
 
@@ -200,11 +202,39 @@ function epochSecondsToUtc(seconds: number): string {
   return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/** Read what the topics say about one order. */
-export async function readOrderStatus(
-  orderId: string,
-  deps: StatusDeps,
-): Promise<OrderStatus> {
+/** One attestation as read off the topic, with what the network attached to it. */
+export interface AttestationRecord {
+  readonly attestation: Attestation;
+  readonly consensusTimestamp: string;
+  /** The account that paid to submit it. Not proof of anything but authorship. */
+  readonly payerAccountId: string;
+}
+
+/**
+ * Everything the topics say about one order, before anything is decided.
+ *
+ * Separate from `readOrderStatus` because the two readers want different
+ * things out of the same scan. A status read is a *display*: it shows the last
+ * attestation whoever wrote it, and shows `claimedBy` beside `signedBy` so a
+ * requester can compare them. The settle path cannot afford that reading — it
+ * pays money against an attestation, so it has to pick the claimant's own out
+ * of every message on a topic that has no submit key, and a stray one must not
+ * be able to shadow the real one.
+ *
+ * Duplicating the scan for that was the alternative and it is the worse one:
+ * two readers of the same topics that disagree about what they saw.
+ */
+export interface OrderFacts {
+  readonly posted?: { readonly envelope: OrderEnvelope; readonly consensusTimestamp: string };
+  readonly claims: readonly ClaimRecord[];
+  /** In consensus order, every one of them, whoever submitted. */
+  readonly attestations: readonly AttestationRecord[];
+  /** The treaty's answer to who holds the order. Absent when the envelope is not visible. */
+  readonly holder?: ClaimResolution;
+}
+
+/** Read the topics once and hand back what they say. */
+export async function readOrderFacts(orderId: string, deps: StatusDeps): Promise<OrderFacts> {
   // One scan, not two. Claims live on the orders topic, so reading them
   // separately would double every mirror-node read this query makes.
   const sightings = await scanTopic<OrderSighting>(
@@ -266,6 +296,23 @@ export async function readOrderStatus(
           ...(delivered === undefined ? {} : { deliveredAt: delivered.consensusTimestamp }),
         });
 
+  return {
+    ...(posted === undefined ? {} : { posted }),
+    claims,
+    attestations,
+    ...(holder === undefined ? {} : { holder }),
+  };
+}
+
+/** Read what the topics say about one order, as a requester reads it. */
+export async function readOrderStatus(
+  orderId: string,
+  deps: StatusDeps,
+): Promise<OrderStatus> {
+  const facts = await readOrderFacts(orderId, deps);
+  const { posted, attestations } = facts;
+  const delivered = attestations.at(-1);
+  const holder = facts.holder;
   const held = holder?.state === "claimed" ? holder.active : undefined;
 
   if (delivered !== undefined) {
