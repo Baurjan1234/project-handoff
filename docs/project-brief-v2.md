@@ -352,8 +352,10 @@ expert web app itself; custodial key management is a weeks-scale project.
   claims, and an order refused for a schema violation, both hold their funds
   indefinitely. Under the requester-signed lock those are the requester's funds, which
   changes who the gap costs without changing what it is. **Measured 2026-09-12:** nine
-  orders on the shared escrow `0.0.10422187` hold 18 testnet HBAR this way, seven of
-  them past their deadline and so no longer claimable.
+  orders on the shared escrow hold 18 testnet HBAR this way, seven of them past their
+  deadline and so no longer claimable. (The account is in `docs/links.md`; this document
+  is the one that goes on camera, and a figure carries here where an identifier does
+  not.)
 - **Execution class is schema + architecture**, demoed as roadmap; its proofs need an
   oracle story presented honestly as a trusted-verifier stub.
 - **Content availability is centralized** (Supabase). Signed URLs are access control —
