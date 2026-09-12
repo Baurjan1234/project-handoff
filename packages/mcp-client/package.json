@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "handoff-mcp": "./dist/handoff-mcp.mjs"
+    "handoff-mcp": "dist/handoff-mcp.mjs"
   },
   "files": [
     "dist/handoff-mcp.mjs",
