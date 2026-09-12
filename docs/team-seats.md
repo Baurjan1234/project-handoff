@@ -54,6 +54,6 @@ The board is the only place work status lives. These are the accounts to assign 
 |---|---|
 | `packages/schema` | Nasaa (P4) — the treaty; changes are PRs tagged `breaking` |
 | `packages/chain`, `packages/content` | Khishgee (P1) |
-| `apps/mcp`, `apps/requester` | Tseegii (P2) |
+| `apps/mcp`, `packages/mcp-client`, `apps/requester` | Tseegii (P2) |
 | `apps/web` | Jack (P3) |
 | `docs/`, `README.md`, `.claude/` | Nasaa (P4) |

@@ -15,7 +15,7 @@ flowchart LR
   subgraph req["Requester side"]
     RA["Agent session<br/>Claude Code, Cursor"]
     RW["Plain web form<br/>Tier 2"]
-    DEMO["apps/requester<br/>Agent Kit demo"]
+    DEMO["@hedera-handoff/mcp-client<br/>published, bundled from apps/mcp"]
   end
 
   subgraph mono["Handoff workspace"]

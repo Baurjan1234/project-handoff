@@ -199,7 +199,8 @@ packages/chain      P1 Khishgee   escrow, schedule + early-execute, HCS, mirror 
 packages/content    P1 Khishgee   Supabase adapter behind a storage interface
 apps/web            P3 Jack       expert app: inbox, review workspace, sign
 apps/mcp            P2 Tseegii    handoff_verify server
-apps/requester      P2 Tseegii    demo requester session via Hedera Agent Kit
+packages/mcp-client P2 Tseegii    the published client, bundled from apps/mcp. What a requester session runs
+apps/requester      P2 Tseegii    empty. The demo requester is an agent session, not a program here
 ```
 
 Two constraints that hold regardless of how anything else moves:
