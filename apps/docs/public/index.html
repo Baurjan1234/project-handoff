@@ -97,8 +97,10 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* iOS Safari only honours this when html and body both carry it */
-  html, body { overflow-x: hidden; }
+  /* iOS Safari only honours this when html and body both carry it.
+     `clip` rather than `hidden`: `hidden` turns html/body into a scroll
+     container, which silently kills `position: sticky` on the sidebars. */
+  html, body { overflow-x: clip; }
 
   /* ── Nav ── */
   nav {
