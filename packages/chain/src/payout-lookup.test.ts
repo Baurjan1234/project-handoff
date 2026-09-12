@@ -90,7 +90,8 @@ describe("findPayout", () => {
 
     await findPayout(MIRROR, { escrowAccountId: ESCROW, orderId: "ord_abc" });
 
-    const url = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    const [firstCall] = fetchMock.mock.calls;
+    const url = new URL(String((firstCall as unknown as [string])[0]));
     expect(url.pathname).toBe("/api/v1/transactions");
     expect(url.searchParams.get("account.id")).toBe(ESCROW);
     expect(url.searchParams.get("transactiontype")).toBe("CRYPTOTRANSFER");
