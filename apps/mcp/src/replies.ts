@@ -119,9 +119,17 @@ export function postedReply(reply: PostedReply): string {
   ].join("\n");
 }
 
-/** Beats 4–9, the wait. One answer, not a loop. */
-export function waitingReply(deadline: string): string {
-  return `Posted · waiting for a certified reviewer. Open until ${clockTime(deadline)}.`;
+/**
+ * Beats 4–9, the wait. One answer, not a loop.
+ *
+ * It names the credential the order routes to, never "a certified reviewer".
+ * Routing is all the tag does — no registry checks that anybody holds it — and
+ * `../../../docs/decisions/2026-09-08-copy-claims-no-check-that-did-not-run.md`
+ * bans the word on this surface until one runs. `docs/design-system.md` already
+ * writes the line this way; only the code had drifted.
+ */
+export function waitingReply(deadline: string, certTagLabel: string): string {
+  return `Posted · waiting for a ${certTagLabel}. Open until ${clockTime(deadline)}.`;
 }
 
 /**

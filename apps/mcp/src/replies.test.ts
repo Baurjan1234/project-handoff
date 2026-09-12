@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseCertTags, ConfigError } from "./config.js";
 import {
+  CLAIM_NOT_READABLE,
+  NOT_VISIBLE_YET,
   claimedReply,
   clockTime,
   deliveredReply,
@@ -113,10 +115,17 @@ describe("beat 3, posted", () => {
 });
 
 describe("the wait", () => {
-  it("answers with a time, once", () => {
-    expect(waitingReply(DEADLINE)).toBe(
-      "Posted · waiting for a certified reviewer. Open until 18:00 UTC.",
+  it("answers with a time, once, and names the credential it routes to", () => {
+    expect(waitingReply(DEADLINE, "Licensed reviewer")).toBe(
+      "Posted · waiting for a Licensed reviewer. Open until 18:00 UTC.",
     );
+  });
+
+  it("falls back to the tag code rather than inventing a label", () => {
+    // `labelFor` hands back the code when the tag list could not be read at
+    // startup. "waiting for a cpa-us" is awkward and true; a made-up label
+    // would be neither.
+    expect(waitingReply(DEADLINE, "cpa-us")).toContain("waiting for a cpa-us.");
   });
 
   it("names the claimant's account and their window, in the design system's words", () => {
@@ -130,6 +139,38 @@ describe("the wait", () => {
     // the claimant and no registry checks it.
     const reply = claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" });
     expect(reply).not.toContain("certified");
+  });
+});
+
+describe("the word the requester surface may not use", () => {
+  it("says \"certified\" nowhere a requester reads", () => {
+    // `2026-09-08-copy-claims-no-check-that-did-not-run.md`: banned until a
+    // registry check runs, because no check runs. One assertion over every
+    // reply rather than one per line, so a new reply cannot quietly reinstate
+    // it — which is how it survived in `waitingReply` for four days.
+    const everyReply = [
+      postedReply({
+        orderId: "ord_abc",
+        priceTinybars: PRICE,
+        deadline: DEADLINE,
+        certTagLabel: "Licensed reviewer",
+        feeTinybars: FEE,
+        feeTransactionId: FEE_TX,
+        fundLockTransactionId: LOCK_TX,
+      }),
+      waitingReply(DEADLINE, "Licensed reviewer"),
+      claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" }),
+      deliveredReply({ verdict: "reject", signedBy: "0.0.5", certTag: "cpa-us" }),
+      CLAIM_NOT_READABLE,
+      NOT_VISIBLE_YET,
+      unknownTagReply("cpa-uk", TAGS),
+      wrongKeyTypeReply("0.0.10376667", "ED25519"),
+      insufficientBalanceReply("4200000000", FEE, PRICE),
+    ];
+
+    for (const reply of everyReply) {
+      expect(reply.toLowerCase()).not.toContain("certified");
+    }
   });
 });
 

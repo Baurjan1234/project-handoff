@@ -145,7 +145,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "handoff_verify",
     {
       description:
-        "Order a signed review of a piece of work from a certified human. Funds lock up " +
+        "Order a signed review of a piece of work from a human reviewer. Funds lock up " +
         "front and the expert's attestation is published on Hedera. Calling this costs a " +
         "small service fee over x402, separately from the price of the judgment itself. " +
         // Consent, stated once, where an agent reads it before acting rather
@@ -242,7 +242,12 @@ export function createMcpServer(deps: McpDeps): McpServer {
         ) {
           lines.push(claimedReply({ claimedBy: status.claimedBy, signBy: status.signBy }));
         } else if (status.state === "POSTED" && status.envelope !== undefined) {
-          lines.push(waitingReply(status.envelope.deadline));
+          lines.push(
+            waitingReply(
+              status.envelope.deadline,
+              labelFor(deps.certTags, status.envelope.cert_tag),
+            ),
+          );
         } else {
           lines.push(NOT_VISIBLE_YET);
         }
