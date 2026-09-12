@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseCertTags, ConfigError } from "./config.js";
 import {
+  CLAIM_NOT_READABLE,
+  NOT_VISIBLE_YET,
+  claimedReply,
   clockTime,
   deliveredReply,
   insufficientBalanceReply,
@@ -18,6 +21,8 @@ const TAGS = [
 const DEADLINE = "2026-09-14T18:00:00Z";
 const PRICE = "10000000000"; // 100 HBAR
 const FEE = "50000000"; // 0.5 HBAR
+const FEE_TX = "0.0.5551234@1757600000.000000001";
+const LOCK_TX = "0.0.5551234@1757600002.000000002";
 
 describe("clocks are times, never countdowns", () => {
   it("renders the deadline as an hour, labelled with its zone", () => {
@@ -42,7 +47,7 @@ describe("beat 3, posted", () => {
 
   it("puts the fee proof row first and the escrow line second", () => {
     const lines = reply.split("\n");
-    expect(lines[0]).toBe("Service fee settled · 0.5 HBAR");
+    expect(lines[0]).toBe("Service fee settled · 0.5 HBAR · settlement id not returned");
     expect(reply.indexOf("Service fee settled")).toBeLessThan(reply.indexOf("locked in escrow"));
   });
 
@@ -78,13 +83,94 @@ describe("beat 3, posted", () => {
     // The order still posted, so the order line is still there.
     expect(unsettled).toContain("Order posted · #ord_abc");
   });
+
+  it("carries both transaction ids, one on each proof row", () => {
+    const withIds = postedReply({
+      orderId: "ord_abc",
+      priceTinybars: PRICE,
+      deadline: DEADLINE,
+      certTagLabel: "Licensed reviewer",
+      feeTinybars: FEE,
+      feeTransactionId: FEE_TX,
+      fundLockTransactionId: LOCK_TX,
+    });
+    const lines = withIds.split("\n");
+
+    // The settle id is the only proof the fee was settled rather than merely
+    // verified, and the lock id is what a requester opens to see their money.
+    expect(lines[0]).toBe(`Service fee settled · 0.5 HBAR · tx ${FEE_TX}`);
+    expect(withIds).toContain(`Lock tx ${LOCK_TX}`);
+    // Still two rails, still not one figure.
+    expect(withIds).not.toContain("100.5");
+  });
+
+  it("names a missing settlement id rather than going quiet about it", () => {
+    // The facilitator can report success and return no transaction, and the
+    // server then sends an empty string rather than omitting the field. Saying
+    // only "settled" would read exactly like a settlement somebody can check.
+    expect(reply).toContain("Service fee settled · 0.5 HBAR · settlement id not returned");
+    expect(reply).not.toContain("tx 0.0.");
+    expect(reply).not.toContain("Lock tx");
+  });
 });
 
 describe("the wait", () => {
-  it("answers with a time, once", () => {
-    expect(waitingReply(DEADLINE)).toBe(
-      "Posted · waiting for a certified reviewer. Open until 18:00 UTC.",
+  it("answers with a time, once, and names the credential it routes to", () => {
+    expect(waitingReply(DEADLINE, "Licensed reviewer")).toBe(
+      "Posted · waiting for a Licensed reviewer. Open until 18:00 UTC.",
     );
+  });
+
+  it("falls back to the tag code rather than inventing a label", () => {
+    // `labelFor` hands back the code when the tag list could not be read at
+    // startup. "waiting for a cpa-us" is awkward and true; a made-up label
+    // would be neither.
+    expect(waitingReply(DEADLINE, "cpa-us")).toContain("waiting for a cpa-us.");
+  });
+
+  it("names the claimant's account and their window, in the design system's words", () => {
+    expect(claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" })).toBe(
+      "Claimed by account 0.0.777 · under review · sign by 18:12 UTC.",
+    );
+  });
+
+  it("never calls the claimant certified, because nothing checked that", () => {
+    // Same limit as the signed line: the cert tag on a claim is asserted by
+    // the claimant and no registry checks it.
+    const reply = claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" });
+    expect(reply).not.toContain("certified");
+  });
+});
+
+describe("the word the requester surface may not use", () => {
+  it("says \"certified\" nowhere a requester reads", () => {
+    // `2026-09-08-copy-claims-no-check-that-did-not-run.md`: banned until a
+    // registry check runs, because no check runs. One assertion over every
+    // reply rather than one per line, so a new reply cannot quietly reinstate
+    // it — which is how it survived in `waitingReply` for four days.
+    const everyReply = [
+      postedReply({
+        orderId: "ord_abc",
+        priceTinybars: PRICE,
+        deadline: DEADLINE,
+        certTagLabel: "Licensed reviewer",
+        feeTinybars: FEE,
+        feeTransactionId: FEE_TX,
+        fundLockTransactionId: LOCK_TX,
+      }),
+      waitingReply(DEADLINE, "Licensed reviewer"),
+      claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" }),
+      deliveredReply({ verdict: "reject", signedBy: "0.0.5", certTag: "cpa-us" }),
+      CLAIM_NOT_READABLE,
+      NOT_VISIBLE_YET,
+      unknownTagReply("cpa-uk", TAGS),
+      wrongKeyTypeReply("0.0.10376667", "ED25519"),
+      insufficientBalanceReply("4200000000", FEE, PRICE),
+    ];
+
+    for (const reply of everyReply) {
+      expect(reply.toLowerCase()).not.toContain("certified");
+    }
   });
 });
 

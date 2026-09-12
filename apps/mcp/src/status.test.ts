@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   encodeAttestation,
+  encodeClaim,
   encodeEnvelope,
   MockChainAdapter,
   SCHEMA_VERSION,
   sha256Hex,
+  utcToEpochSeconds,
 } from "@handoff/schema";
 import { readOrderStatus, type StatusDeps } from "./status.js";
 
@@ -12,6 +14,10 @@ const ORDERS = "0.0.orders";
 const ATTESTATIONS = "0.0.attestations";
 
 const HASH = sha256Hex("FAKE report");
+
+/** Far enough out that the wall clock never drifts past it during a run. */
+const DEADLINE = "2099-01-01T00:00:00Z";
+const CLAIM_TIMEOUT_SECONDS = 3600;
 
 function envelope(orderId: string): string {
   return encodeEnvelope({
@@ -21,8 +27,17 @@ function envelope(orderId: string): string {
     artifact_hash_in: HASH,
     cert_tag: "cpa-us",
     price_tinybars: "10000000000",
-    deadline: "2026-09-14T18:00:00Z",
-    claim_timeout_seconds: 3600,
+    deadline: DEADLINE,
+    claim_timeout_seconds: CLAIM_TIMEOUT_SECONDS,
+    schema_version: SCHEMA_VERSION,
+  });
+}
+
+function claim(orderId: string, certTag = "cpa-us"): string {
+  return encodeClaim({
+    kind: "claim",
+    order_id: orderId,
+    cert_tag: certTag,
     schema_version: SCHEMA_VERSION,
   });
 }
@@ -81,13 +96,108 @@ describe("readOrderStatus", () => {
     expect(status.envelope).toBeUndefined();
   });
 
-  it("never claims to know whether a reviewer has claimed it", async () => {
+  it("says POSTED means nobody has taken it, because claims are readable", async () => {
     const chain = new MockChainAdapter();
     await chain.submitMessage(ORDERS, envelope("ord_1"));
 
-    // There is a CLAIM lifecycle event but no on-wire claim message anywhere,
-    // so a reader that reported CLAIMED would be inventing it.
-    expect((await readOrderStatus("ord_1", deps(chain))).claimReadable).toBe(false);
+    const status = await readOrderStatus("ord_1", deps(chain));
+
+    // The server reads claims off the orders topic now. Were this false, a
+    // screen would have to say "we cannot see claims" rather than "open".
+    expect(status.claimReadable).toBe(true);
+    expect(status.state).toBe("POSTED");
+    expect(status.claimedBy).toBeUndefined();
+  });
+
+  it("reports CLAIMED with the claimant and the window they must sign in", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    // Published from the claimant's own account: the payer is the claimant,
+    // never a field in the body.
+    const claimed = await chain.publishClaim(ORDERS, "0.0.expert", claim("ord_1"));
+
+    const status = await readOrderStatus("ord_1", deps(chain));
+
+    expect(status.state).toBe("CLAIMED");
+    expect(status.claimedBy).toBe("0.0.expert");
+    expect(status.claimedAt).toBe(claimed.consensusTimestamp);
+    // Claim timeout, capped at the order deadline. This order's deadline is
+    // years out, so the timeout is what binds.
+    const signBy = utcToEpochSeconds(status.signBy ?? "");
+    const claimedAtSeconds = Number(claimed.consensusTimestamp.split(".")[0]);
+    expect(signBy).toBe(claimedAtSeconds + CLAIM_TIMEOUT_SECONDS);
+  });
+
+  it("gives the order to the first claim by consensus timestamp, not the last", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    await chain.publishClaim(ORDERS, "0.0.first", claim("ord_1"));
+    await chain.publishClaim(ORDERS, "0.0.second", claim("ord_1"));
+
+    // The loser of a claim race is ignored while the winner's window is open.
+    expect((await readOrderStatus("ord_1", deps(chain))).claimedBy).toBe("0.0.first");
+  });
+
+  it("reads a claim whose window ran out as open again", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    const claimed = await chain.publishClaim(ORDERS, "0.0.idle", claim("ord_1"));
+
+    const afterExpiry =
+      Number(claimed.consensusTimestamp.split(".")[0]) + CLAIM_TIMEOUT_SECONDS + 1;
+    const status = await readOrderStatus("ord_1", deps(chain, { nowEpochSeconds: afterExpiry }));
+
+    // Claim timeout reopens the order once. POSTED is what the topics say.
+    expect(status.state).toBe("POSTED");
+    expect(status.claimedBy).toBeUndefined();
+  });
+
+  it("ignores a claim made under a cert tag the order did not ask for", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    await chain.publishClaim(ORDERS, "0.0.wrong", claim("ord_1", "pe-us"));
+
+    // Readers drop it; the network never rejected it. Same rule both ends.
+    expect((await readOrderStatus("ord_1", deps(chain))).state).toBe("POSTED");
+  });
+
+  it("ignores a claim for a different order sharing the topic", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    await chain.publishClaim(ORDERS, "0.0.other", claim("ord_2"));
+
+    expect((await readOrderStatus("ord_1", deps(chain))).state).toBe("POSTED");
+  });
+
+  it("carries the claimant alongside the signer once a verdict lands", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    await chain.publishClaim(ORDERS, "0.0.expert", claim("ord_1"));
+    await chain.submitMessage(ATTESTATIONS, attestation("ord_1", "approve"));
+
+    const status = await readOrderStatus("ord_1", deps(chain));
+
+    expect(status.state).toBe("DELIVERED");
+    // The attestations topic carries no submit key, so who signed and who held
+    // the claim are two separate facts and a requester gets to see both.
+    expect(status.claimedBy).toBe("0.0.expert");
+    expect(status.signedBy).toBeTruthy();
+  });
+
+  it("keeps a delivered claim from expiring", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+    const claimed = await chain.publishClaim(ORDERS, "0.0.expert", claim("ord_1"));
+    await chain.submitMessage(ATTESTATIONS, attestation("ord_1", "approve"));
+
+    const afterExpiry =
+      Number(claimed.consensusTimestamp.split(".")[0]) + CLAIM_TIMEOUT_SECONDS + 1;
+    const status = await readOrderStatus("ord_1", deps(chain, { nowEpochSeconds: afterExpiry }));
+
+    // A verdict signed inside the window does not stop being that verdict
+    // because the clock later passed the deadline.
+    expect(status.state).toBe("DELIVERED");
+    expect(status.claimedBy).toBe("0.0.expert");
   });
 
   it("walks past the first page, which is where the newest orders are", async () => {

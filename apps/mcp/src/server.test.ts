@@ -504,9 +504,9 @@ describe("free read paths", () => {
     const status = read.body as { state: string; claimReadable: boolean; envelope?: unknown };
     expect(status.state).toBe("POSTED");
     expect(status.envelope).toBeDefined();
-    // No claim message shape exists yet, and the reader says so rather than
-    // letting "POSTED" be read as "nobody has taken it".
-    expect(status.claimReadable).toBe(false);
+    // The server reads claims off the orders topic, so POSTED here does mean
+    // nobody has taken it. Were this false, the screens must not say that.
+    expect(status.claimReadable).toBe(true);
   });
 
   it("answers UNKNOWN for an id nothing on the topics matches", async () => {
@@ -736,6 +736,31 @@ describe("content, addressed by hash", () => {
     expect(preflight.headers["Access-Control-Allow-Origin"]).toBe("*");
     expect(preflight.headers["Access-Control-Allow-Methods"]).toContain("PUT");
     expect(preflight.headers["Access-Control-Allow-Headers"]).toContain("content-type");
+  });
+
+  it("answers a preflight on the routes the requests screen uses, not only on content", async () => {
+    const { deps } = harness();
+
+    for (const path of ["/tags", "/orders", "/orders/ord_1"]) {
+      const answer = await handle({ method: "OPTIONS", path, headers: {}, body: Buffer.alloc(0) }, deps);
+      expect(answer.status).toBe(204);
+      expect(answer.headers["Access-Control-Allow-Origin"]).toBe("*");
+      expect(answer.headers["Access-Control-Allow-Methods"]).toContain("POST");
+      expect(answer.headers["Access-Control-Allow-Headers"]).toContain(PAYMENT_SIGNATURE_HEADER);
+    }
+  });
+
+  it("lets a browser read the reviewer list and the 402 it is quoted", async () => {
+    const { deps } = harness();
+
+    const tags = await handle({ method: "GET", path: "/tags", headers: {}, body: Buffer.alloc(0) }, deps);
+    expect(tags.status).toBe(200);
+    expect(tags.headers["Access-Control-Allow-Origin"]).toBe("*");
+
+    const quoted = await handle(post({}, orderBody()), deps);
+    expect(quoted.status).toBe(402);
+    expect(quoted.headers["Access-Control-Allow-Origin"]).toBe("*");
+    expect(quoted.headers["Access-Control-Expose-Headers"]).toContain(PAYMENT_REQUIRED_HEADER);
   });
 
   it("does not treat a path that is not a hash as content", async () => {

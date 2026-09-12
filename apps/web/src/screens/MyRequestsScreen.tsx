@@ -209,7 +209,13 @@ function StateBadge({ status, known }: { status: RequestStatus | null; known: bo
   }
   return (
     <Badge variant="outline" className="text-[10.5px] font-semibold">
-      {status.state === "POSTED" ? "Open" : status.state === "DELIVERED" ? "Delivered" : "Not read"}
+      {status.state === "POSTED"
+        ? "Open"
+        : status.state === "CLAIMED"
+          ? "Claimed"
+          : status.state === "DELIVERED"
+            ? "Delivered"
+            : "Not read"}
     </Badge>
   );
 }

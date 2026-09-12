@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Handoff MCP Setup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #FAF7F2;
+    --ink: #1C1917;
+    --ink-muted: #78716C;
+    --azure: #0497FE;
+    --surface: #FFFFFF;
+    --line: #E7E5E4;
+    --term-bg: #1E1E2E;
+    --term-text: #CDD6F4;
+    --term-green: #A6E3A1;
+    --term-yellow: #F9E2AF;
+    --term-blue: #89B4FA;
+    --term-pink: #F5C2E7;
+    --term-red: #F38BA8;
+    --term-comment: #6C7086;
+    --term-surface: #313244;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1A1A1A;
+      --ink: #E7E5E4;
+      --ink-muted: #A8A29E;
+      --surface: #262626;
+      --line: #3A3A3A;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #1A1A1A;
+    --ink: #E7E5E4;
+    --ink-muted: #A8A29E;
+    --surface: #262626;
+    --line: #3A3A3A;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* ── Header ── */
+  .page-header {
+    margin-bottom: 40px;
+  }
+
+  .page-header .breadcrumb {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--azure);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .page-header h1 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 32px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    line-height: 1.2;
+  }
+
+  .page-header .subtitle {
+    font-size: 15px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ── Tab switcher ── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--line);
+    margin-bottom: 32px;
+  }
+
+  .tab-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .tab-btn:hover {
+    color: var(--ink);
+  }
+
+  .tab-btn.active {
+    color: var(--azure);
+    border-bottom-color: var(--azure);
+  }
+
+  .tab-btn .tab-icon {
+    margin-right: 6px;
+    font-size: 13px;
+  }
+
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel.active {
+    display: block;
+  }
+
+  /* ── Steps ── */
+  .step {
+    margin-bottom: 36px;
+    position: relative;
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #0497FE12;
+    color: var(--azure);
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .step h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .step-desc {
+    font-size: 14px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    margin: 0 0 12px;
+    padding-left: 40px;
+  }
+
+  .step-desc code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--azure);
+    background: #0497FE0A;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .step-desc strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* ── Terminal mockup ── */
+  .terminal {
+    background: var(--term-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-left: 40px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  }
+
+  .terminal-chrome {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--term-surface);
+  }
+
+  .terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .terminal-dot.r { background: #F38BA8; }
+  .terminal-dot.y { background: #F9E2AF; }
+  .terminal-dot.g { background: #A6E3A1; }
+
+  .terminal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    font-family: 'Inter', sans-serif;
+    color: var(--term-comment);
+    margin-right: 36px;
+  }
+
+  .terminal-body {
+    padding: 16px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--term-text);
+    overflow-x: auto;
+  }
+
+  .terminal-body .prompt {
+    color: var(--term-green);
+  }
+
+  .terminal-body .cmd {
+    color: var(--term-text);
+  }
+
+  .terminal-body .flag {
+    color: var(--term-yellow);
+  }
+
+  .terminal-body .url {
+    color: var(--term-blue);
+  }
+
+  .terminal-body .comment {
+    color: var(--term-comment);
+  }
+
+  .terminal-body .output {
+    color: var(--term-comment);
+  }
+
+  .terminal-body .success {
+    color: var(--term-green);
+  }
+
+  .terminal-body .label {
+    color: var(--term-pink);
+  }
+
+  .terminal-body .key {
+    color: var(--term-blue);
+  }
+
+  .terminal-body .str {
+    color: var(--term-green);
+  }
+
+  .terminal-body .warn {
+    color: var(--term-yellow);
+  }
+
+  .terminal-body .line {
+    display: block;
+    white-space: pre;
+  }
+
+  /* ── Desktop UI mockup ── */
+  .desktop-mock {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-left: 40px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .desktop-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .desktop-body {
+    padding: 20px;
+  }
+
+  .desktop-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    margin: -20px -20px 16px;
+    padding: 0 20px;
+  }
+
+  .desktop-nav-item {
+    font-size: 13px;
+    padding: 10px 14px;
+    color: var(--ink-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  .desktop-nav-item.active {
+    color: var(--ink);
+    font-weight: 600;
+    border-bottom-color: var(--azure);
+  }
+
+  .desktop-field {
+    margin-bottom: 16px;
+  }
+
+  .desktop-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .desktop-field-hint {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+  }
+
+  .desktop-json-box {
+    background: var(--term-bg);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--term-text);
+    overflow-x: auto;
+  }
+
+  .desktop-btn {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: default;
+  }
+
+  .desktop-btn.primary {
+    background: var(--azure);
+    color: #fff;
+  }
+
+  .desktop-btn.secondary {
+    background: var(--line);
+    color: var(--ink);
+    margin-left: 8px;
+  }
+
+  /* ── Callout note ── */
+  .callout {
+    background: #0497FE08;
+    border: 1px solid #0497FE20;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    line-height: 1.55;
+    margin-left: 40px;
+    margin-top: 12px;
+  }
+
+  .callout strong {
+    color: var(--ink);
+  }
+
+  .callout.warn {
+    background: #F9E2AF12;
+    border-color: #F9E2AF40;
+  }
+
+  /* ── Divider ── */
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 40px 0;
+  }
+
+  /* ── Chat mockup for step 4 ── */
+  .chat-mock {
+    margin-left: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chat-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .chat-bubble.user {
+    background: var(--azure);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+
+  .chat-bubble.assistant {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+
+  .chat-bubble .chat-label {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.7;
+    margin-bottom: 4px;
+  }
+
+  .chat-bubble.assistant .tool-call {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--azure);
+    background: #0497FE0A;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 6px;
+  }
+
+  /* ── Footer ── */
+  .page-footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .page-footer a {
+    color: var(--azure);
+    text-decoration: none;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 32px 16px 60px; }
+    html, body { overflow-x: hidden; }
+    .terminal, .desktop-mock, .callout, .chat-mock, .step-desc { margin-left: 0; }
+    .page-header h1 { font-size: 26px; }
+    .tab-bar { overflow-x: auto; }
+    .tab-btn { white-space: nowrap; }
+    .chat-bubble { max-width: 100%; }
+    .page-footer { flex-wrap: wrap; gap: 8px; }
+  }
+</style>
+
+<div class="page-header">
+  <div class="breadcrumb">Handoff Docs &rsaquo; Setup</div>
+  <h1>Install the MCP server</h1>
+  <p class="subtitle">Add Handoff to your agent in under two minutes. One published npm package, <code>@hedera-handoff/mcp-client</code>, works with Claude Code, Claude Desktop, or any MCP-compatible client.</p>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="code"><span class="tab-icon">&gt;_</span> Claude Code</button>
+  <button class="tab-btn" data-tab="desktop"><span class="tab-icon">&#9635;</span> Claude Desktop</button>
+</div>
+
+<!-- ═══════════ Claude Code tab ═══════════ -->
+<div class="tab-panel active" id="tab-code">
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <h3>Set your Hedera testnet credentials</h3>
+    </div>
+    <p class="step-desc">Export your testnet account ID and private key in your shell profile, so the client reads them from the environment rather than from a file you might commit. Your account must use an <strong>ECDSA</strong> key (not ED25519) for x402 payments to work.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line"><span class="comment"># Add to your shell profile (~/.zshrc or ~/.bashrc)</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">X402_PAYER_ACCOUNT_ID</span>=<span class="str">"0.0.YOUR_ACCOUNT"</span></span>
+        <span class="line"><span class="prompt">$</span> <span class="cmd">export</span> <span class="key">X402_PAYER_PRIVATE_KEY</span>=<span class="str">"your-ecdsa-key"</span></span>
+      </div>
+    </div>
+    <div class="callout warn">
+      <strong>Don't have a testnet account?</strong> Visit the Hedera Portal to create one for free. The faucet gives you enough test HBAR for several orders. Each order costs 0.5 HBAR (service fee) + 100 HBAR (escrow).
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <h3>Add the Handoff MCP client</h3>
+    </div>
+    <p class="step-desc">Nothing to clone and nothing to build. This registers the published client, <code>@hedera-handoff/mcp-client</code>, with Claude Code. It runs on your machine and signs there &mdash; your key never reaches the service.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line"><span class="prompt">$</span> <span class="cmd">claude mcp add handoff</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">HANDOFF_SERVICE_URL</span>=<span class="url">https://api.the-handoff.xyz</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">X402_PAYER_ACCOUNT_ID</span>=<span class="str">"$X402_PAYER_ACCOUNT_ID"</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">-e</span> <span class="key">X402_PAYER_PRIVATE_KEY</span>=<span class="str">"$X402_PAYER_PRIVATE_KEY"</span> <span class="flag">\</span></span>
+        <span class="line">    <span class="flag">--</span> <span class="cmd">npx -y @hedera-handoff/mcp-client</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="success">&#10003;</span> <span class="output">Added stdio MCP server handoff to local config</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <h3>Verify the connection</h3>
+    </div>
+    <p class="step-desc">Check that Handoff appears in your MCP server list.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line"><span class="prompt">$</span> <span class="cmd">claude mcp list</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="label">handoff</span><span class="output">: npx -y @hedera-handoff/mcp-client - </span><span class="success">&#10003; Connected</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      <h3>Ask your agent to verify something</h3>
+    </div>
+    <p class="step-desc">Start a Claude Code session and describe the work. Your agent handles the rest &mdash; payment, escrow, and waiting for the expert's verdict.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">claude</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line"><span class="prompt">&gt;</span> <span class="cmd">I drafted a quarterly financial report for submission</span></span>
+        <span class="line"><span class="cmd">  to the tax authority. Have a certified accountant</span></span>
+        <span class="line"><span class="cmd">  verify the numbers and flag any compliance issues</span></span>
+        <span class="line"><span class="cmd">  before I file.</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="output">I'll submit this for expert verification using Handoff.</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="comment">  &#9656; Calling handoff_verify...</span></span>
+        <span class="line"><span class="comment">  &#9656; Service fee: 0.5 HBAR paid via x402</span></span>
+        <span class="line"><span class="comment">  &#9656; Escrow: 100 HBAR locked</span></span>
+        <span class="line"><span class="comment">  &#9656; Waiting for expert verdict...</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="warn">&#9632; Verdict received</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="output">The certified accountant reviewed your report and</span></span>
+        <span class="line"><span class="output">found </span><span class="warn">2 issues</span><span class="output">:</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="output">  </span><span class="red">REVENUE_MISMATCH</span><span class="output"> — Q3 revenue doesn't match the ledger</span></span>
+        <span class="line"><span class="output">  </span><span class="red">MISSING_DISCLOSURE</span><span class="output"> — Related-party note is absent</span></span>
+        <span class="line">&nbsp;</span>
+        <span class="line"><span class="label">Verdict:</span> <span class="warn">reject</span>  <span class="label">Expert:</span> <span class="output">0.0.5234871</span></span>
+        <span class="line"><span class="label">Proof:</span>  <span class="url">View on Hashscan &#8599;</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ Claude Desktop tab ═══════════ -->
+<div class="tab-panel" id="tab-desktop">
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <h3>Open the MCP settings</h3>
+    </div>
+    <p class="step-desc">In Claude Desktop, go to <strong>Settings</strong> &rarr; <strong>Developer</strong> &rarr; <strong>Edit Config</strong>. This opens <code>claude_desktop_config.json</code> in your editor.</p>
+    <div class="desktop-mock">
+      <div class="desktop-titlebar">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span style="flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--ink);margin-right:36px">Settings</span>
+      </div>
+      <div class="desktop-body">
+        <div class="desktop-nav">
+          <div class="desktop-nav-item">General</div>
+          <div class="desktop-nav-item">Appearance</div>
+          <div class="desktop-nav-item active">Developer</div>
+        </div>
+        <div class="desktop-field">
+          <div class="desktop-field-label">MCP Servers</div>
+          <div class="desktop-field-hint">Configure Model Context Protocol servers for extended capabilities.</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <span class="desktop-btn primary">Edit Config</span>
+            <span class="desktop-btn secondary">Reload</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <h3>Add the Handoff server</h3>
+    </div>
+    <p class="step-desc">Paste this config into your <code>claude_desktop_config.json</code>. Replace the account ID and private key with your Hedera testnet credentials. Claude Desktop starts the published client with <code>npx</code>; nothing to clone and nothing to build.</p>
+    <div class="terminal">
+      <div class="terminal-chrome">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">claude_desktop_config.json</span>
+      </div>
+      <div class="terminal-body">
+        <span class="line">{</span>
+        <span class="line">  <span class="key">"mcpServers"</span>: {</span>
+        <span class="line">    <span class="key">"handoff"</span>: {</span>
+        <span class="line">      <span class="key">"command"</span>: <span class="str">"npx"</span>,</span>
+        <span class="line">      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@hedera-handoff/mcp-client"</span>],</span>
+        <span class="line">      <span class="key">"env"</span>: {</span>
+        <span class="line">        <span class="key">"HANDOFF_SERVICE_URL"</span>: <span class="str">"https://api.the-handoff.xyz"</span>,</span>
+        <span class="line">        <span class="key">"X402_PAYER_ACCOUNT_ID"</span>: <span class="str">"0.0.YOUR_ACCOUNT"</span>,</span>
+        <span class="line">        <span class="key">"X402_PAYER_PRIVATE_KEY"</span>: <span class="str">"your-ecdsa-key"</span></span>
+        <span class="line">      }</span>
+        <span class="line">    }</span>
+        <span class="line">  }</span>
+        <span class="line">}</span>
+      </div>
+    </div>
+    <div class="callout warn">
+      <strong>ECDSA keys only.</strong> Your Hedera testnet account must use an ECDSA key (not ED25519) for the x402 payment to work. The portal's default is ED25519; the client refuses it with a message saying so. The key stays on your machine &mdash; only signatures go over the wire.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <h3>Restart Claude Desktop</h3>
+    </div>
+    <p class="step-desc">Quit and reopen Claude Desktop. The Handoff server will appear in the MCP tools menu (the hammer icon at the bottom of the chat input).</p>
+    <div class="desktop-mock">
+      <div class="desktop-titlebar">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span style="flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--ink);margin-right:36px">Claude</span>
+      </div>
+      <div class="desktop-body" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--paper);border-radius:8px;border:1px solid var(--line)">
+          <span style="font-size:14px">&#128296;</span>
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">MCP Tools</span>
+          <span style="font-size:11px;color:var(--ink-muted);margin-left:auto">2 tools available</span>
+        </div>
+        <div style="margin:8px 0 0 24px;display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+            <span style="color:var(--term-green)">&#9679;</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink)">handoff_verify</span>
+            <span style="font-size:11px;color:var(--ink-muted)">Submit work for expert verification</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+            <span style="color:var(--term-green)">&#9679;</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink)">handoff_status</span>
+            <span style="font-size:11px;color:var(--ink-muted)">Check progress and get the verdict</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      <h3>Ask Claude to verify something</h3>
+    </div>
+    <p class="step-desc">Type a natural language request. Claude handles the payment, escrow, and expert coordination automatically.</p>
+    <div class="chat-mock">
+      <div class="chat-bubble user">
+        I drafted a quarterly financial report for submission to the tax authority. Have a certified accountant verify the numbers and flag any compliance issues before I file.
+      </div>
+      <div class="chat-bubble assistant">
+        <div>I'll submit your financial report for expert verification using Handoff.</div>
+        <div class="tool-call">&#9656; handoff_verify</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink-muted)">
+          Service fee: 0.5 HBAR &middot; Escrow: 100 HBAR locked &middot; Waiting for expert...
+        </div>
+      </div>
+      <div class="chat-bubble assistant">
+        <div><strong>Verdict received: reject</strong></div>
+        <div style="margin-top:6px">The certified accountant found 2 issues:</div>
+        <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12px">
+          <div style="color:var(--term-red)">REVENUE_MISMATCH</div>
+          <div style="color:var(--term-red)">MISSING_DISCLOSURE</div>
+        </div>
+        <div style="margin-top:8px;font-size:12.5px">
+          <em>"Q3 revenue doesn't match the ledger. The related-party transactions note is absent from the disclosure section."</em>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--ink-muted)">
+          Expert: 0.0.5234871 &middot; Proof: 4 transactions on Hashscan
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="page-footer">
+  <span>Testnet only. Not real money.</span>
+  <a href="https://the-handoff.xyz">Back to docs &rarr;</a>
+</div>
+
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

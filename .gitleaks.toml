@@ -1,0 +1,21 @@
+# Hard rule 2 stays in force: this file only narrows one false positive.
+# The docs site shows readers the config they will paste, so its HTML
+# carries the line `"X402_PAYER_PRIVATE_KEY": "<placeholder>"`. The generic
+# rule reads the placeholder as a value.
+#
+# Written in the single-table form because CI runs gitleaks 8.24, which
+# ignores the newer [[allowlists]] form without a warning. Only a regex is
+# used, no path exemption, so the whole line must match: the docs site's
+# own span markup around the key, and a value that is the variable's own
+# name or the literal `your-ecdsa-key`. A real-looking key on that line
+# still fails the scan.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "docs site placeholders for the x402 payer key"
+regexTarget = "line"
+regexes = [
+  '''<span class="key">"?X402_PAYER_PRIVATE_KEY"?</span>[=:] ?<span class="str">"(\$\{?X402_PAYER_PRIVATE_KEY\}?|your-ecdsa-key)"</span>''',
+]

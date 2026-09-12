@@ -20,6 +20,7 @@ import { formatTinybars, hbarToTinybars } from "@handoff/schema";
 import type { CertTagOption } from "../config.js";
 import {
   CLAIM_NOT_READABLE,
+  claimedReply,
   NOT_VISIBLE_YET,
   deliveredReply,
   postedReply,
@@ -80,10 +81,29 @@ function labelFor(tags: readonly CertTagOption[], code: string): string {
 interface PostedBody {
   readonly order_id?: string;
   readonly service_fee?: { readonly settled?: boolean; readonly amount_tinybars?: string; readonly error?: string };
+  /**
+   * What the server threaded back. The fee id is empty rather than absent when
+   * settlement did not land, so an empty string is read as "no id", never
+   * rendered as one.
+   */
+  readonly transaction_ids?: {
+    readonly fund_lock?: string;
+    readonly submit_envelope?: string;
+    readonly service_fee?: string;
+  };
+}
+
+/** An id we were given, or nothing. The empty string is not an id. */
+function transactionId(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
 }
 
 export function createMcpServer(deps: McpDeps): McpServer {
-  const server = new McpServer({ name: "handoff", version: "0.1.0" });
+  // Kept in step with `packages/mcp-client`'s `version` by hand, because that
+  // is what an installed client actually is and this string is what it reports
+  // back over the protocol. A session debugging a version-skew problem — an
+  // old client against a redeployed server — has nothing else to read.
+  const server = new McpServer({ name: "handoff", version: "0.1.1" });
 
   const certTagCodes = deps.certTags.map((tag) => tag.code);
   // An empty list means the service would not say what it routes to at
@@ -125,7 +145,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "handoff_verify",
     {
       description:
-        "Order a signed review of a piece of work from a certified human. Funds lock up " +
+        "Order a signed review of a piece of work from a human reviewer. Funds lock up " +
         "front and the expert's attestation is published on Hedera. Calling this costs a " +
         "small service fee over x402, separately from the price of the judgment itself. " +
         // Consent, stated once, where an agent reads it before acting rather
@@ -155,11 +175,16 @@ export function createMcpServer(deps: McpDeps): McpServer {
           },
         )) as PostedBody & Record<string, unknown>;
 
+        const feeTransactionId = transactionId(posted.transaction_ids?.service_fee);
+        const fundLockTransactionId = transactionId(posted.transaction_ids?.fund_lock);
+
         const text = postedReply({
           orderId: posted.order_id ?? "unknown",
           priceTinybars: formatTinybars(hbarToTinybars(input.price_hbar)),
           deadline: input.deadline,
           certTagLabel: labelFor(deps.certTags, input.cert_tag),
+          ...(feeTransactionId === undefined ? {} : { feeTransactionId }),
+          ...(fundLockTransactionId === undefined ? {} : { fundLockTransactionId }),
           ...(posted.service_fee?.settled === true && posted.service_fee.amount_tinybars !== undefined
             ? { feeTinybars: posted.service_fee.amount_tinybars }
             : { ...(posted.service_fee?.error === undefined ? {} : { feeError: posted.service_fee.error }) }),
@@ -210,8 +235,19 @@ export function createMcpServer(deps: McpDeps): McpServer {
               ...(status.attestation === undefined ? {} : { certTag: status.attestation.cert_tag }),
             }),
           );
+        } else if (
+          status.state === "CLAIMED" &&
+          status.claimedBy !== undefined &&
+          status.signBy !== undefined
+        ) {
+          lines.push(claimedReply({ claimedBy: status.claimedBy, signBy: status.signBy }));
         } else if (status.state === "POSTED" && status.envelope !== undefined) {
-          lines.push(waitingReply(status.envelope.deadline));
+          lines.push(
+            waitingReply(
+              status.envelope.deadline,
+              labelFor(deps.certTags, status.envelope.cert_tag),
+            ),
+          );
         } else {
           lines.push(NOT_VISIBLE_YET);
         }

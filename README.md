@@ -101,7 +101,8 @@ One pnpm workspace. Libraries in `packages/`, deployables in `apps/`.
 | `packages/chain` | Escrow, scheduled payment and early execute, HCS, mirror reads. **The only package that imports the Hedera SDK** |
 | `packages/content` | The content store behind an interface |
 | `apps/mcp` | The `handoff_verify` MCP server and the x402-gated resource server in front of it |
-| `apps/requester` | The demo requester agent |
+| `packages/mcp-client` | The published client, `@hedera-handoff/mcp-client`, bundled from `apps/mcp`. This is what a requester agent session runs |
+| `apps/requester` | Empty. The demo requester is an agent session running the client above; see `apps/requester/CLAUDE.md` |
 | `apps/web` | The expert app: inbox, review workspace, sign |
 
 Two constraints hold regardless of how anything else moves. `packages/schema` is the

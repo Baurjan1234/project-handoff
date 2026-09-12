@@ -1,11 +1,11 @@
 {
   "name": "@hedera-handoff/mcp-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Order a certified human review from any agent session. The x402 client for Handoff, on Hedera testnet.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "handoff-mcp": "./dist/handoff-mcp.mjs"
+    "handoff-mcp": "dist/handoff-mcp.mjs"
   },
   "files": [
     "dist/handoff-mcp.mjs",

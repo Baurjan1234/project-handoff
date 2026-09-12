@@ -45,16 +45,67 @@ export interface RequestDraft {
   readonly claimTimeoutSeconds: string;
 }
 
-export const EMPTY_DRAFT: RequestDraft = {
-  spec: "",
-  artifact: "",
-  certTag: "",
-  priceHbar: "100",
-  deadline: "",
-  claimTimeoutSeconds: "1800",
-};
-
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+const HOUR_MS = 3_600_000;
+
+/** Long enough for a real review. The form opens on it rather than on blank. */
+export const DEFAULT_DEADLINE_DAYS = 3;
+
+/**
+ * Ten minutes. Above the treaty's floor, and short next to a three-day
+ * deadline — which is the whole reason the two clocks are separate. A
+ * claimant who walks away frees the order quickly instead of sitting on it.
+ */
+export const DEFAULT_CLAIM_TIMEOUT_SECONDS = 600;
+
+/** UTC, second precision, `Z`. Empty for anything that is not a real instant. */
+function utcSecond(at: Date): string {
+  if (Number.isNaN(at.getTime())) return "";
+  const text = `${at.toISOString().slice(0, 19)}Z`;
+  return UTC.test(text) ? text : "";
+}
+
+/** Three days out, on the hour, so the form opens on a deadline that works. */
+export function defaultDeadline(now: Date): string {
+  const at = new Date(now.getTime() + DEFAULT_DEADLINE_DAYS * 24 * HOUR_MS);
+  at.setMinutes(0, 0, 0);
+  return utcSecond(new Date(at.getTime() + HOUR_MS));
+}
+
+/** A new draft. Takes the clock because two of its defaults are times. */
+export function emptyDraft(now: Date): RequestDraft {
+  return {
+    spec: "",
+    artifact: "",
+    certTag: "",
+    priceHbar: "100",
+    deadline: defaultDeadline(now),
+    claimTimeoutSeconds: String(DEFAULT_CLAIM_TIMEOUT_SECONDS),
+  };
+}
+
+/**
+ * The two sides of the date picker, which speaks local wall-clock time with
+ * no zone while the envelope takes UTC. Converting in one tested place is
+ * what keeps a deadline picked in Ulaanbaatar meaning the instant that person
+ * meant, and it is why the field shows the UTC instant back.
+ */
+export function deadlineForPicker(deadline: string): string {
+  if (!UTC.test(deadline.trim())) return "";
+  const at = new Date(deadline.trim());
+  if (Number.isNaN(at.getTime())) return "";
+  const pad = (value: number, width = 2): string => String(value).padStart(width, "0");
+  return (
+    `${pad(at.getFullYear(), 4)}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` +
+    `T${pad(at.getHours())}:${pad(at.getMinutes())}`
+  );
+}
+
+/** What the picker hands back is local time. Anything else is no deadline. */
+export function deadlineFromPicker(local: string): string {
+  return local.trim() === "" ? "" : utcSecond(new Date(local.trim()));
+}
 
 /**
  * Everything wrong with the draft, in the order the fields appear. Plain

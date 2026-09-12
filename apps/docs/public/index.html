@@ -1,0 +1,1645 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Handoff Docs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #FAF7F2;
+    --ink: #1C1917;
+    --ink-muted: #57534E;
+    --azure: #0497FE;
+    --proof: #1D4E89;
+    --light-azure: #8BC6F0;
+    --pale: #B7D6EA;
+    --surface: #FFFFFF;
+    --line: #E7E5E4;
+    --code-bg: #0d1117;
+    --code-text: #c9d1d9;
+    --code-border: #21262d;
+    --paid: #166534;
+    --paid-bg: #ECFDF5;
+    --fee-color: #78716C;
+    --escrow-color: #1C1917;
+    --card-shadow: 0 1px 3px rgba(28,25,23,0.04);
+    --nav-blur: rgba(250,247,242,0.88);
+    --sidebar-bg: transparent;
+    --sidebar-active: #0497FE10;
+    --sidebar-hover: #0497FE08;
+    --search-bg: #F0EDE8;
+    --search-border: #E7E5E4;
+    --search-focus-border: #0497FE66;
+    --logo-filter: none;
+    --logo-bg: transparent;
+    --kbd-bg: #E7E5E4;
+    --kbd-color: #78716C;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #111110;
+      --ink: #E7E5E4;
+      --ink-muted: #A8A29E;
+      --surface: #1C1A19;
+      --line: #2E2C2B;
+      --code-bg: #0d1117;
+      --code-border: #21262d;
+      --paid-bg: #0A1F14;
+      --fee-color: #A8A29E;
+      --escrow-color: #E7E5E4;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      --nav-blur: rgba(17,17,16,0.88);
+      --sidebar-active: #0497FE18;
+      --sidebar-hover: #0497FE10;
+      --search-bg: #1C1A19;
+      --search-border: #2E2C2B;
+      --search-focus-border: #0497FE66;
+      --logo-filter: brightness(0) invert(1);
+      --logo-bg: transparent;
+      --pipeline-bg: var(--surface);
+      --pipeline-border: var(--line);
+      --kbd-bg: #2E2C2B;
+      --kbd-color: #A8A29E;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #111110;
+    --ink: #E7E5E4;
+    --ink-muted: #A8A29E;
+    --surface: #1C1A19;
+    --line: #2E2C2B;
+    --code-bg: #0d1117;
+    --code-border: #21262d;
+    --paid-bg: #0A1F14;
+    --fee-color: #A8A29E;
+    --escrow-color: #E7E5E4;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    --nav-blur: rgba(17,17,16,0.88);
+    --sidebar-active: #0497FE18;
+    --sidebar-hover: #0497FE10;
+    --search-bg: #1C1A19;
+    --search-border: #2E2C2B;
+    --search-focus-border: #0497FE66;
+    --logo-filter: brightness(0) invert(1);
+    --logo-bg: transparent;
+    --kbd-bg: #2E2C2B;
+    --kbd-color: #A8A29E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* iOS Safari only honours this when html and body both carry it */
+  html, body { overflow-x: hidden; }
+
+  /* ── Nav ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-blur);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    text-decoration: none;
+  }
+
+  .nav-logo-mark {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    filter: var(--logo-filter);
+  }
+
+  .nav-wordmark {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    text-transform: uppercase;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-wordmark .o-diamond {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    position: relative;
+  }
+
+  .nav-wordmark .o-diamond svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .nav-label {
+    font-size: 12px;
+    color: var(--ink-muted);
+    border-left: 1px solid var(--line);
+    padding-left: 10px;
+    margin-left: 2px;
+    font-weight: 500;
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    overflow: auto;
+  }
+
+  .nav-tab {
+    background: none;
+    border: none;
+    color: var(--ink-muted);
+    font-weight: 400;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  .nav-tab:hover {
+    color: var(--ink);
+    background: var(--sidebar-hover);
+  }
+
+  .nav-tab.active {
+    color: var(--ink);
+    font-weight: 600;
+    background: var(--sidebar-active);
+  }
+
+  .nav-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--search-bg);
+    border: 1px solid var(--search-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    width: 200px;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .nav-search:focus-within {
+    width: 260px;
+    border-color: var(--search-focus-border);
+  }
+
+  .nav-search-icon {
+    color: var(--ink-muted);
+    font-size: 13px;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .nav-search input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--ink);
+    font-size: 13px;
+    width: 100%;
+    font-family: inherit;
+  }
+
+  .nav-search input::placeholder { color: var(--ink-muted); opacity: 0.7; }
+
+  .nav-search kbd {
+    font-size: 10px;
+    color: var(--kbd-color);
+    background: var(--kbd-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .nav-right a {
+    font-size: 13px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.15s;
+  }
+  .nav-right a:hover { color: var(--ink); }
+
+  .testnet-pill {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--azure);
+    border: 1px solid var(--azure);
+    border-radius: 100px;
+    padding: 2px 10px;
+    opacity: 0.8;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    min-height: calc(100vh - 56px);
+  }
+
+  /* ── Left sidebar ── */
+  .sidebar-left {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--line);
+    padding: 24px 16px;
+    position: sticky;
+    top: 56px;
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+  }
+
+  .sidebar-section-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .sidebar-link {
+    display: block;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    color: var(--ink-muted);
+    background: transparent;
+    font-weight: 400;
+    cursor: pointer;
+    margin-bottom: 2px;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+
+  .sidebar-link:hover {
+    color: var(--ink);
+    background: var(--sidebar-hover);
+  }
+
+  .sidebar-link.active {
+    color: var(--ink);
+    font-weight: 600;
+    background: var(--sidebar-active);
+    border-left-color: var(--azure);
+  }
+
+  .sidebar-info {
+    margin-top: 28px;
+    padding: 14px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+
+  .sidebar-info-label {
+    font-size: 11px;
+    color: var(--azure);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .sidebar-info-text {
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* ── Main ── */
+  .main {
+    flex: 1;
+    padding: 40px 48px 40px 48px;
+    max-width: 860px;
+    min-width: 0;
+  }
+
+  /* ── Right sidebar ── */
+  .sidebar-right {
+    width: 200px;
+    flex-shrink: 0;
+    padding: 24px 16px;
+    position: sticky;
+    top: 56px;
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+  }
+
+  .toc-link {
+    display: block;
+    font-size: 12px;
+    padding: 5px 0;
+    color: var(--ink-muted);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .toc-link:hover, .toc-link.active {
+    color: var(--azure);
+  }
+
+  .stack-box {
+    margin-top: 16px;
+    padding: 14px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+
+  .stack-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .stack-item {
+    font-size: 11px;
+    color: var(--ink-muted);
+    padding: 3px 0;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .sidebar-left { display: none; }
+    .main { padding: 24px 20px; }
+    .nav-search { display: none; }
+    .nav-inner { padding: 0 16px; gap: 12px; }
+    .nav-right { gap: 10px; }
+    .hero h1 { font-size: 30px; }
+    .hero p { font-size: 15px; }
+    .flow-tooltip { left: auto; right: 0; max-width: calc(100vw - 72px); }
+  }
+
+  @media (max-width: 420px) {
+    .nav-label { display: none; }
+    .main { padding: 20px 16px; }
+    .hero h1 { font-size: 27px; }
+  }
+
+  /* ── Hero ── */
+  .hero {
+    margin-bottom: 48px;
+  }
+
+  .hero-badges {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-azure {
+    background: #0497FE18;
+    color: var(--azure);
+    border: 1px solid #0497FE30;
+  }
+
+  .badge-green {
+    background: #16653418;
+    color: var(--paid);
+    border: 1px solid #16653430;
+  }
+
+  .hero h1 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 36px;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .hero h1 .accent {
+    color: var(--azure);
+  }
+
+  .hero p {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-muted);
+    margin: 0 0 28px;
+    max-width: 540px;
+  }
+
+  .hero-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    background: var(--azure);
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  /* ── Sections ── */
+  section {
+    margin-bottom: 48px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--azure);
+    margin: 0 0 8px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+  }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 0 0 8px;
+  }
+
+  .section-intro {
+    color: var(--ink-muted);
+    font-size: 14px;
+    margin: 0 0 24px;
+    max-width: 580px;
+    line-height: 1.6;
+  }
+
+  /* ── Code blocks with terminal chrome ── */
+  .code-block {
+    background: var(--code-bg);
+    border-radius: 10px;
+    border: 1px solid var(--code-border);
+    overflow: hidden;
+    margin: 16px 0;
+  }
+
+  .code-chrome {
+    display: flex;
+    gap: 6px;
+    padding: 12px 16px 0;
+    opacity: 0.4;
+  }
+
+  .code-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .code-dot.red { background: #ff5f56; }
+  .code-dot.yellow { background: #ffbd2e; }
+  .code-dot.green { background: #27c93f; }
+
+  .code-block pre {
+    margin: 0;
+    padding: 12px 20px 20px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--code-text);
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .code-block .comment { color: #8b949e; }
+  .code-block .key { color: #79c0ff; }
+  .code-block .str { color: #a5d6ff; }
+  .code-block .kw { color: #ff7b72; }
+  .code-block .num { color: #79c0ff; }
+
+  .code-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 24px 0 8px;
+  }
+
+  /* ── Feature cards (core concepts) ── */
+  /* ── Compact pipeline bar ── */
+  .pipeline-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 12px;
+    margin-bottom: 20px;
+    box-shadow: var(--card-shadow);
+    overflow-x: auto;
+  }
+
+  .pip-step {
+    text-align: center;
+    padding: 6px 10px;
+    min-width: 90px;
+  }
+
+  /* auto margins centre the row when it fits and, unlike justify-content,
+     keep the first step reachable when the row scrolls */
+  .pip-step:first-child { margin-left: auto; }
+  .pip-step:last-child { margin-right: auto; }
+
+  .pip-num {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 2px;
+  }
+
+  .pip-label {
+    font-size: 11px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .pip-arrow {
+    color: var(--line);
+    margin: 0 2px;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* ── Flow cards grid ── */
+  .flow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .flow-grid { grid-template-columns: 1fr; }
+  }
+
+  .flow-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.2s;
+  }
+
+  .flow-card:hover {
+    border-color: var(--azure);
+  }
+
+  .flow-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .flow-card-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+
+  .flow-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .flow-tag.agent { color: var(--azure); background: #0497FE12; border: 1px solid #0497FE25; }
+  .flow-tag.x402 { color: var(--fee-color); background: #78716C12; border: 1px solid #78716C25; }
+  .flow-tag.hedera { color: var(--proof); background: #1D4E8912; border: 1px solid #1D4E8925; }
+  .flow-tag.onchain { color: var(--paid); background: #16653412; border: 1px solid #16653425; }
+
+  .flow-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .flow-card p {
+    font-size: 13px;
+    color: var(--ink-muted);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* ── Tooltip detail badge ── */
+  .flow-detail-wrap {
+    position: relative;
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  .flow-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink-muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    user-select: none;
+  }
+
+  .flow-detail:hover {
+    border-color: var(--azure);
+    color: var(--azure);
+  }
+
+  .flow-detail::after {
+    content: '?';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--line);
+    color: var(--ink-muted);
+    font-size: 9px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .flow-detail:hover::after {
+    background: var(--azure);
+    color: #fff;
+  }
+
+  .flow-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    min-width: 240px;
+    max-width: 300px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s, transform 0.15s;
+  }
+
+  .flow-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 16px;
+    border: 6px solid transparent;
+    border-top-color: var(--ink);
+  }
+
+  .flow-detail-wrap:hover .flow-tooltip,
+  .flow-detail-wrap.active .flow-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* ── Two money flows ── */
+  .money-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 540px) {
+    .money-grid { grid-template-columns: 1fr; }
+  }
+
+  .money-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .money-card.fee { border-top: 3px solid var(--fee-color); }
+  .money-card.escrow { border-top: 3px solid var(--azure); }
+
+  .money-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 12px;
+  }
+
+  .money-amount {
+    font-variant-numeric: tabular-nums;
+    margin: 0 0 16px;
+  }
+
+  .money-amount.fee { font-size: 20px; font-weight: 600; color: var(--fee-color); }
+  .money-amount.escrow { font-size: 28px; font-weight: 700; color: var(--escrow-color); }
+
+  .money-amount small { font-size: 14px; font-weight: 400; color: var(--ink-muted); }
+
+  .money-dl {
+    display: grid;
+    gap: 8px;
+  }
+
+  .money-dl dt { font-size: 12px; color: var(--ink-muted); font-weight: 500; }
+  .money-dl dd { font-size: 14px; margin: 0; line-height: 1.5; }
+
+  .money-note {
+    margin: 16px 0 0;
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  /* ── MCP tools as endpoint rows ── */
+  .tool-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .tool-row:hover {
+    background: var(--sidebar-hover);
+  }
+
+  .tool-row:last-child {
+    border-bottom: none;
+  }
+
+  .method-badge {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 4px;
+    min-width: 42px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .method-badge.gated {
+    color: var(--azure);
+    background: #0497FE18;
+  }
+
+  .method-badge.free {
+    color: var(--paid);
+    background: #16653418;
+  }
+
+  .tool-name-row {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .tool-desc-row {
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin-left: auto;
+  }
+
+  /* ── Tool detail card ── */
+  .tool-detail {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+    margin: 16px 0;
+  }
+
+  .tool-detail-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--proof);
+    margin: 0 0 4px;
+  }
+
+  .tool-detail-desc {
+    font-size: 14px;
+    color: var(--ink-muted);
+    margin: 0 0 20px;
+    line-height: 1.55;
+  }
+
+  .tool-params {
+    display: grid;
+    gap: 10px;
+  }
+
+  .tool-param {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px;
+    font-size: 13px;
+    align-items: baseline;
+  }
+
+  @media (max-width: 540px) {
+    .tool-param { grid-template-columns: 1fr; gap: 2px; }
+  }
+
+  .param-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  .param-desc { color: var(--ink-muted); line-height: 1.5; }
+
+  .tool-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 100px;
+    margin-top: 16px;
+  }
+
+  .tool-badge.gated {
+    color: var(--azure);
+    border: 1px solid var(--azure);
+    opacity: 0.8;
+  }
+
+  .tool-badge.ungated {
+    color: var(--paid);
+    border: 1px solid var(--paid);
+    opacity: 0.8;
+  }
+
+  /* ── Install ── */
+  .install-steps {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .install-step { min-width: 0; }
+
+  .install-step h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--azure);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Attestation ── */
+  .attestation-box {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+  }
+
+  .attestation-box summary {
+    padding: 18px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    user-select: none;
+  }
+
+  .attestation-box summary::-webkit-details-marker { display: none; }
+
+  .attestation-box summary::after {
+    content: "+";
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--ink-muted);
+    transition: transform 0.15s;
+  }
+
+  .attestation-box[open] summary::after { transform: rotate(45deg); }
+
+  .attestation-body {
+    padding: 0 24px 24px;
+    border-top: 1px solid var(--line);
+  }
+
+  .att-schema { margin: 16px 0 0; }
+
+  .att-field {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 4px 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    align-items: baseline;
+  }
+
+  @media (max-width: 540px) {
+    .att-field { grid-template-columns: 1fr; }
+  }
+
+  .att-field:last-child { border-bottom: none; }
+
+  .att-field-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--proof);
+  }
+
+  .att-field-desc { color: var(--ink-muted); line-height: 1.5; }
+
+  .att-note {
+    margin: 20px 0 0;
+    padding: 14px 18px;
+    background: var(--code-bg);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--code-text);
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .footer-note { font-size: 12px; color: var(--ink-muted); }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+  }
+
+  .footer-links a {
+    font-size: 12px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .footer-links a:hover { color: var(--ink); }
+
+  [id] { scroll-margin-top: 72px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0s !important; }
+  }
+</style>
+
+<!-- ═══ Nav ═══ -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-left">
+      <svg class="nav-logo-mark" viewBox="0 0 500 500" aria-label="Handoff mark">
+        <defs>
+          <linearGradient id="nav-lg" x1="142.3" y1="258.1" x2="367.7" y2="258.1" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#b7d6ea"/><stop offset="1" stop-color="#0497fe"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#nav-lg)" d="M257.3,306c-15.6,0-31.3-1.7-46.9-5.3-39.8-9-65.3-26.4-68.1-28.3l43.5-61.8-.3-.2c2.7,1.8,66.8,44.2,144.6-.3l37.5,65.5c-35.1,20.1-72.6,30.3-110.4,30.3Z"/>
+        <g>
+          <rect fill="#0497fe" x="308.1" y="120.4" width="76.9" height="76.9" rx="38.4" ry="38.4"/>
+          <path fill="#0497fe" d="M346.6,203.2h0c24.5,0,44.3,19.9,44.3,44.3v44.3h-88.7v-44.3c0-24.5,19.9-44.3,44.3-44.3Z"/>
+          <rect fill="#0497fe" x="302.2" y="291.1" width="88.7" height="88.7"/>
+          <rect fill="#8bc6f0" x="109.1" y="211" width="84.4" height="84.4"/>
+          <rect fill="#0497fe" x="109.2" y="126.5" width="84.4" height="84.4"/>
+          <rect fill="#b7d6ea" x="125.8" y="143" width="51.2" height="51.2"/>
+          <rect fill="#0497fe" x="130.8" y="232.5" width="41.6" height="41.6"/>
+          <path fill="#b7d6ea" d="M109.1,295.4v84.4h84.4v-84.4h-84.4ZM162,349.9h-20.6v-20.6h20.6v20.6Z"/>
+        </g>
+        <path fill="#b7d6ea" d="M250,498.9C112.8,498.9,1.2,387.3,1.2,250.1S112.8,1.3,250,1.3s248.8,111.6,248.8,248.8-111.6,248.8-248.8,248.8ZM250,42.1c-114.7,0-208,93.3-208,208s93.3,208,208,208,208-93.3,208-208S364.7,42.1,250,42.1Z"/>
+      </svg>
+      <span class="nav-wordmark">HAND<span class="o-diamond"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2" fill="#0497fe" transform="rotate(45 10 10)"/></svg></span>FF</span>
+      <span class="nav-label">DOCS</span>
+    </a>
+
+    <div style="flex:1"></div>
+
+    <div class="nav-search">
+      <span class="nav-search-icon">&#x2315;</span>
+      <input placeholder="Search docs..." />
+      <kbd>&#x2318;K</kbd>
+    </div>
+
+    <div class="nav-right">
+      <a href="https://github.com/nasaa0528/project-handoff" target="_blank" rel="noreferrer">GitHub</a>
+      <span class="testnet-pill">Testnet</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ Two-column layout ═══ -->
+<div class="layout">
+
+  <!-- ═══ Left sidebar ═══ -->
+  <aside class="sidebar-left">
+    <div class="sidebar-section-label">Documentation</div>
+    <a href="#overview" class="sidebar-link active">What is Handoff?</a>
+    <a href="#quickstart" class="sidebar-link">Quick start</a>
+    <a href="#concepts" class="sidebar-link">How it works</a>
+    <a href="#money" class="sidebar-link">Two money flows</a>
+    <a href="#tools" class="sidebar-link">MCP tools</a>
+    <a href="#install" class="sidebar-link">Installation</a>
+    <a href="#attestation" class="sidebar-link">On-chain attestation</a>
+
+    <div class="sidebar-info">
+      <div class="sidebar-info-label">Hedera Testnet</div>
+      <p class="sidebar-info-text">Handoff runs on Hedera testnet. Get test HBAR from the portal to start.</p>
+    </div>
+
+    <div class="stack-box">
+      <div class="stack-label">Stack</div>
+      <div class="stack-item">Hedera HCS</div>
+      <div class="stack-item">x402 / Blocky402</div>
+      <div class="stack-item">MCP Protocol</div>
+      <div class="stack-item">TypeScript</div>
+      <div class="stack-item">React / Tailwind</div>
+    </div>
+  </aside>
+
+  <!-- ═══ Main content ═══ -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero" id="overview">
+      <div class="hero-badges">
+        <span class="badge badge-azure">Protocol</span>
+        <span class="badge badge-green">ETHOnline 2026</span>
+      </div>
+      <h1>Agent-built. Expert-verified.<br><span class="accent">On-chain.</span></h1>
+      <p>Your agent fleet can draft, design, and ship &mdash; but the last mile needs a human who knows the domain. Handoff connects agents to credentialed experts who verify or complete the work. Funds lock up front, the expert signs off, and the proof lives on Hedera.</p>
+      <div class="hero-buttons">
+        <a href="#quickstart" class="btn-primary">Get started</a>
+        <a href="https://github.com/nasaa0528/project-handoff" target="_blank" rel="noreferrer" class="btn-secondary">View on GitHub</a>
+      </div>
+    </div>
+
+    <!-- Quick start code block -->
+    <section id="quickstart">
+      <p class="section-label">Quick start</p>
+      <h2>Post an order from your agent</h2>
+      <div class="code-block">
+        <div class="code-chrome">
+          <span class="code-dot red"></span>
+          <span class="code-dot yellow"></span>
+          <span class="code-dot green"></span>
+        </div>
+        <pre><span class="comment"># Add the MCP server to your client config</span>
+<span class="comment"># Then ask your agent:</span>
+
+I drafted a quarterly financial report for
+submission to the tax authority. Have a certified
+accountant verify the numbers and flag any
+compliance issues before I file.
+
+<span class="comment"># Your agent calls handoff_verify, pays the</span>
+<span class="comment"># 0.5 HBAR service fee, locks 100 HBAR in</span>
+<span class="comment"># escrow, and waits for the expert's signed</span>
+<span class="comment"># verdict.</span></pre>
+      </div>
+    </section>
+
+    <!-- How it works — pipeline + card grid with tooltips -->
+    <section id="concepts">
+      <p class="section-label">How it works</p>
+      <h2>From request to proof in six steps</h2>
+      <p class="section-intro">One order, one credentialed expert, one signed verdict. A straight line from posting to payment.</p>
+
+      <div class="pipeline-bar">
+        <div class="pip-step"><div class="pip-num" style="color:var(--azure)">1</div><div class="pip-label">Ask agent</div></div>
+        <div class="pip-arrow">&rarr;</div>
+        <div class="pip-step"><div class="pip-num" style="color:var(--fee-color)">2</div><div class="pip-label">0.5 HBAR fee</div></div>
+        <div class="pip-arrow">&rarr;</div>
+        <div class="pip-step"><div class="pip-num" style="color:var(--proof)">3</div><div class="pip-label">100 HBAR locked</div></div>
+        <div class="pip-arrow">&rarr;</div>
+        <div class="pip-step"><div class="pip-num" style="color:var(--azure)">4</div><div class="pip-label">Expert claims</div></div>
+        <div class="pip-arrow">&rarr;</div>
+        <div class="pip-step"><div class="pip-num" style="color:var(--proof)">5</div><div class="pip-label">Reviews &amp; signs</div></div>
+        <div class="pip-arrow">&rarr;</div>
+        <div class="pip-step"><div class="pip-num" style="color:var(--paid)">6</div><div class="pip-label">Paid + verdict</div></div>
+      </div>
+
+      <div class="flow-grid">
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#0497FE12;color:var(--azure)">1</div>
+            <span class="flow-tag agent">Agent</span>
+          </div>
+          <h3>You ask your agent</h3>
+          <p>Describe the work in natural language and attach the document. Your agent picks the right credential and calls handoff_verify.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">MCP tool call</span>
+            <div class="flow-tooltip">Any MCP-compatible agent can call handoff_verify &mdash; Claude Code, Claude Desktop, or custom agents. No SDK integration needed.</div>
+          </div>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#78716C12;color:var(--fee-color)">2</div>
+            <span class="flow-tag x402">x402</span>
+          </div>
+          <h3>Agent pays the service fee</h3>
+          <p>0.5 HBAR flows through x402 via the Blocky402 facilitator. This micropayment posts the order to Hedera.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">x402 &middot; 0.5 HBAR</span>
+            <div class="flow-tooltip">The x402 protocol gates the API. Your agent partially signs a transfer; the Blocky402 facilitator co-signs as fee payer and settles on Hedera testnet. The fee is separate from the escrow.</div>
+          </div>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#1D4E8912;color:var(--proof)">3</div>
+            <span class="flow-tag hedera">Hedera</span>
+          </div>
+          <h3>Funds lock in escrow</h3>
+          <p>100 HBAR locks in a 2-of-3 threshold escrow. Only hashes go on-chain &mdash; the document stays private.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">2-of-3 threshold key</span>
+            <div class="flow-tooltip">The escrow is a Hedera account with a 2-of-3 threshold key: requester, platform verifier, and schedule admin. No single party can move the funds alone. Release requires the attestation to pass schema validation.</div>
+          </div>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#0497FE12;color:var(--azure)">4</div>
+            <span class="flow-tag hedera">Hedera</span>
+          </div>
+          <h3>A credentialed expert claims it</h3>
+          <p>Only experts holding the required certification see the order. The claim is signed by the expert's own account.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">credential routing &middot; HCS</span>
+            <div class="flow-tooltip">The claim is an HCS message signed by the expert's Hedera account. Consensus timestamp determines who won the race, not the UI. If a claim times out, the order reopens for the next expert.</div>
+          </div>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#1D4E8912;color:var(--proof)">5</div>
+            <span class="flow-tag onchain">On-chain</span>
+          </div>
+          <h3>Expert reviews and signs</h3>
+          <p>The expert reviews the document, writes defect codes and notes, then signs an attestation to the HCS attestations topic.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">on-chain attestation</span>
+            <div class="flow-tooltip">The account that submits the HCS message IS the signature &mdash; the platform is never in the signing path. The attestation is attributable forever, published to a dedicated topic with no submit key.</div>
+          </div>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-card-top">
+            <div class="flow-card-num" style="background:#16653412;color:var(--paid)">6</div>
+            <span class="flow-tag onchain">On-chain</span>
+          </div>
+          <h3>Expert gets paid, you get the verdict</h3>
+          <p>The escrow releases to the expert. You receive the verdict, defect codes, notes, and four transaction IDs as proof.</p>
+          <div class="flow-detail-wrap">
+            <span class="flow-detail">symmetric payment &middot; 100 HBAR</span>
+            <div class="flow-tooltip">Approve or reject, the expert gets paid the same amount. Payment is verified by a mirror-node read, not by hope. Settlement is confirmed by real transaction IDs that open on Hashscan.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="money-note" style="margin-top:16px">
+        <strong>Reject is a delivered product.</strong> Experts are paid for judgment, not approval. Funds only return if the submission is mechanically invalid &mdash; never over a disagreement.
+      </div>
+    </section>
+
+    <!-- Two money flows -->
+    <section id="money">
+      <p class="section-label">Economics</p>
+      <h2>Two money flows</h2>
+      <p class="section-intro">Two separate payments happen when you post an order. Here's where each one goes.</p>
+
+      <div class="money-grid">
+        <div class="money-card fee">
+          <p class="money-label">Service fee</p>
+          <p class="money-amount fee">0.5 HBAR <small>per order</small></p>
+          <dl class="money-dl">
+            <dt>What</dt><dd>Charge to place the order</dd>
+            <dt>How</dt><dd>x402 micropayment via Blocky402</dd>
+            <dt>When</dt><dd>Before the order posts</dd>
+          </dl>
+        </div>
+        <div class="money-card escrow">
+          <p class="money-label">Order value</p>
+          <p class="money-amount escrow">100 HBAR <small>held in escrow</small></p>
+          <dl class="money-dl">
+            <dt>What</dt><dd>Price of the human judgment</dd>
+            <dt>How</dt><dd>Locked in a 2-of-3 threshold escrow</dd>
+            <dt>When</dt><dd>Locked at posting, paid at verdict</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="money-note">
+        If nobody claims by the deadline, the escrow returns to you. The service fee does not refund &mdash; it paid for the order to be posted.
+      </div>
+    </section>
+
+    <!-- MCP Tools — endpoint rows + detail card -->
+    <section id="tools">
+      <p class="section-label">Tools</p>
+      <h2>MCP tools</h2>
+      <p class="section-intro">Your agent interacts with Handoff through two MCP tools. One submits work for expert verification, the other checks on progress.</p>
+
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:20px;box-shadow:var(--card-shadow)">
+        <div class="tool-row">
+          <span class="method-badge gated">GATED</span>
+          <span class="tool-name-row">handoff_verify</span>
+          <span class="tool-desc-row">Submit work for expert verification</span>
+        </div>
+        <div class="tool-row">
+          <span class="method-badge free">FREE</span>
+          <span class="tool-name-row">handoff_status</span>
+          <span class="tool-desc-row">Check progress and get the verdict</span>
+        </div>
+      </div>
+
+      <div class="tool-detail">
+        <p class="tool-detail-name">handoff_verify</p>
+        <p class="tool-detail-desc">Submit work for expert verification. Your agent sends the document, states what to check for, and names the credential. The tool handles the x402 payment, posts the order to HCS, locks the escrow, and waits for the signed verdict.</p>
+        <div class="tool-params">
+          <div class="tool-param">
+            <span class="param-name">artifact</span>
+            <span class="param-desc">The document to review. Plain text.</span>
+          </div>
+          <div class="tool-param">
+            <span class="param-name">ask</span>
+            <span class="param-desc">What the expert should check for. One paragraph.</span>
+          </div>
+          <div class="tool-param">
+            <span class="param-name">credential</span>
+            <span class="param-desc">Required certification, e.g. "Certified accountant".</span>
+          </div>
+        </div>
+
+        <p class="code-label">Response</p>
+        <div class="code-block">
+          <div class="code-chrome">
+            <span class="code-dot red"></span>
+            <span class="code-dot yellow"></span>
+            <span class="code-dot green"></span>
+          </div>
+          <pre><span class="comment">// The signed verdict, with proof</span>
+{
+  <span class="key">"verdict"</span>: <span class="str">"reject"</span>,
+  <span class="key">"defects"</span>: [<span class="str">"REVENUE_MISMATCH"</span>, <span class="str">"MISSING_DISCLOSURE"</span>],
+  <span class="key">"notes"</span>: <span class="str">"Q3 revenue doesn't match the ledger..."</span>,
+  <span class="key">"signed_by"</span>: <span class="str">"0.0.5234871"</span>,
+  <span class="key">"proof"</span>: {
+    <span class="key">"fee_tx"</span>: <span class="str">"0.0.x@1725..."</span>,
+    <span class="key">"lock_tx"</span>: <span class="str">"0.0.x@1725..."</span>,
+    <span class="key">"verdict_tx"</span>: <span class="str">"0.0.x@1725..."</span>,
+    <span class="key">"payout_tx"</span>: <span class="str">"0.0.x@1725..."</span>
+  }
+}</pre>
+        </div>
+        <span class="tool-badge gated">x402 gated &middot; 0.5 HBAR</span>
+      </div>
+
+      <div class="tool-detail">
+        <p class="tool-detail-name">handoff_status</p>
+        <p class="tool-detail-desc">Check the status of a posted order. Returns the current lifecycle state, claim info, and settlement proof when available.</p>
+        <div class="tool-params">
+          <div class="tool-param">
+            <span class="param-name">order_id</span>
+            <span class="param-desc">The order id returned by handoff_verify.</span>
+          </div>
+        </div>
+        <span class="tool-badge ungated">No fee &middot; read only</span>
+      </div>
+    </section>
+
+    <!-- Installation -->
+    <section id="install">
+      <p class="section-label">Setup</p>
+      <h2>Installation</h2>
+      <p class="section-intro">Three steps to your first expert-verified result.</p>
+
+      <div class="install-steps">
+        <div class="install-step">
+          <h3><span class="step-num">1</span> Add the client config</h3>
+          <p style="font-size:14px;color:var(--ink-muted);margin:0 0 12px;line-height:1.6">The client is one npm package, <code style="font-family:'JetBrains Mono',monospace;font-size:13px">@hedera-handoff/mcp-client</code>, started with <code style="font-family:'JetBrains Mono',monospace;font-size:13px">npx</code>. It runs on your machine and signs there; the service never sees your key. Keep the key in your shell profile and let <code style="font-family:'JetBrains Mono',monospace;font-size:13px">${...}</code> expand it.</p>
+          <p class="code-label">Claude Code &middot; .mcp.json</p>
+          <div class="code-block">
+            <div class="code-chrome">
+              <span class="code-dot red"></span>
+              <span class="code-dot yellow"></span>
+              <span class="code-dot green"></span>
+            </div>
+            <pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"handoff"</span>: {
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@hedera-handoff/mcp-client"</span>],
+      <span class="key">"env"</span>: {
+        <span class="key">"HANDOFF_SERVICE_URL"</span>: <span class="str">"https://api.the-handoff.xyz"</span>,
+        <span class="key">"X402_PAYER_ACCOUNT_ID"</span>: <span class="str">"${X402_PAYER_ACCOUNT_ID}"</span>,
+        <span class="key">"X402_PAYER_PRIVATE_KEY"</span>: <span class="str">"${X402_PAYER_PRIVATE_KEY}"</span>
+      }
+    }
+  }
+}</pre>
+          </div>
+
+          <p class="code-label">Claude Desktop &middot; claude_desktop_config.json</p>
+          <div class="code-block">
+            <div class="code-chrome">
+              <span class="code-dot red"></span>
+              <span class="code-dot yellow"></span>
+              <span class="code-dot green"></span>
+            </div>
+            <pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"handoff"</span>: {
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@hedera-handoff/mcp-client"</span>],
+      <span class="key">"env"</span>: {
+        <span class="key">"HANDOFF_SERVICE_URL"</span>: <span class="str">"https://api.the-handoff.xyz"</span>,
+        <span class="key">"X402_PAYER_ACCOUNT_ID"</span>: <span class="str">"0.0.YOUR_ACCOUNT"</span>,
+        <span class="key">"X402_PAYER_PRIVATE_KEY"</span>: <span class="str">"your-ecdsa-key"</span>
+      }
+    }
+  }
+}</pre>
+          </div>
+        </div>
+
+        <div class="install-step">
+          <h3><span class="step-num">2</span> Get a Hedera testnet account</h3>
+          <p style="font-size:14px;color:var(--ink-muted);margin:0;line-height:1.6">Visit the Hedera Portal to create a free testnet account &mdash; it takes a minute. Get test HBAR from the faucet. Your account must use an <strong>ECDSA</strong> key (not ED25519) for the x402 payment to work.</p>
+          <div class="money-note" style="margin-top:12px">
+            <strong>How much HBAR?</strong> Each order costs 0.5 HBAR (service fee) plus 100 HBAR (escrow). The testnet faucet gives enough for several orders. The escrow returns if no expert claims by the deadline.
+          </div>
+        </div>
+
+        <div class="install-step">
+          <h3><span class="step-num">3</span> Ask your agent to verify something</h3>
+          <div class="code-block">
+            <div class="code-chrome">
+              <span class="code-dot red"></span>
+              <span class="code-dot yellow"></span>
+              <span class="code-dot green"></span>
+            </div>
+            <pre><span class="comment"># In Claude Code or any MCP client</span>
+
+I drafted a quarterly financial report for
+submission to the tax authority. Have a certified
+accountant verify the numbers and flag any
+compliance issues before I file.</pre>
+          </div>
+          <p style="font-size:14px;color:var(--ink-muted);margin:8px 0 0;line-height:1.6">Your agent calls <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--proof)">handoff_verify</code>, pays the service fee, locks the escrow, and waits for the expert's signed verdict.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Attestation -->
+    <section id="attestation">
+      <p class="section-label">On-chain</p>
+      <h2>The attestation</h2>
+      <p class="section-intro">Every verdict is permanently recorded on Hedera, signed by the expert's own account. It can never be altered or denied.</p>
+
+      <details class="attestation-box">
+        <summary>What gets published on-chain</summary>
+        <div class="attestation-body">
+          <div class="att-schema">
+            <div class="att-field">
+              <span class="att-field-name">order_id</span>
+              <span class="att-field-desc">Which order this verdict answers</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">class</span>
+              <span class="att-field-desc"><code>review</code> (returns a verdict) or <code>execution</code> (returns the outcome itself)</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">verdict</span>
+              <span class="att-field-desc">approve, approve_with_changes, or reject</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">defects[]</span>
+              <span class="att-field-desc">Machine-readable issues the expert found, e.g. REVENUE_MISMATCH.</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">notes_hash</span>
+              <span class="att-field-desc">SHA-256 of the expert's written notes. The notes are delivered to you privately; only the fingerprint is published.</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">artifact_hash_in</span>
+              <span class="att-field-desc">Fingerprint of the document the requester committed to.</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">cert_tag</span>
+              <span class="att-field-desc">The credential the expert held when they signed</span>
+            </div>
+            <div class="att-field">
+              <span class="att-field-name">schema_version</span>
+              <span class="att-field-desc">Ensures old attestations stay parsable as the format evolves</span>
+            </div>
+          </div>
+          <div class="att-note">
+            <strong>What stays private:</strong> the expert's written notes, the document itself, and the requester's identity. The on-chain hash is the commitment; parties keep their own copies.
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <span class="footer-note">Testnet only. Not real money. Not real legal opinions.</span>
+      <div class="footer-links">
+        <a href="https://github.com/nasaa0528/project-handoff" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://the-handoff.xyz" target="_blank" rel="noreferrer">Expert App</a>
+        <a href="https://ethglobal.com/events/ethonline2026" target="_blank" rel="noreferrer">ETHGlobal</a>
+        <a href="https://docs.hedera.com" target="_blank" rel="noreferrer">Hedera</a>
+      </div>
+    </footer>
+
+  </main>
+
+
+</div>
+
+<script>
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      document.querySelectorAll('.sidebar-left .sidebar-link').forEach(l => {
+        l.classList.toggle('active', l.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+
+document.querySelectorAll('section[id], .hero[id]').forEach(s => observer.observe(s));
+
+document.querySelectorAll('.flow-detail-wrap').forEach(wrap => {
+  wrap.addEventListener('click', e => {
+    e.stopPropagation();
+    const wasActive = wrap.classList.contains('active');
+    document.querySelectorAll('.flow-detail-wrap.active').forEach(w => w.classList.remove('active'));
+    if (!wasActive) wrap.classList.add('active');
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.flow-detail-wrap.active').forEach(w => w.classList.remove('active'));
+});
+</script>
+
+</body></html>

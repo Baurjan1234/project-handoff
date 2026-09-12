@@ -201,7 +201,8 @@ packages/accounts   P1 Khishgee   registration and sign-in, keyed on the Hedera 
 packages/accounts-client  P1 Khishgee   browser-safe client for the accounts API, consumed by apps/web
 apps/web            P3 Jack       expert app: inbox, review workspace, sign
 apps/mcp            P2 Tseegii    handoff_verify server
-apps/requester      P2 Tseegii    demo requester session via Hedera Agent Kit
+packages/mcp-client P2 Tseegii    the published client, bundled from apps/mcp. What a requester session runs
+apps/requester      P2 Tseegii    empty. The demo requester is an agent session, not a program here
 apps/accounts-api   P1 Khishgee   REST API over packages/accounts
 ```
 
