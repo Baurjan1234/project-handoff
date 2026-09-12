@@ -17,6 +17,7 @@ import { executeDirectPayout } from "./direct-payout.js";
 import { buildFundLock, submitFundLock } from "./fund-lock.js";
 import { submitTopicMessage, submitTopicMessageAsPayer } from "./hcs.js";
 import { fetchMirrorTopicMessages, fetchMirrorTransaction, toMirrorTransactionId } from "./mirror.js";
+import { findPayout } from "./payout-lookup.js";
 import { PendingPayoutStore } from "./pending-payout.js";
 
 /**
@@ -187,8 +188,12 @@ export class HederaChainAdapter implements ChainAdapter {
    * The interface takes only a scheduleId — it deliberately hides that early-execute
    * needs two signatures. Both platform keys co-sign the SAME TransferTransaction in
    * one call (direct-payout.ts), not two separate ScheduleSign calls over time.
-   * Idempotent: signing an already-executed payout returns success without
-   * re-submitting anything.
+   *
+   * Idempotent on two levels, and it needs both. In-process, an already-executed
+   * record returns its transaction id. Across a restart — where the in-process
+   * record is gone — the mirror node is asked whether this order's payout memo
+   * already appears among the escrow's debits. Without the second level, every
+   * crash is a double payment waiting for a retry.
    */
   async signSchedule(scheduleId: string): Promise<SignScheduleResult> {
     const record = this.#pendingPayouts.get(scheduleId);
@@ -201,7 +206,28 @@ export class HederaChainAdapter implements ChainAdapter {
       return { transactionId: record.executedTransactionId ?? record.createdTransactionId, executed: true };
     }
 
+    // The in-memory record above is this process's memory and nothing more. It
+    // is empty after a restart, and a caller retrying a settle it never got an
+    // answer to would arrive here with a fresh record for an order the expert
+    // has already been paid for. So the authoritative "already paid?" is asked
+    // of the mirror node, which remembers what this process does not.
+    //
+    // Ordering matters: the network is consulted BEFORE any signature is
+    // composed, so the expensive, irreversible half never runs on an order
+    // that is already settled.
+    const alreadyPaid = await findPayout(this.config.mirrorNodeUrl, {
+      escrowAccountId: record.escrowAccountId,
+      orderId: record.orderId,
+    });
+    if (alreadyPaid !== null) {
+      // Not an error. "Payout is an idempotent retry" — a second call returns
+      // the first call's transaction id and moves nothing.
+      this.#pendingPayouts.markExecuted(scheduleId, alreadyPaid.transactionId);
+      return { transactionId: alreadyPaid.transactionId, executed: true };
+    }
+
     const result = await executeDirectPayout(this.config.client, {
+      orderId: record.orderId,
       escrowAccountId: AccountId.fromString(record.escrowAccountId),
       payeeAccountId: AccountId.fromString(record.payeeAccountId),
       amountTinybars: record.amountTinybars,
