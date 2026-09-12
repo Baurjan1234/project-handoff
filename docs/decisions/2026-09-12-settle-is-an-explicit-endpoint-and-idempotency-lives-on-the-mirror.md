@@ -54,6 +54,26 @@ Three validations decide whether the money moves, and each is there for a rule:
 
 **Consequences.**
 
+- **Only a claimant's own attestation makes their claim final.** `resolveClaims` stops
+  expiring a claim the moment it is given a `deliveredAt`, and it cannot ask whose
+  attestation that was. While the reader passed the last message from anybody, a stranger
+  on the submit-keyless attestations topic could make a lapsed claim final — locking the
+  order to a claimant who never delivered, and defeating the short claim timeout. The
+  reader now resolves once on the claims alone and passes `deliveredAt` only when it is
+  the first claimant's own and no reopen has happened. One case is still wrong and is
+  **P4's**: a first claimant who delivers late *after* somebody claimed the reopen should
+  win by the treaty's rule and does not here. It needs `resolveClaims` to see the
+  attestations.
+- **The payout is decided by the claimant's *earliest matching* attestation.** Settling is
+  an idempotent retry, so its answer has to be a function of facts that only grow. Taking
+  the last let a claimant publish a divergent attestation after being paid and turn every
+  later retry into a violation for a correctly settled order. Earliest-that-matches also
+  does not punish a correction, which matters more than usual while there is no path to
+  return stranded funds.
+- **A mirror sighting that credited the wrong account is refused, not reported as
+  settled.** The memo binds a transfer to an order; it does not promise where the money
+  went. Only the payee is compared — not the amount, because a payee who also paid the
+  transaction fee has it netted out of their credit leg.
 - **Two windows the mirror read does not close, both named rather than implied.**
   Within one process, two overlapping settles would both read "not paid" — the mirror
   cannot see a transfer nobody has submitted yet — so `signSchedule` coalesces concurrent
@@ -108,9 +128,9 @@ Three validations decide whether the money moves, and each is there for a rule:
   the escrow's debit and `payeeAccountId` comes back null. Informational only — the memo
   is what binds a payout to its order, and the settle reply takes the payee from the
   winning claim. In production the fee payer is the platform, not the expert.
-- **The recording rule still applies.** This path has not run on testnet yet. It does not
-  go on camera until it has run clean once; `live-happy-path.ts` remains the proven
-  fallback.
+- **The recording rule is satisfied.** The path ran clean on testnet on 2026-09-12
+  (above), so it is eligible for camera. `live-happy-path.ts` remains the fallback if a
+  take needs the chain half alone.
 - `docs/architecture.md` is updated in the same change.
 
 **Supersedes.** Nothing by file. It closes the standing consequence left open by
