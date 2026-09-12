@@ -13,6 +13,23 @@ import { buildEscrowKeyList } from "../src/keys.ts";
 import { createEscrowAccount } from "../src/escrow.ts";
 import { HederaChainAdapter } from "../src/hedera-adapter.ts";
 
+/**
+ * A fresh order id per run, and it has to be fresh.
+ *
+ * The payout now carries the memo `handoff-payout:<order_id>` and
+ * `signSchedule` refuses to pay when the mirror node already shows that memo
+ * among the escrow's debits. With a hardcoded id this script proved nothing
+ * after its first run: the fund lock would still succeed and strand another
+ * 1.5 HBAR, the payout would short-circuit on the *previous* run's transfer,
+ * and the restart check would compare that old id against itself and pass
+ * trivially — a green run with no payout, no mirror query exercised, and no
+ * restart case tested.
+ *
+ * This script is the only place the mirror query meets the real API, and the
+ * recording rule leans on it, so "it passed" has to mean something every time.
+ */
+const ORDER_ID = `demo-order-${Date.now()}`;
+
 function log(step: string, detail: unknown): void {
   console.log(`\n=== ${step} ===`);
   console.log(JSON.stringify(detail, null, 2));
@@ -71,7 +88,7 @@ async function main(): Promise<void> {
   // different accounts and this signature happens on the requester's machine;
   // the server only ever sees the bytes that come back.
   const lockParams = {
-    orderId: "demo-order-1",
+    orderId: ORDER_ID,
     amountTinybars: "150000000", // 1.5 HBAR
     requesterAccountId: env.operatorId.toString(),
   };
@@ -91,7 +108,7 @@ async function main(): Promise<void> {
   // CLAIMED: payee known, "create schedule" — bookkeeping only, no chain call.
   const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
   const scheduleResult = await adapter.createSchedule({
-    orderId: "demo-order-1",
+    orderId: ORDER_ID,
     escrowAccountId: lockResult.escrowAccountId,
     payeeAccountId: env.operatorId.toString(), // paying back to operator for this proof run
     amountTinybars: "150000000",
@@ -101,7 +118,7 @@ async function main(): Promise<void> {
 
   // Idempotency check: identical params return the same id, alreadyExisted true.
   const scheduleResultAgain = await adapter.createSchedule({
-    orderId: "demo-order-1",
+    orderId: ORDER_ID,
     escrowAccountId: lockResult.escrowAccountId,
     payeeAccountId: env.operatorId.toString(),
     amountTinybars: "150000000",
@@ -140,7 +157,7 @@ async function main(): Promise<void> {
   });
 
   const afterRestart = await restarted.createSchedule({
-    orderId: "demo-order-1",
+    orderId: ORDER_ID,
     escrowAccountId: lockResult.escrowAccountId,
     payeeAccountId: env.operatorId.toString(),
     amountTinybars: "150000000",
