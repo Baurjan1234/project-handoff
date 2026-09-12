@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AccountsClient } from "@handoff/accounts-client";
+import type { AccountsClient, RegistrationInput } from "@handoff/accounts-client";
 import type { ChainMode } from "../../chain/config";
 import {
   assessRegistration,
@@ -48,10 +48,13 @@ type Stage =
   | { kind: "welcome"; page: WelcomePage; session: AccountsSession }
   | { kind: "allset"; session: AccountsSession };
 
-const SETUP_LABELS = ["Checking your Hedera account on testnet", "Creating your account", "Sending your email code", "All set"] as const;
+const CHECK_STEP = "Checking your Hedera account on testnet";
+const SETUP_LABELS = [CHECK_STEP, "Creating your account", "Sending your email code", "All set"] as const;
 
-function stepsAt(current: number, failed = false): readonly SetupStep[] {
-  return SETUP_LABELS.map((label, index) => {
+/** With no account typed there is nothing to check, so that step is not listed. */
+function stepsAt(current: number, failed = false, withCheck = true): readonly SetupStep[] {
+  const labels = withCheck ? SETUP_LABELS : SETUP_LABELS.filter((label) => label !== CHECK_STEP);
+  return labels.map((label, index) => {
     const state: SetupState = index < current ? "done" : index === current ? (failed ? "failed" : "current") : "todo";
     return { label, state };
   });
@@ -94,6 +97,8 @@ export function AuthFlow({
   );
   const [draft, setDraft] = useState<RegistrationDraft>(EMPTY_REGISTRATION);
   const [registerError, setRegisterError] = useState<string | null>(null);
+  // The account field appears only once the service said it needs one.
+  const [askForAccount, setAskForAccount] = useState(false);
   const [domain, setDomain] = useState<CredentialDomain>("finance");
   const [license, setLicense] = useState("");
   const [code, setCode] = useState("");
@@ -116,33 +121,50 @@ export function AuthFlow({
 
   // The setup sequence. Each step is a real call, marked done as it returns.
   const runSetup = useCallback(async () => {
-    const accountId = draft.hederaAccountId.trim();
+    const typedId = draft.hederaAccountId.trim();
+    const withCheck = typedId !== "";
     const email = draft.email.trim();
-    const advance = (n: number) => alive.current && setStage({ kind: "setup", steps: stepsAt(n), error: null });
-    const fail = (n: number, error: unknown) =>
-      alive.current && setStage({ kind: "setup", steps: stepsAt(n, true), error: describeAccountsError(error).message });
+    // Step numbers are of the full list; without a check every later step sits one earlier.
+    const at = (n: number) => (withCheck ? n : n - 1);
+    const advance = (n: number) => alive.current && setStage({ kind: "setup", steps: stepsAt(at(n), false, withCheck), error: null });
+    const fail = (n: number, error: unknown) => {
+      if (!alive.current) return;
+      const failure = describeAccountsError(error);
+      // The service needs the account after all: the form comes back with the field, and its sentence.
+      if (failure.field === "hederaAccountId") setAskForAccount(true);
+      setStage({ kind: "setup", steps: stepsAt(at(n), true, withCheck), error: failure.message });
+    };
 
-    advance(0);
-    const found = await lookup(accountId, new AbortController().signal);
-    if (found.status === "not-found") {
-      return fail(0, new Error(`Account ${accountId} is not on testnet. Check the id, or create one at the Hedera portal first.`));
+    if (withCheck) {
+      advance(0);
+      const found = await lookup(typedId, new AbortController().signal);
+      if (found.status === "not-found") {
+        return fail(0, new Error(`Account ${typedId} is not on testnet. Check the id, or create one at the Hedera portal first.`));
+      }
+      if (found.status === "found" && found.deleted) return fail(0, new Error(`Account ${typedId} has been deleted on testnet.`));
+      // Unreachable is allowed through, as the server allows it: the server checks again.
     }
-    if (found.status === "found" && found.deleted) return fail(0, new Error(`Account ${accountId} has been deleted on testnet.`));
-    // Unreachable is allowed through, as the server allows it: the server checks again.
 
     advance(1);
     let sent: boolean;
+    let accountId: string;
     try {
       const { firstName, lastName } = splitFullName(draft.fullName);
-      const registered = await accounts.register({
-        hederaAccountId: accountId,
+      // The wire type still names the account as required; the service is what
+      // decides, and it answers `field: hederaAccountId` when it needs one
+      // (docs/decisions/2026-09-12-platform-creates-and-stores-expert-key.md).
+      const input = {
         email,
         username: usernameFrom(email, draft.fullName),
         firstName,
         ...(lastName === undefined ? {} : { lastName }),
         password: draft.password,
-      });
+        ...(withCheck ? { hederaAccountId: typedId } : {}),
+      } as RegistrationInput;
+      const registered = await accounts.register(input);
       sent = registered.verification.sent;
+      // The account the service settled on: the one typed, or the one it made.
+      accountId = registered.account.hederaAccountId;
     } catch (error) {
       return fail(1, error);
     }
@@ -159,7 +181,7 @@ export function AuthFlow({
 
     advance(3);
     if (!alive.current) return;
-    setStage({ kind: "setup", steps: stepsAt(4), error: null });
+    setStage({ kind: "setup", steps: stepsAt(at(4), false, withCheck), error: null });
     // A beat so the last tick is seen, then the code screen. The only timer in the flow.
     await new Promise((resolve) => setTimeout(resolve, 600));
     if (!alive.current) return;
@@ -220,6 +242,7 @@ export function AuthFlow({
           }}
           onSignIn={onCancel}
           onBringKey={onBringKey}
+          askForAccount={askForAccount}
         />
       );
     case "credential":

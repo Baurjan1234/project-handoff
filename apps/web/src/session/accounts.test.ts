@@ -54,7 +54,11 @@ describe("what Create account refuses before asking the server", () => {
     expect(blockers[0]).toBe("Enter your name.");
     expect(blockers[1]).toContain("email");
     expect(blockers[2]).toContain(String(PASSWORD_MIN_LENGTH));
-    expect(blockers[3]).toContain("0.0.");
+    expect(blockers).toHaveLength(3);
+  });
+  it("lets the Hedera account be blank, for the service to create, but not malformed", () => {
+    expect(assessRegistration({ ...GOOD, hederaAccountId: "" })).toEqual([]);
+    expect(assessRegistration({ ...GOOD, hederaAccountId: "not-an-id" })).toHaveLength(1);
   });
   it("holds the server's password floor", () => {
     expect(assessRegistration({ ...GOOD, password: "short" })).toHaveLength(1);
@@ -106,6 +110,12 @@ describe("what the screen says when the service refused", () => {
   it("says nothing was sent when the service never answered", () => {
     const f = describeAccountsError(new AccountsApiError("internal", "could not reach", 0));
     expect(f.message).toContain("Nothing was sent.");
+  });
+  it("says in plain words that the service needs the account, when it asks for one", () => {
+    const f = describeAccountsError(new AccountsApiError("validation_failed", "Invalid input: expected string, received undefined", 400, "hederaAccountId"));
+    expect(f.field).toBe("hederaAccountId");
+    expect(f.message).toContain("Enter it below.");
+    expect(f.message).not.toMatch(/undefined|string/);
   });
   it("passes the server's own words through for anything else", () => {
     expect(failure("weak_password", 400, "password")).toMatchObject({ message: "server words", field: "password" });

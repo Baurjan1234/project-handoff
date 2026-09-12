@@ -13,14 +13,25 @@ describe("Create account", () => {
       <RegisterCard mode="testnet" draft={EMPTY_REGISTRATION} onDraft={noop} blockers={["Enter your name."]} error={null} busy={false} onSubmit={noop} onSignIn={noop} onBringKey={noop} />,
     );
     expect(html).toContain("Create your account");
-    for (const label of ["Full name", "Email", "Password", "Hedera testnet account"]) expect(html).toContain(label);
-    expect(html).toContain("never creates one or holds its key");
+    for (const label of ["Full name", "Email", "Password"]) expect(html).toContain(label);
+    // The account is the service's to create; the field is not offered unless the service asks.
+    expect(html).not.toContain("Hedera testnet account");
+    expect(html).not.toContain("register-account");
     expect(html).toContain("Bring your own key");
     expect(html).toContain("Enter your name.");
     expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Create account/);
     // No <form>: a submitted form with a password field is what asks the browser to save it.
     expect(html).not.toContain("<form");
     expect(expectNoBannedWords(html)).toEqual([]);
+  });
+
+  it("asks for the Hedera account only once the service said it needs one", () => {
+    const html = renderToStaticMarkup(
+      <RegisterCard mode="testnet" draft={EMPTY_REGISTRATION} onDraft={noop} blockers={[]} error="hederaAccountId is required" busy={false} onSubmit={noop} onSignIn={noop} onBringKey={noop} askForAccount />,
+    );
+    expect(html).toContain("Hedera testnet account");
+    expect(html).toContain("register-account");
+    expect(html).toContain("The service asked for the account you already have.");
   });
 
   it("shows the service's refusal under the form", () => {

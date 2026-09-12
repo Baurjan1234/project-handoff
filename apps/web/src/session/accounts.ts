@@ -74,8 +74,13 @@ export function assessRegistration(draft: RegistrationDraft): readonly string[] 
   if (draft.password.length < PASSWORD_MIN_LENGTH) {
     blockers.push(`Choose a password of at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
-  const id = parseAccountId(draft.hederaAccountId);
-  if (!id.ok) blockers.push(id.reason);
+  // Blank is allowed: the account is the service's to create when it can
+  // (docs/decisions/2026-09-12-platform-creates-and-stores-expert-key.md), and
+  // until then the service says so and the form asks. Typed, it has to parse.
+  if (draft.hederaAccountId.trim() !== "") {
+    const id = parseAccountId(draft.hederaAccountId);
+    if (!id.ok) blockers.push(id.reason);
+  }
   return blockers;
 }
 
@@ -145,6 +150,14 @@ export function describeAccountsError(error: unknown): AccountsFailure {
         ...field,
         message: "That account is not on testnet. Check the id, or create one at the Hedera portal first.",
       };
+    case "validation_failed":
+      // The one refusal the form does not pre-empt: it does not ask for the
+      // account, because the service is meant to create one. Until it does,
+      // this is how it says it needs the one the person already has.
+      if (error.field === "hederaAccountId") {
+        return { ...base, ...field, message: "The service needs the Hedera testnet account you already have. Enter it below." };
+      }
+      return { ...base, ...field, message: error.message };
     default:
       if (error.status === 0) {
         return {

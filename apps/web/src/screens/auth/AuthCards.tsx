@@ -145,6 +145,7 @@ export function RegisterCard({
   onSubmit,
   onSignIn,
   onBringKey,
+  askForAccount = false,
 }: {
   mode: ChainMode;
   draft: RegistrationDraft;
@@ -155,6 +156,12 @@ export function RegisterCard({
   onSubmit: () => void;
   onSignIn: () => void;
   onBringKey: () => void;
+  /**
+   * Show the Hedera account field. Hidden by default: the account is the
+   * service's to create. It appears only when the service answered that it
+   * needs one, with the service's own sentence above it.
+   */
+  askForAccount?: boolean;
 }) {
   const ready = blockers.length === 0 && !busy;
   const submit = () => {
@@ -204,10 +211,11 @@ export function RegisterCard({
             className={FIELD}
           />
         </Field>
+        {askForAccount && (
         <Field
           id="register-account"
           label="Hedera testnet account"
-          help="Your account is your identity here; this app never creates one or holds its key. The portal shows the id, like 0.0.12345, and gives out free test HBAR."
+          help="The service asked for the account you already have. The Hedera portal shows the id, like 0.0.12345, and gives out free test HBAR."
         >
           <Input
             id="register-account"
@@ -222,6 +230,7 @@ export function RegisterCard({
             className={`${FIELD} font-mono`}
           />
         </Field>
+        )}
 
         <Divider>already have a Hedera account?</Divider>
 

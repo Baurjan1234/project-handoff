@@ -68,11 +68,17 @@ and this app consumes it through `@handoff/accounts-client`, never `@handoff/acc
 Configured by `VITE_ACCOUNTS_API_URL`; **absent, the connect screen offers the key path
 only** and nothing below renders. What a session is and is not:
 
-- **A session is who is at the keyboard. It is not a key.** The account arrives already
-  made by its owner (the register form asks for the id, checked on the testnet mirror),
-  and signing a verdict still needs the key pasted into `SecretKey`, once, on the
-  **key step** — the connect card with the account locked and only the key field live.
-  On the mock there is no key, so an email session boots straight to the inbox.
+- **A session is who is at the keyboard. It is not a key.** Signing a verdict still
+  needs the key pasted into `SecretKey`, once, on the **key step** — the connect card
+  with the account locked and only the key field live. On the mock there is no key, so
+  an email session boots straight to the inbox.
+- **The register form does not ask for the Hedera account.** Since
+  `docs/decisions/2026-09-12-platform-creates-and-stores-expert-key.md` the account is
+  the service's to create, so the field is hidden and the flow takes whatever account
+  the service's answer names. Until the service can create one it refuses with
+  `field: hederaAccountId`; the form then comes back with the field revealed and a plain
+  sentence, and a typed id is checked on the testnet mirror as a first setup step. When
+  the service creates accounts that branch never fires and nothing here changes.
 - **The token lives in App state, in memory only.** Never `localStorage`; a reload is a
   sign-in, like the key. Disconnect calls `signOut` best-effort. The password lives in
   `AuthFlow`'s state for the length of the flow so the person is signed in the moment
