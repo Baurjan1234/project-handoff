@@ -54,6 +54,13 @@ Three validations decide whether the money moves, and each is there for a rule:
 
 **Consequences.**
 
+- **Two windows the mirror read does not close, both named rather than implied.**
+  Within one process, two overlapping settles would both read "not paid" — the mirror
+  cannot see a transfer nobody has submitted yet — so `signSchedule` coalesces concurrent
+  calls for the same payout onto one promise. Across processes there is a residual
+  window: a restart inside the mirror node's ~6-second indexing lag, followed immediately
+  by a retry, can still pay twice. Narrow, admitted, and the production answer is the
+  durable payout store `pending-payout.ts` already says it needs.
 - **The route is ungated and that is not a hole in the gate.** The x402 gate covers order
   posting only (`2026-09-05-gate-covers-order-posting-only.md`). Settling sells nothing:
   it moves money the requester already locked, to the expert who already signed, on facts
@@ -84,6 +91,11 @@ Three validations decide whether the money moves, and each is there for a rule:
 - **Nothing calls this on the product path yet.** The expert app's sign action should
   `POST` it after publishing and render the payout transaction — **P3's lane, not done
   here.** Until it does, the demo settles through the script.
+- **The mirror query shape has only met a stub in unit tests.**
+  `packages/chain/scripts/live-happy-path.ts` now ends with a second adapter over the
+  same escrow — a restarted process — that must return the original payout's transaction
+  id or throw `DOUBLE PAYMENT`. That run is what validates `type=debit`, `memo_base64`
+  and the transfer legs against the real API. It needs the provisioned `.env`.
 - **The recording rule still applies.** This path has not run on testnet yet. It does not
   go on camera until it has run clean once; `live-happy-path.ts` remains the proven
   fallback.

@@ -293,6 +293,13 @@ export async function readOrderFacts(orderId: string, deps: StatusDeps): Promise
           nowEpochSeconds: deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
           // A delivered claim never expires. Without this a verdict signed one
           // second after the window closed would read as an expired claim.
+          //
+          // TODO: `delivered` here is the last attestation from anybody, so a
+          // stray one on a submit-keyless topic holds a claim window open that
+          // should have expired. Cosmetic today — no money moves on it, and
+          // the reopen it would block is unwired — but it is the same class
+          // `settle.ts` already refuses, and the fix is the same: the
+          // claimant's own, not the last.
           ...(delivered === undefined ? {} : { deliveredAt: delivered.consensusTimestamp }),
         });
 
