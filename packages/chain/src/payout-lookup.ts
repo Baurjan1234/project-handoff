@@ -13,6 +13,7 @@
  * makes the question answerable there.
  */
 
+import { formatTinybars, parseTinybars } from "@handoff/schema";
 import { fetchMirrorAccountDebits, fromMirrorTransactionId } from "./mirror.js";
 import { payoutMemoFor } from "./payout-memo.js";
 
@@ -20,7 +21,7 @@ export interface PayoutSighting {
   /** SDK shape (`0.0.x@s.n`), converted from the mirror's, so it matches every other `TxRef`. */
   readonly transactionId: string;
   readonly consensusTimestamp: string;
-  /** Tinybars the escrow was debited, as a string. Never a number. */
+  /** Tinybars the escrow was debited. A string end to end; never a `number`. */
   readonly amountTinybars: string;
   /**
    * The account credited exactly what the escrow was debited.
@@ -69,9 +70,21 @@ export async function findPayout(
   for (const transaction of debits) {
     if (decodeMemo(transaction.memo_base64) !== memo) continue;
 
-    const legs = transaction.transfers ?? [];
+    // bigint throughout. The legs came off a public API and are parsed rather
+    // than trusted, which is also why a leg that is not a tinybar figure is
+    // skipped instead of throwing: a malformed row is somebody else's
+    // transaction, not a reason to fail a check that guards a payment.
+    const legs: { account: string | null; amount: bigint }[] = [];
+    for (const leg of transaction.transfers ?? []) {
+      try {
+        legs.push({ account: leg.account, amount: parseTinybars(leg.amount) });
+      } catch {
+        continue;
+      }
+    }
+
     const escrowLeg = legs.find(
-      (leg) => leg.account === params.escrowAccountId && leg.amount < 0,
+      (leg) => leg.account === params.escrowAccountId && leg.amount < 0n,
     );
     if (escrowLeg === undefined) {
       // The memo names this order and the escrow is not debited in it. That is
@@ -86,7 +99,7 @@ export async function findPayout(
     return {
       transactionId: fromMirrorTransactionId(transaction.transaction_id),
       consensusTimestamp: transaction.consensus_timestamp,
-      amountTinybars: String(amount),
+      amountTinybars: formatTinybars(amount),
       payeeAccountId: credited.length === 1 ? (credited[0]?.account ?? null) : null,
     };
   }

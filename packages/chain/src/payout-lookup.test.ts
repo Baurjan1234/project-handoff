@@ -140,3 +140,52 @@ describe("findPayout", () => {
     await expect(findPayout(MIRROR, { escrowAccountId: ESCROW, orderId: "ord_abc" })).rejects.toThrow(/500/);
   });
 });
+
+describe("tinybars off the mirror node", () => {
+  it("keeps a tinybar figure past 2^53 exact, which a plain JSON.parse would round", async () => {
+    // 4 billion HBAR. Under the 50-billion max supply and three orders of
+    // magnitude past Number.MAX_SAFE_INTEGER, so a plain parse loses the tail.
+    const huge = "400000000000000001";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            `{"transactions":[{"transaction_id":"0.0.999-1789035890-122059080",` +
+              `"consensus_timestamp":"1789035890.122059080","result":"SUCCESS",` +
+              `"memo_base64":"${memo64(`${PAYOUT_MEMO_PREFIX}ord_abc`)}",` +
+              `"transfers":[{"account":"${ESCROW}","amount":-${huge}},` +
+              `{"account":"${PAYEE}","amount":${huge}}]}]}`,
+            { status: 200 },
+          ),
+      ),
+    );
+
+    const found = await findPayout(MIRROR, { escrowAccountId: ESCROW, orderId: "ord_abc" });
+
+    expect(found?.amountTinybars).toBe(huge);
+    expect(String(JSON.parse(`{"a":${huge}}`).a)).not.toBe(huge);
+    // And the payee is still identifiable, which a rounded pair of legs would
+    // also survive — but only by accident.
+    expect(found?.payeeAccountId).toBe(PAYEE);
+  });
+
+  it("skips a leg whose amount is not a tinybar figure rather than failing the check", async () => {
+    stubMirror([
+      {
+        ...payoutRow("ord_abc", 500_000_000),
+        transfers: [
+          { account: "0.0.junk", amount: "not-a-number" },
+          { account: ESCROW, amount: -500_000_000 },
+          { account: PAYEE, amount: 500_000_000 },
+        ],
+      },
+    ]);
+
+    // A malformed row is somebody else's transaction, not a reason to fail a
+    // check that stands between a retry and a double payment.
+    const found = await findPayout(MIRROR, { escrowAccountId: ESCROW, orderId: "ord_abc" });
+
+    expect(found?.payeeAccountId).toBe(PAYEE);
+  });
+});

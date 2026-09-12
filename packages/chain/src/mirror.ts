@@ -145,7 +145,16 @@ export async function waitForMirrorTransaction(
 
 export interface MirrorTransfer {
   account: string | null;
-  amount: number;
+  /**
+   * Tinybars, as the exact digits the mirror node sent.
+   *
+   * A string because it is money. The REST API serves this as a JSON *number*,
+   * and `JSON.parse` has already rounded anything past 2^53 by the time a
+   * caller could look at it — tinybars run to 5e18, which is three orders of
+   * magnitude past that. So the body is parsed with source-text access and
+   * these digits are taken verbatim, never through a `number`.
+   */
+  amount: string;
 }
 
 export interface MirrorAccountTransaction {
@@ -189,6 +198,25 @@ export async function fetchMirrorAccountDebits(
     throw new Error(`Mirror node returned ${response.status} for ${accountId}'s debits`);
   }
 
-  const body = (await response.json()) as { transactions?: MirrorAccountTransaction[] };
+  const body = parseWithExactAmounts(await response.text()) as {
+    transactions?: MirrorAccountTransaction[];
+  };
   return body.transactions ?? [];
+}
+
+/**
+ * `JSON.parse`, keeping every `amount` as the digits that were on the wire.
+ *
+ * The reviver's third argument carries `source`, the raw text of the value
+ * being revived, for primitives only (V8 11.x, Node 21+; this workspace pins
+ * Node 24 in `.nvmrc`). It is the only way to read an integer JSON number
+ * exactly: by the time a plain parse hands it over it is already a rounded
+ * double. Guarded rather than assumed, so a runtime without it degrades to the
+ * ordinary string conversion instead of throwing.
+ */
+function parseWithExactAmounts(text: string): unknown {
+  return JSON.parse(text, function reviveExactAmounts(key, value, context?: { source?: string }) {
+    if (key !== "amount") return value;
+    return context?.source ?? String(value);
+  });
 }
