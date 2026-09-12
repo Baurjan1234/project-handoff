@@ -17,3 +17,7 @@ new-expert-ui-export/
 
 .DS_Store
 *.log
+
+# Playwright MCP scratch output: page snapshots, console logs, screenshots.
+# Written into the working directory by the browser tools, never part of a change.
+.playwright-mcp/

@@ -15,14 +15,15 @@
  *
  * `claimReadable` is the server saying whether it can see claims at all. When
  * it is false the screen must not say "nobody has claimed this" — only that
- * claims are not visible from here. It is false today: claims are published to
- * the orders topic by the expert app and the server does not yet read them.
+ * claims are not visible from here. It is true now that the server reads the
+ * orders topic for claims as well as envelopes, which is also where `CLAIMED`
+ * comes from.
  */
 
 const VERDICTS = ["approve", "approve_with_changes", "reject"] as const;
 export type RequestVerdict = (typeof VERDICTS)[number];
 
-const STATES = ["POSTED", "DELIVERED", "UNKNOWN"] as const;
+const STATES = ["POSTED", "CLAIMED", "DELIVERED", "UNKNOWN"] as const;
 export type RequestState = (typeof STATES)[number];
 
 /** The envelope's fields this screen shows. A subset, read defensively. */

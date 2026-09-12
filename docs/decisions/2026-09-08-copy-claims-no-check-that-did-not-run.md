@@ -51,3 +51,27 @@ That is P4's lane and a `breaking` PR to the schema.
   Signed and must not invent the middle state.
 - NAS-27, the registry, is now the thing that lets the copy say "certified" again. That
   is a reason to keep it in Tier 1, not a reason to hurry it.
+
+---
+
+> **Closed out 2026-09-12.** Three consequences above were still open and are now done.
+> The reasoning is left exactly as written; only their status changed.
+>
+> - **"The Posted reply in `apps/mcp/src/replies.ts` still says 'certified reviewer' and
+>   should follow in Tseegii's next PR."** It did not follow for four days. `waitingReply`
+>   now takes the credential label and names it — "Posted · waiting for a Licensed
+>   reviewer", which is what `docs/design-system.md` had all along — and the
+>   `handoff_verify` tool description, the widest requester surface we have, says "a human
+>   reviewer". The guard is one test over every reply the module exports rather than one
+>   per line: two per-line assertions already existed, in the two places the word was
+>   absent, which is exactly how it survived in the third.
+> - **"A new P4 issue carries the claim envelope."** Shipped. `ClaimEnvelope`,
+>   `tryDecodeClaim` and `resolveClaims` are in `packages/schema`.
+> - **"Until then status goes from Posted to Signed and must not invent the middle
+>   state."** Lifted. The middle state is now read off the orders topic rather than
+>   invented, per `2026-09-12-handoff-status-reports-claimed.md`.
+>
+> **What has not changed: NAS-27 has not shipped.** No registry checks anybody's
+> credential, so the ban on "certified" stands on every requester surface — including any
+> reply, tool description, README or slide written from here on. The word returns the day
+> a real check runs, and not before.

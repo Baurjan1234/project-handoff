@@ -9,6 +9,8 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
+    "prepublishOnly": "echo '\n  This is the workspace root, not a publishable package.\n  The only package we publish is the client:  pnpm publish:client\n' && exit 1",
+    "publish:client": "pnpm --filter @hedera-handoff/mcp-client exec npm publish",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build"

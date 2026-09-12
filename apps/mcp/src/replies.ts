@@ -68,6 +68,15 @@ export interface PostedReply {
   /** Absent when settlement did not land; the fee row then says so. */
   readonly feeTinybars?: string;
   readonly feeError?: string;
+  /**
+   * The Hedera transaction the facilitator's `/settle` submitted. The only id
+   * the fee leg produces, and the only thing that proves the fee was settled
+   * rather than merely verified — `/verify` has passed for a payload whose key
+   * did not control the payer. Absent when settlement did not land.
+   */
+  readonly feeTransactionId?: string;
+  /** The transaction that moved the order value into escrow. */
+  readonly fundLockTransactionId?: string;
 }
 
 /**
@@ -75,43 +84,88 @@ export interface PostedReply {
  *
  * The fee row comes first and smaller, the escrow line second and heavier,
  * because a requester who has just watched two numbers move needs to see which
- * one was spent and which one is being held.
+ * one was spent and which one is being held. Two rails, two amounts, never
+ * "paid 100.5 HBAR".
+ *
+ * **Both proof rows carry their transaction id**, which is the design system's
+ * instruction for this message and the repo's standing rule: every Hedera call
+ * surfaces its id, threaded rather than swallowed. The ids are what a requester
+ * — or a reviewer watching a recording — opens on a mirror node. Without them
+ * the reply asserts that money moved and offers nothing to check it against.
  */
 export function postedReply(reply: PostedReply): string {
   const fee =
     reply.feeTinybars === undefined
       ? `Service fee not settled · ${reply.feeError ?? "the facilitator did not confirm it"}`
-      : `Service fee settled · ${hbar(reply.feeTinybars)}`;
+      : `Service fee settled · ${hbar(reply.feeTinybars)} · ` +
+        // Settled with no id is a real path, not a bug: the facilitator can
+        // report success and return no transaction. "Settled" stays, because
+        // it is what the facilitator said and the order did post — but the
+        // absence is named rather than rendered as a shorter, quieter line
+        // that reads identically to a settlement somebody can check.
+        (reply.feeTransactionId === undefined
+          ? "settlement id not returned"
+          : `tx ${reply.feeTransactionId}`);
 
   return [
     fee,
     "",
     `Order posted · #${reply.orderId}`,
-    `${hbar(reply.priceTinybars)} locked in escrow for the review.`,
+    `${hbar(reply.priceTinybars)} locked in escrow for the review.` +
+      (reply.fundLockTransactionId === undefined ? "" : ` Lock tx ${reply.fundLockTransactionId}`),
     "It pays the reviewer when they sign, whatever the verdict. " +
       `If nobody claims it by ${clockTime(reply.deadline)}, it returns to you.`,
     `Visible to reviewers holding: ${reply.certTagLabel}. Cannot be cancelled once posted.`,
   ].join("\n");
 }
 
-/** Beats 4–9, the wait. One answer, not a loop. */
-export function waitingReply(deadline: string): string {
-  return `Posted · waiting for a certified reviewer. Open until ${clockTime(deadline)}.`;
+/**
+ * Beats 4–9, the wait. One answer, not a loop.
+ *
+ * It names the credential the order routes to, never "a certified reviewer".
+ * Routing is all the tag does — no registry checks that anybody holds it — and
+ * `../../../docs/decisions/2026-09-08-copy-claims-no-check-that-did-not-run.md`
+ * bans the word on this surface until one runs. `docs/design-system.md` already
+ * writes the line this way; only the code had drifted.
+ */
+export function waitingReply(deadline: string, certTagLabel: string): string {
+  return `Posted · waiting for a ${certTagLabel}. Open until ${clockTime(deadline)}.`;
 }
 
 /**
- * What we can say while no claim message shape exists.
+ * The middle state, in the design system's own words.
  *
- * The design system's claimed line names the claimant's account and their sign
- * deadline, and neither is readable today: there is a `CLAIM` lifecycle event
- * but nothing on a topic to read it from. Saying so in one line is the design
- * system's own instruction for something that cannot be delivered this week —
+ * `docs/design-system.md` writes this line as "Claimed by account 0.0.x ·
+ * under review · sign by 18:12 UTC", and said it needed an on-wire claim
+ * message first. It has one: the claim envelope is in `@handoff/schema` and
+ * `readOrderStatus` resolves the holder with the treaty's own rule.
+ *
+ * **It does not say "a certified reviewer", for the reason `deliveredReply`
+ * does not.** The claim carries a cert tag the claimant asserted and no
+ * registry checks it, so the account is what is known and the account is what
+ * is named.
+ */
+export interface ClaimedReply {
+  readonly claimedBy: string;
+  /** When the claim expires. UTC, second precision. */
+  readonly signBy: string;
+}
+
+export function claimedReply(reply: ClaimedReply): string {
+  return `Claimed by account ${reply.claimedBy} · under review · sign by ${clockTime(reply.signBy)}.`;
+}
+
+/**
+ * The fallback for a reader that cannot see claims at all.
+ *
+ * `claimReadable` is false only when something is misconfigured — a topic id
+ * pointing somewhere claims are not published, say. Saying so in one line is
  * better than a requester reading "waiting" and concluding nobody has taken
- * their order.
+ * their order, which is the one wrong inference available here.
  */
 export const CLAIM_NOT_READABLE =
-  "Whether a reviewer has claimed it is not readable yet — claims are not " +
-  "published to a topic in this build. The signed verdict appears here when it lands.";
+  "Whether a reviewer has claimed it is not readable from here. The signed " +
+  "verdict appears here when it lands.";
 
 export interface DeliveredReply {
   readonly verdict: string;
