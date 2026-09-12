@@ -91,11 +91,23 @@ Three validations decide whether the money moves, and each is there for a rule:
 - **Nothing calls this on the product path yet.** The expert app's sign action should
   `POST` it after publishing and render the payout transaction — **P3's lane, not done
   here.** Until it does, the demo settles through the script.
-- **The mirror query shape has only met a stub in unit tests.**
-  `packages/chain/scripts/live-happy-path.ts` now ends with a second adapter over the
-  same escrow — a restarted process — that must return the original payout's transaction
-  id or throw `DOUBLE PAYMENT`. That run is what validates `type=debit`, `memo_base64`
-  and the transfer legs against the real API. It needs the provisioned `.env`.
+- **Verified end to end on real testnet, 2026-09-12.** One order through the running
+  resource server: x402 fee settled through Blocky402, escrow funded by the requester's
+  own signature, claim and a **reject** attestation published from the expert's own
+  account, settle paid `0.0.10376667@1789200311.136173331` — and a second settle returned
+  that same id. The mirror node shows exactly one debit carrying
+  `handoff-payout:<order_id>`. `live-happy-path.ts`'s restart case also passed: a second
+  adapter over the same escrow returned the original payout rather than making a new one.
+  That run is what validated `type=debit`, `memo_base64` and the transfer legs against
+  the real API rather than a stub.
+- **The violation path was exercised for real too**, by accident and worth keeping: an
+  attestation pinning a hash the order never named was refused with `409` and
+  `retryable: false`, and no money moved.
+- **`findPayout` cannot name the payee when the payee also paid the transaction fee.**
+  Observed in that run: the expert's credit leg nets the fee out, so it no longer equals
+  the escrow's debit and `payeeAccountId` comes back null. Informational only — the memo
+  is what binds a payout to its order, and the settle reply takes the payee from the
+  winning claim. In production the fee payer is the platform, not the expert.
 - **The recording rule still applies.** This path has not run on testnet yet. It does not
   go on camera until it has run clean once; `live-happy-path.ts` remains the proven
   fallback.
