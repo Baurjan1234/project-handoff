@@ -100,18 +100,39 @@ export function waitingReply(deadline: string): string {
 }
 
 /**
- * What we can say while no claim message shape exists.
+ * The middle state, in the design system's own words.
  *
- * The design system's claimed line names the claimant's account and their sign
- * deadline, and neither is readable today: there is a `CLAIM` lifecycle event
- * but nothing on a topic to read it from. Saying so in one line is the design
- * system's own instruction for something that cannot be delivered this week —
+ * `docs/design-system.md` writes this line as "Claimed by account 0.0.x ·
+ * under review · sign by 18:12 UTC", and said it needed an on-wire claim
+ * message first. It has one: the claim envelope is in `@handoff/schema` and
+ * `readOrderStatus` resolves the holder with the treaty's own rule.
+ *
+ * **It does not say "a certified reviewer", for the reason `deliveredReply`
+ * does not.** The claim carries a cert tag the claimant asserted and no
+ * registry checks it, so the account is what is known and the account is what
+ * is named.
+ */
+export interface ClaimedReply {
+  readonly claimedBy: string;
+  /** When the claim expires. UTC, second precision. */
+  readonly signBy: string;
+}
+
+export function claimedReply(reply: ClaimedReply): string {
+  return `Claimed by account ${reply.claimedBy} · under review · sign by ${clockTime(reply.signBy)}.`;
+}
+
+/**
+ * The fallback for a reader that cannot see claims at all.
+ *
+ * `claimReadable` is false only when something is misconfigured — a topic id
+ * pointing somewhere claims are not published, say. Saying so in one line is
  * better than a requester reading "waiting" and concluding nobody has taken
- * their order.
+ * their order, which is the one wrong inference available here.
  */
 export const CLAIM_NOT_READABLE =
-  "Whether a reviewer has claimed it is not readable yet — claims are not " +
-  "published to a topic in this build. The signed verdict appears here when it lands.";
+  "Whether a reviewer has claimed it is not readable from here. The signed " +
+  "verdict appears here when it lands.";
 
 export interface DeliveredReply {
   readonly verdict: string;

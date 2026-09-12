@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCertTags, ConfigError } from "./config.js";
 import {
+  claimedReply,
   clockTime,
   deliveredReply,
   insufficientBalanceReply,
@@ -85,6 +86,19 @@ describe("the wait", () => {
     expect(waitingReply(DEADLINE)).toBe(
       "Posted · waiting for a certified reviewer. Open until 18:00 UTC.",
     );
+  });
+
+  it("names the claimant's account and their window, in the design system's words", () => {
+    expect(claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" })).toBe(
+      "Claimed by account 0.0.777 · under review · sign by 18:12 UTC.",
+    );
+  });
+
+  it("never calls the claimant certified, because nothing checked that", () => {
+    // Same limit as the signed line: the cert tag on a claim is asserted by
+    // the claimant and no registry checks it.
+    const reply = claimedReply({ claimedBy: "0.0.777", signBy: "2026-09-14T18:12:00Z" });
+    expect(reply).not.toContain("certified");
   });
 });
 

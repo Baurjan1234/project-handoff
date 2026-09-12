@@ -20,6 +20,7 @@ import { formatTinybars, hbarToTinybars } from "@handoff/schema";
 import type { CertTagOption } from "../config.js";
 import {
   CLAIM_NOT_READABLE,
+  claimedReply,
   NOT_VISIBLE_YET,
   deliveredReply,
   postedReply,
@@ -210,6 +211,12 @@ export function createMcpServer(deps: McpDeps): McpServer {
               ...(status.attestation === undefined ? {} : { certTag: status.attestation.cert_tag }),
             }),
           );
+        } else if (
+          status.state === "CLAIMED" &&
+          status.claimedBy !== undefined &&
+          status.signBy !== undefined
+        ) {
+          lines.push(claimedReply({ claimedBy: status.claimedBy, signBy: status.signBy }));
         } else if (status.state === "POSTED" && status.envelope !== undefined) {
           lines.push(waitingReply(status.envelope.deadline));
         } else {
