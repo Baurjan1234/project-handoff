@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -355,8 +355,18 @@ export function ConnectCard({
   const testnet = mode === "testnet";
   // The Hedera panel opens by itself when an id is already there, from a
   // reload or a prefill; otherwise it waits behind its toggle.
-  // Without an email form there is nothing above it, so it is simply open.
+  // Two panels, one open at a time. Without an email form the Hedera panel is
+  // the only one, so it is simply open.
   const [open, setOpen] = useState(accountIdText !== "" || email === null || locked);
+  const [emailOpen, setEmailOpen] = useState(email !== null && (email.identifier !== "" || email.error !== null));
+  const showEmail = () => {
+    setEmailOpen(true);
+    setOpen(false);
+  };
+  const showHedera = () => {
+    setOpen((o) => !o);
+    setEmailOpen(false);
+  };
   const emailEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && email !== null) {
       event.preventDefault();
@@ -406,6 +416,27 @@ export function ConnectCard({
 
           {email !== null && (
             <>
+              {/* The button gives way to the fields: once open there is one Sign in on the card, not two. */}
+              {!emailOpen && (
+              <button
+                type="button"
+                aria-expanded={emailOpen}
+                aria-controls="connect-email-panel"
+                onClick={showEmail}
+                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[10px] bg-primary text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-azure-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <Mail className="size-[18px]" aria-hidden />
+                Sign in with email
+                <ChevronDown className="size-3.5" aria-hidden />
+              </button>
+              )}
+
+              <div
+                id="connect-email-panel"
+                className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${emailOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+                inert={!emailOpen}
+              >
+              <div className="overflow-hidden">
               {/* No <form>, for the same reason as the key field: a submitted form with a password asks the browser to save it. */}
               <div className="grid gap-4">
                 <div className="grid gap-1.5">
@@ -457,6 +488,8 @@ export function ConnectCard({
                   {!email.busy && <ChevronRight className="size-4" aria-hidden />}
                 </Button>
               </div>
+              </div>
+              </div>
 
               <div className="my-6 flex items-center gap-3" aria-hidden>
                 <span className="h-px flex-1 bg-border" />
@@ -468,7 +501,7 @@ export function ConnectCard({
                 type="button"
                 aria-expanded={open}
                 aria-controls="connect-hedera-panel"
-                onClick={() => setOpen((o) => !o)}
+                onClick={showHedera}
                 className="flex h-[52px] w-full items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] border-border text-[14px] font-semibold text-foreground transition-colors hover:border-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 <Lock className="size-3.5" aria-hidden />

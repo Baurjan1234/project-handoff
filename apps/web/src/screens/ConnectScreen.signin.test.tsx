@@ -51,6 +51,9 @@ describe("the sign-in card", () => {
     );
     expect(html).toContain("Sign in as an expert");
     expect(html).toContain("Review work, sign your verdict, get paid.");
+    // Two collapsed panels behind two buttons; the fields exist but are inert until asked for.
+    expect(html).toContain("Sign in with email");
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-controls="connect-email-panel"/);
     expect(html).toContain("connect-email");
     expect(html).toContain("connect-password");
     expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>Sign in/);
@@ -63,6 +66,20 @@ describe("the sign-in card", () => {
     // No <form> anywhere: a submitted form with a password field asks the browser to save it.
     expect(html).not.toContain("<form");
     expect(expectNoBannedWords(html)).toEqual([]);
+  });
+
+  it("opens the email panel by itself when something is already typed or a refusal is showing", () => {
+    const typed = renderToStaticMarkup(
+      <ConnectCard {...base} email={{ ...email, identifier: "me@example.com" }} mode="testnet" accountIdText="" assessment={assessment(null, false)} lookup={null} />,
+    );
+    // Open means the button has given way to the fields: one Sign in on the card, not two.
+    expect(typed).not.toContain("Sign in with email");
+    expect(typed).toMatch(/id="connect-email-panel"[^>]*grid-rows-\[1fr\]/);
+    const refused = renderToStaticMarkup(
+      <ConnectCard {...base} email={{ ...email, error: "Those credentials are not right." }} mode="testnet" accountIdText="" assessment={assessment(null, false)} lookup={null} />,
+    );
+    expect(refused).not.toContain("Sign in with email");
+    expect(refused).toMatch(/id="connect-email-panel"[^>]*grid-rows-\[1fr\]/);
   });
 
   it("offers the key path only, already open, when there is no accounts API", () => {
@@ -118,7 +135,8 @@ describe("the sign-in card", () => {
     expect(confirmed).toContain("Certified Accountant");
     expect(confirmed).toContain("cert:accounting-cpa");
     expect(confirmed).toContain("grid-rows-[1fr]");
-    expect(confirmed).not.toContain("grid-rows-[0fr]");
+    // The only collapsed thing left is the email panel; the credential slot has grown in.
+    expect(confirmed.match(/grid-rows-\[0fr\]/g)).toHaveLength(1);
   });
 
   it("shows the credential on the mock as soon as the id parses, and no key field", () => {
