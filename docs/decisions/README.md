@@ -65,3 +65,7 @@ Newest last.
 ### 2026-09-10
 
 - [One hosted resource server, and a client published to npm](2026-09-10-one-hosted-resource-server-and-a-published-client.md) — supersedes the Sep 8 "nothing needs deploying" finding; ordering no longer needs a clone
+
+### 2026-09-12
+
+- [handoff_status reports CLAIMED, read off the orders topic with the treaty's resolveClaims](2026-09-12-handoff-status-reports-claimed.md) — retires the design system's "must not invent the middle state" note; **adds a state to `OrderStatus`**
