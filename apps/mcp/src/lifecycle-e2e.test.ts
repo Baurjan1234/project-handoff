@@ -30,13 +30,13 @@ import { handle, type HttpRequest, type ServerDeps } from "./server.js";
 
 const ORDERS = "0.0.orders";
 const ATTESTATIONS = "0.0.attestations";
-const REQUESTER = "0.0.10376659";
-const EXPERT = "0.0.20481337";
-const FEE_PAYER = "0.0.7162784";
+const REQUESTER = "0.0.1001";
+const EXPERT = "0.0.2002";
+const FEE_PAYER = "0.0.3003";
 
 const GATE_CONFIG = {
   network: "hedera:testnet" as const,
-  receiverAccountId: "0.0.5550001",
+  receiverAccountId: "0.0.4004",
   feeTinybars: "50000000",
   serviceUrl: "http://localhost:4021",
 };
