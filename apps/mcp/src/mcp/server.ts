@@ -81,6 +81,21 @@ function labelFor(tags: readonly CertTagOption[], code: string): string {
 interface PostedBody {
   readonly order_id?: string;
   readonly service_fee?: { readonly settled?: boolean; readonly amount_tinybars?: string; readonly error?: string };
+  /**
+   * What the server threaded back. The fee id is empty rather than absent when
+   * settlement did not land, so an empty string is read as "no id", never
+   * rendered as one.
+   */
+  readonly transaction_ids?: {
+    readonly fund_lock?: string;
+    readonly submit_envelope?: string;
+    readonly service_fee?: string;
+  };
+}
+
+/** An id we were given, or nothing. The empty string is not an id. */
+function transactionId(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
 }
 
 export function createMcpServer(deps: McpDeps): McpServer {
@@ -156,11 +171,16 @@ export function createMcpServer(deps: McpDeps): McpServer {
           },
         )) as PostedBody & Record<string, unknown>;
 
+        const feeTransactionId = transactionId(posted.transaction_ids?.service_fee);
+        const fundLockTransactionId = transactionId(posted.transaction_ids?.fund_lock);
+
         const text = postedReply({
           orderId: posted.order_id ?? "unknown",
           priceTinybars: formatTinybars(hbarToTinybars(input.price_hbar)),
           deadline: input.deadline,
           certTagLabel: labelFor(deps.certTags, input.cert_tag),
+          ...(feeTransactionId === undefined ? {} : { feeTransactionId }),
+          ...(fundLockTransactionId === undefined ? {} : { fundLockTransactionId }),
           ...(posted.service_fee?.settled === true && posted.service_fee.amount_tinybars !== undefined
             ? { feeTinybars: posted.service_fee.amount_tinybars }
             : { ...(posted.service_fee?.error === undefined ? {} : { feeError: posted.service_fee.error }) }),

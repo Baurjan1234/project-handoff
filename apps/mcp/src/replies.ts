@@ -68,6 +68,15 @@ export interface PostedReply {
   /** Absent when settlement did not land; the fee row then says so. */
   readonly feeTinybars?: string;
   readonly feeError?: string;
+  /**
+   * The Hedera transaction the facilitator's `/settle` submitted. The only id
+   * the fee leg produces, and the only thing that proves the fee was settled
+   * rather than merely verified — `/verify` has passed for a payload whose key
+   * did not control the payer. Absent when settlement did not land.
+   */
+  readonly feeTransactionId?: string;
+  /** The transaction that moved the order value into escrow. */
+  readonly fundLockTransactionId?: string;
 }
 
 /**
@@ -75,19 +84,35 @@ export interface PostedReply {
  *
  * The fee row comes first and smaller, the escrow line second and heavier,
  * because a requester who has just watched two numbers move needs to see which
- * one was spent and which one is being held.
+ * one was spent and which one is being held. Two rails, two amounts, never
+ * "paid 100.5 HBAR".
+ *
+ * **Both proof rows carry their transaction id**, which is the design system's
+ * instruction for this message and the repo's standing rule: every Hedera call
+ * surfaces its id, threaded rather than swallowed. The ids are what a requester
+ * — or a reviewer watching a recording — opens on a mirror node. Without them
+ * the reply asserts that money moved and offers nothing to check it against.
  */
 export function postedReply(reply: PostedReply): string {
   const fee =
     reply.feeTinybars === undefined
       ? `Service fee not settled · ${reply.feeError ?? "the facilitator did not confirm it"}`
-      : `Service fee settled · ${hbar(reply.feeTinybars)}`;
+      : `Service fee settled · ${hbar(reply.feeTinybars)} · ` +
+        // Settled with no id is a real path, not a bug: the facilitator can
+        // report success and return no transaction. "Settled" stays, because
+        // it is what the facilitator said and the order did post — but the
+        // absence is named rather than rendered as a shorter, quieter line
+        // that reads identically to a settlement somebody can check.
+        (reply.feeTransactionId === undefined
+          ? "settlement id not returned"
+          : `tx ${reply.feeTransactionId}`);
 
   return [
     fee,
     "",
     `Order posted · #${reply.orderId}`,
-    `${hbar(reply.priceTinybars)} locked in escrow for the review.`,
+    `${hbar(reply.priceTinybars)} locked in escrow for the review.` +
+      (reply.fundLockTransactionId === undefined ? "" : ` Lock tx ${reply.fundLockTransactionId}`),
     "It pays the reviewer when they sign, whatever the verdict. " +
       `If nobody claims it by ${clockTime(reply.deadline)}, it returns to you.`,
     `Visible to reviewers holding: ${reply.certTagLabel}. Cannot be cancelled once posted.`,

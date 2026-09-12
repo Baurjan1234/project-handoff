@@ -19,6 +19,8 @@ const TAGS = [
 const DEADLINE = "2026-09-14T18:00:00Z";
 const PRICE = "10000000000"; // 100 HBAR
 const FEE = "50000000"; // 0.5 HBAR
+const FEE_TX = "0.0.5551234@1757600000.000000001";
+const LOCK_TX = "0.0.5551234@1757600002.000000002";
 
 describe("clocks are times, never countdowns", () => {
   it("renders the deadline as an hour, labelled with its zone", () => {
@@ -43,7 +45,7 @@ describe("beat 3, posted", () => {
 
   it("puts the fee proof row first and the escrow line second", () => {
     const lines = reply.split("\n");
-    expect(lines[0]).toBe("Service fee settled · 0.5 HBAR");
+    expect(lines[0]).toBe("Service fee settled · 0.5 HBAR · settlement id not returned");
     expect(reply.indexOf("Service fee settled")).toBeLessThan(reply.indexOf("locked in escrow"));
   });
 
@@ -78,6 +80,35 @@ describe("beat 3, posted", () => {
     expect(unsettled).toContain("the facilitator timed out");
     // The order still posted, so the order line is still there.
     expect(unsettled).toContain("Order posted · #ord_abc");
+  });
+
+  it("carries both transaction ids, one on each proof row", () => {
+    const withIds = postedReply({
+      orderId: "ord_abc",
+      priceTinybars: PRICE,
+      deadline: DEADLINE,
+      certTagLabel: "Licensed reviewer",
+      feeTinybars: FEE,
+      feeTransactionId: FEE_TX,
+      fundLockTransactionId: LOCK_TX,
+    });
+    const lines = withIds.split("\n");
+
+    // The settle id is the only proof the fee was settled rather than merely
+    // verified, and the lock id is what a requester opens to see their money.
+    expect(lines[0]).toBe(`Service fee settled · 0.5 HBAR · tx ${FEE_TX}`);
+    expect(withIds).toContain(`Lock tx ${LOCK_TX}`);
+    // Still two rails, still not one figure.
+    expect(withIds).not.toContain("100.5");
+  });
+
+  it("names a missing settlement id rather than going quiet about it", () => {
+    // The facilitator can report success and return no transaction, and the
+    // server then sends an empty string rather than omitting the field. Saying
+    // only "settled" would read exactly like a settlement somebody can check.
+    expect(reply).toContain("Service fee settled · 0.5 HBAR · settlement id not returned");
+    expect(reply).not.toContain("tx 0.0.");
+    expect(reply).not.toContain("Lock tx");
   });
 });
 
