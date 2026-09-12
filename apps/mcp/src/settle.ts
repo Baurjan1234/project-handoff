@@ -38,11 +38,12 @@
 import {
   assertPositive,
   parseTinybars,
+  utcToEpochSeconds,
   type Attestation,
   type ChainAdapter,
   type OrderEnvelope,
 } from "@handoff/schema";
-import { readOrderFacts, type AttestationRecord, type StatusDeps } from "./status.js";
+import { readOrderFacts, type StatusDeps } from "./status.js";
 
 export interface SettleDeps extends StatusDeps {
   readonly chain: ChainAdapter;
@@ -190,9 +191,14 @@ export async function settleOrder(orderId: string, deps: SettleDeps): Promise<Se
     // happen. It is still not a violation: nothing was breached, the order
     // simply expired, and the funds are the requester's to get back once there
     // is a path for that (Known limits: there is not one yet).
+    // `utcToEpochSeconds`, not `Date.parse`: `resolveClaims` reads this same
+    // field with it, and one decision with two parsers is a decision that will
+    // disagree with itself. `Date.parse` also answers NaN on anything it does
+    // not like, which compares false and would quietly say "retry" about an
+    // order that can never pay.
     const expired =
       (deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000)) >=
-      Math.floor(Date.parse(posted.envelope.deadline) / 1000);
+      utcToEpochSeconds(posted.envelope.deadline);
     throw new SettleError({
       kind: "not-ready",
       state: expired ? "TIMEOUT" : state,
@@ -239,10 +245,14 @@ export async function settleOrder(orderId: string, deps: SettleDeps): Promise<Se
     // Nothing the holder signed is a verdict on this order. Reported from the
     // latest, because that is the one they most recently stood behind and its
     // message is the most useful thing to hand back.
-    assertAttestationMatchesOrder(
-      (byTheHolder[byTheHolder.length - 1] as AttestationRecord).attestation,
-      posted.envelope,
-    );
+    //
+    // Narrowed rather than cast. `byTheHolder` is known non-empty above, but a
+    // cast to say so is the same move as an `@ts-ignore` and this is the path
+    // that decides whether money moves.
+    const latest = byTheHolder.at(-1);
+    if (latest !== undefined) {
+      assertAttestationMatchesOrder(latest.attestation, posted.envelope);
+    }
     // Unreachable: `matchesOrder` and `assertAttestationMatchesOrder` are the
     // same rule, so a record that fails the first makes the second throw.
     throw new SettleError({ kind: "violation", message: `order ${orderId} has no payable attestation` });

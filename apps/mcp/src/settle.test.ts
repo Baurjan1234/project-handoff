@@ -341,3 +341,24 @@ describe("an order nobody claimed before its deadline", () => {
     });
   });
 });
+
+describe("the deadline is read with one parser", () => {
+  it("does not answer 'retry' about an order whose deadline it cannot read", async () => {
+    const chain = new MockChainAdapter();
+    // A deadline `resolveClaims` parses and `Date.parse` would too — the point
+    // is that both ends now read it the same way, so an unreadable one is a
+    // refusal from the schema's parser rather than a silent `retryable: true`.
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+
+    const past = Math.floor(Date.parse(DEADLINE) / 1000) + 1;
+    await expect(
+      settleOrder("ord_1", deps(chain, { nowEpochSeconds: past })),
+    ).rejects.toMatchObject({ refusal: { retryable: false, state: "TIMEOUT" } });
+
+    // One second earlier is still open, so the boundary is the deadline itself
+    // and not an off-by-one in whichever parser ran.
+    await expect(
+      settleOrder("ord_1", deps(chain, { nowEpochSeconds: past - 2 })),
+    ).rejects.toMatchObject({ refusal: { retryable: true, state: "POSTED" } });
+  });
+});
