@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_REGISTRATION } from "../../session/accounts";
 import { expectNoBannedWords } from "../fixtures";
 import { AllSetCard, CodeCard, CredentialCard, RegisterCard, SetupCard } from "./AuthCards";
+import { WelcomeCard } from "./WelcomeCard";
 
 const noop = () => {};
 
@@ -97,6 +98,25 @@ describe("Check your email", () => {
     );
     expect(html).toContain("code-account");
     expect(html).toContain("Enter the six-digit code we sent you.");
+  });
+});
+
+describe("the welcome panes", () => {
+  it("say what the build does and nothing it does not", () => {
+    for (const page of [1, 2, 3] as const) {
+      const html = renderToStaticMarkup(<WelcomeCard mode="testnet" name="Sarah" page={page} onNext={noop} onBack={noop} onSkip={noop} />);
+      expect(html).toContain("Welcome");
+      expect(html).toContain("Sarah");
+      expect(html).toContain(`Step ${String(page)} of 3`);
+      expect(expectNoBannedWords(html)).toEqual([]);
+      // Pay on any verdict ships. Closed incentives do not, and are not claimed.
+      expect(html).not.toMatch(/incentive|symmetry|scarce/i);
+    }
+    const last = renderToStaticMarkup(<WelcomeCard mode="testnet" name="Sarah" page={3} onNext={noop} onBack={noop} onSkip={noop} />);
+    expect(last).toContain("Reject");
+    expect(last).toContain("Approve");
+    expect(last).toContain("Paid to you");
+    expect(last).toContain("Open inbox");
   });
 });
 

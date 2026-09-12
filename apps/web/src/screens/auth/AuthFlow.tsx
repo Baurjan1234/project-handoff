@@ -21,6 +21,7 @@ import {
   type SetupState,
   type SetupStep,
 } from "./AuthCards";
+import { WelcomeCard, type WelcomePage } from "./WelcomeCard";
 
 export type LookupFn = (accountId: string, signal: AbortSignal) => Promise<AccountLookup>;
 
@@ -44,6 +45,7 @@ type Stage =
   | { kind: "credential" }
   | { kind: "setup"; steps: readonly SetupStep[]; error: string | null }
   | { kind: "code"; hederaAccountId: string | null; email: string | null; identifier: string; password: string }
+  | { kind: "welcome"; page: WelcomePage; session: AccountsSession }
   | { kind: "allset"; session: AccountsSession };
 
 const SETUP_LABELS = ["Checking your Hedera account on testnet", "Creating your account", "Sending your email code", "All set"] as const;
@@ -176,7 +178,7 @@ export function AuthFlow({
       await accounts.confirmVerification(accountId, code.trim());
       const signedIn = await accounts.signIn(current.identifier, current.password);
       if (!alive.current) return;
-      setStage({ kind: "allset", session: signedIn });
+      setStage({ kind: "welcome", page: 1, session: signedIn });
     } catch (error) {
       if (alive.current) setCodeError(describeAccountsError(error).message);
     } finally {
@@ -264,6 +266,21 @@ export function AuthFlow({
           onConfirm={() => void confirm(stage)}
           onResend={() => void resend(stage)}
           onBack={onCancel}
+        />
+      );
+    case "welcome":
+      return (
+        <WelcomeCard
+          mode={mode}
+          name={stage.session.account.firstName}
+          page={stage.page}
+          onNext={() =>
+            stage.page === 3
+              ? setStage({ kind: "allset", session: stage.session })
+              : setStage({ ...stage, page: (stage.page + 1) as WelcomePage })
+          }
+          onBack={() => stage.page > 1 && setStage({ ...stage, page: (stage.page - 1) as WelcomePage })}
+          onSkip={() => setStage({ kind: "allset", session: stage.session })}
         />
       );
     case "allset":
