@@ -158,3 +158,43 @@ describe("signSchedule across a restart", () => {
     await expect(chain.signSchedule(schedule.scheduleId)).rejects.toThrow(/cancelled/);
   });
 });
+
+describe("two settles at once, in one process", () => {
+  it("coalesces concurrent signSchedule calls instead of paying twice", async () => {
+    const chain = adapter();
+    // Nothing on the mirror: neither caller can see a payout, because neither
+    // has submitted one yet. This is the window a per-call mirror check cannot
+    // close on its own.
+    stubMirror([]);
+
+    const schedule = await chain.createSchedule(PARAMS);
+    const [first, second] = await Promise.allSettled([
+      chain.signSchedule(schedule.scheduleId),
+      chain.signSchedule(schedule.scheduleId),
+    ]);
+
+    // One mirror read, so only one call ever got as far as deciding to pay.
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    // Both callers get the same outcome — here a refusal, because the unusable
+    // client proves a transfer was attempted exactly once.
+    expect(first.status).toBe("rejected");
+    expect(second.status).toBe("rejected");
+    expect((first as PromiseRejectedResult).reason).toBe(
+      (second as PromiseRejectedResult).reason,
+    );
+  });
+
+  it("lets the next caller try again after an in-flight payout fails", async () => {
+    const chain = adapter();
+    stubMirror([]);
+    const schedule = await chain.createSchedule(PARAMS);
+    await expect(chain.signSchedule(schedule.scheduleId)).rejects.toThrow();
+
+    // The failed payout may or may not have landed, so the next caller has to
+    // reach the mirror node rather than be handed the old rejection forever.
+    stubMirror([paidRow(PARAMS.orderId)]);
+    const retried = await chain.signSchedule(schedule.scheduleId);
+
+    expect(retried.transactionId).toBe("0.0.999@1789035890.122059080");
+  });
+});

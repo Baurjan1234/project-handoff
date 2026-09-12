@@ -74,6 +74,17 @@ export interface HederaChainAdapterConfig {
 export class HederaChainAdapter implements ChainAdapter {
   readonly network = "testnet" as const;
   readonly #pendingPayouts = new PendingPayoutStore();
+  /**
+   * Payouts currently in flight, by schedule id.
+   *
+   * The mirror check below cannot see a transfer that has not been submitted
+   * yet, so two overlapping calls for the same order — an expert clicking sign
+   * while the demo script retries, an HTTP client that timed out and tried
+   * again — would both read "not paid" and both pay. `markExecuted` runs far
+   * too late to help. So the second caller joins the first one's promise
+   * instead of starting its own.
+   */
+  readonly #inFlight = new Map<string, Promise<SignScheduleResult>>();
 
   constructor(private readonly config: HederaChainAdapterConfig) {}
 
@@ -196,6 +207,26 @@ export class HederaChainAdapter implements ChainAdapter {
    * crash is a double payment waiting for a retry.
    */
   async signSchedule(scheduleId: string): Promise<SignScheduleResult> {
+    // Before anything else, including the record lookup: a caller that arrives
+    // while a payout is in flight gets that payout's answer, not a second one.
+    const inFlight = this.#inFlight.get(scheduleId);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+
+    const attempt = this.#signSchedule(scheduleId);
+    this.#inFlight.set(scheduleId, attempt);
+    try {
+      return await attempt;
+    } finally {
+      // Cleared on failure too. A payout that threw may or may not have
+      // landed, and the next caller has to be able to ask the mirror node
+      // rather than being handed a rejection forever.
+      this.#inFlight.delete(scheduleId);
+    }
+  }
+
+  async #signSchedule(scheduleId: string): Promise<SignScheduleResult> {
     const record = this.#pendingPayouts.get(scheduleId);
 
     if (record.deleted) {
