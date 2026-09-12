@@ -504,9 +504,9 @@ describe("free read paths", () => {
     const status = read.body as { state: string; claimReadable: boolean; envelope?: unknown };
     expect(status.state).toBe("POSTED");
     expect(status.envelope).toBeDefined();
-    // No claim message shape exists yet, and the reader says so rather than
-    // letting "POSTED" be read as "nobody has taken it".
-    expect(status.claimReadable).toBe(false);
+    // The server reads claims off the orders topic, so POSTED here does mean
+    // nobody has taken it. Were this false, the screens must not say that.
+    expect(status.claimReadable).toBe(true);
   });
 
   it("answers UNKNOWN for an id nothing on the topics matches", async () => {

@@ -23,20 +23,25 @@ import {
   decodeAttestation,
   decodeEnvelope,
   OrderEnvelope as OrderEnvelopeSchema,
+  resolveClaims,
+  tryDecodeClaim,
   Verdict as VerdictSchema,
   type ChainAdapter,
+  type ClaimRecord,
+  type OrderEnvelope,
 } from "@handoff/schema";
 
 /**
  * What we can prove about an order from the topics alone.
  *
- * `CLAIMED` is deliberately absent. There is a `CLAIM` event in the lifecycle
- * state machine, but no on-wire claim message exists yet — not in
- * `@handoff/schema`, not as a topic convention — so an honest reader cannot
- * report it. `claimReadable: false` says so out loud rather than letting a
- * requester read "Posted" and conclude nobody has picked it up.
+ * `CLAIMED` is read, not inferred. A claim is a `ClaimEnvelope` on the orders
+ * topic submitted from the claimant's own account, so the same scan that finds
+ * the order envelope finds every claim for it, and `resolveClaims` — the
+ * treaty's rule, the one the expert app calls — says which one holds it. The
+ * rule is not reimplemented here on purpose: a rule with two ends implemented
+ * twice is a rule that disagrees with itself.
  */
-export type ReadableOrderState = "POSTED" | "DELIVERED" | "UNKNOWN";
+export type ReadableOrderState = "POSTED" | "CLAIMED" | "DELIVERED" | "UNKNOWN";
 
 /**
  * What a status read answers, as a parser first and a type second.
@@ -49,7 +54,7 @@ export type ReadableOrderState = "POSTED" | "DELIVERED" | "UNKNOWN";
  */
 export const OrderStatusShape = z.object({
   orderId: z.string().min(1),
-  state: z.enum(["POSTED", "DELIVERED", "UNKNOWN"]),
+  state: z.enum(["POSTED", "CLAIMED", "DELIVERED", "UNKNOWN"]),
   envelope: OrderEnvelopeSchema.optional(),
   /** The consensus timestamp the envelope landed at. Ordering truth. */
   postedAt: z.string().optional(),
@@ -66,8 +71,29 @@ export const OrderStatusShape = z.object({
   signedBy: z.string().optional(),
   signedAt: z.string().optional(),
   /**
-   * False until a claim message shape exists. When false, a caller must not
-   * present "nobody has claimed this" — only "we cannot see claims yet".
+   * The account that holds the order, once one does.
+   *
+   * The claimant is the account that paid to submit the claim, never a field
+   * in the body, and it carries exactly as much weight as `signedBy`: it says
+   * who, not that they hold the credential. No registry checks the cert tag
+   * this week, so copy built from this must not call the claimant certified.
+   */
+  claimedBy: z.string().optional(),
+  claimedAt: z.string().optional(),
+  /**
+   * When the holder's claim expires, as a UTC instant. The earlier of the
+   * claim timeout and the order deadline — the window never outlives the
+   * order. Present only while the state is `CLAIMED`.
+   */
+  signBy: z.string().optional(),
+  /**
+   * Whether the server can see claims at all.
+   *
+   * True since the server reads the orders topic for claims as well as
+   * envelopes. It stays in the shape rather than being deleted because the
+   * expert app and the requester screens both branch on it, and because a
+   * reader that lost the ability to see claims — a topic id misconfigured,
+   * say — has to be able to say so instead of reporting an order as open.
    */
   claimReadable: z.boolean(),
 });
@@ -81,6 +107,13 @@ export interface StatusDeps {
   /** Pages read per topic, as a stop rather than a tuning knob. */
   readonly maxPages?: number;
   readonly pageSize?: number;
+  /**
+   * The reader's clock, in epoch seconds, for deciding whether a claim window
+   * has run out. Injectable so a test can sit either side of an expiry without
+   * waiting an hour; in production it is this process's clock, which is the
+   * honest answer for a read the mirror node does not timestamp.
+   */
+  readonly nowEpochSeconds?: number;
 }
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -97,13 +130,18 @@ const DEFAULT_MAX_PAGES = 40;
 async function scanTopic<T>(
   topicId: string,
   deps: StatusDeps,
-  read: (contents: string, consensusTimestamp: string, payerAccountId: string) => T | undefined,
-): Promise<T | undefined> {
+  read: (
+    contents: string,
+    consensusTimestamp: string,
+    payerAccountId: string,
+    sequenceNumber: number,
+  ) => T | undefined,
+): Promise<readonly T[]> {
   const pageSize = deps.pageSize ?? DEFAULT_PAGE_SIZE;
   const maxPages = deps.maxPages ?? DEFAULT_MAX_PAGES;
 
   let afterSequenceNumber: number | undefined;
-  let found: T | undefined;
+  const found: T[] = [];
 
   for (let page = 0; page < maxPages; page += 1) {
     const messages = await deps.chain.readMessages(topicId, {
@@ -121,14 +159,20 @@ async function scanTopic<T>(
       // failing a status query over.
       let candidate: T | undefined;
       try {
-        candidate = read(message.contents, message.consensusTimestamp, message.payerAccountId);
+        candidate = read(
+          message.contents,
+          message.consensusTimestamp,
+          message.payerAccountId,
+          message.sequenceNumber,
+        );
       } catch {
         continue;
       }
-      // Keep the last match rather than the first. A later attestation for the
-      // same order supersedes an earlier one, and consensus order is the truth.
+      // Every match, in consensus order, rather than one. Claims need all of
+      // them to resolve a winner, and a caller that wants the last — a later
+      // attestation supersedes an earlier one — takes the last of these.
       if (candidate !== undefined) {
-        found = candidate;
+        found.push(candidate);
       }
     }
 
@@ -142,17 +186,57 @@ async function scanTopic<T>(
   return found;
 }
 
+/**
+ * One sighting on the orders topic. Orders and claims share it, and the two
+ * shapes cannot be confused by a parser: the order envelope is a strict object
+ * with no `kind`, the claim is a strict object that requires one.
+ */
+type OrderSighting =
+  | { readonly kind: "order"; readonly envelope: OrderEnvelope; readonly consensusTimestamp: string }
+  | { readonly kind: "claim"; readonly record: ClaimRecord };
+
+/** Seconds → the schema's `Utc` shape: second precision, `Z` only. */
+function epochSecondsToUtc(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 /** Read what the topics say about one order. */
 export async function readOrderStatus(
   orderId: string,
   deps: StatusDeps,
 ): Promise<OrderStatus> {
-  const posted = await scanTopic(deps.ordersTopicId, deps, (contents, consensusTimestamp) => {
-    const envelope = decodeEnvelope(contents);
-    return envelope.order_id === orderId ? { envelope, consensusTimestamp } : undefined;
-  });
+  // One scan, not two. Claims live on the orders topic, so reading them
+  // separately would double every mirror-node read this query makes.
+  const sightings = await scanTopic<OrderSighting>(
+    deps.ordersTopicId,
+    deps,
+    (contents, consensusTimestamp, payerAccountId, sequenceNumber) => {
+      const claim = tryDecodeClaim(contents);
+      if (claim !== null) {
+        return claim.order_id === orderId
+          ? { kind: "claim", record: { claim, payerAccountId, consensusTimestamp, sequenceNumber } }
+          : undefined;
+      }
+      const envelope = decodeEnvelope(contents);
+      return envelope.order_id === orderId
+        ? { kind: "order", envelope, consensusTimestamp }
+        : undefined;
+    },
+  );
 
-  const delivered = await scanTopic(
+  let posted: { readonly envelope: OrderEnvelope; readonly consensusTimestamp: string } | undefined;
+  const claims: ClaimRecord[] = [];
+  for (const sighting of sightings) {
+    if (sighting.kind === "claim") {
+      claims.push(sighting.record);
+    } else {
+      // The last envelope wins, the same rule as the attestation: consensus
+      // order is the truth.
+      posted = sighting;
+    }
+  }
+
+  const attestations = await scanTopic(
     deps.attestationsTopicId,
     deps,
     (contents, consensusTimestamp, payerAccountId) => {
@@ -162,12 +246,33 @@ export async function readOrderStatus(
         : undefined;
     },
   );
+  const delivered = attestations.at(-1);
+
+  /**
+   * Who holds the order, by the treaty's rule. Unanswerable without the
+   * envelope, because the rule reads the cert tag, the deadline and the claim
+   * timeout off it — a claim for an order we cannot see is a claim we cannot
+   * score.
+   */
+  const holder =
+    posted === undefined
+      ? undefined
+      : resolveClaims({
+          order: posted.envelope,
+          claims,
+          nowEpochSeconds: deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
+          // A delivered claim never expires. Without this a verdict signed one
+          // second after the window closed would read as an expired claim.
+          ...(delivered === undefined ? {} : { deliveredAt: delivered.consensusTimestamp }),
+        });
+
+  const held = holder?.state === "claimed" ? holder.active : undefined;
 
   if (delivered !== undefined) {
     return {
       orderId,
       state: "DELIVERED",
-      claimReadable: false,
+      claimReadable: true,
       ...(posted === undefined
         ? {}
         : { envelope: posted.envelope, postedAt: posted.consensusTimestamp }),
@@ -175,14 +280,38 @@ export async function readOrderStatus(
       verdict: delivered.attestation.verdict,
       signedBy: delivered.payerAccountId,
       signedAt: delivered.consensusTimestamp,
+      // Carried on a delivered order too, so a reader can compare it with
+      // `signedBy` themselves. The topic has no submit key, so an attestation
+      // from an account that never held the claim is a thing that can happen
+      // and a requester is entitled to see both accounts rather than one.
+      ...(held === undefined
+        ? {}
+        : { claimedBy: held.claimantAccountId, claimedAt: held.claimedAt }),
+    };
+  }
+
+  if (posted !== undefined && held !== undefined) {
+    return {
+      orderId,
+      state: "CLAIMED",
+      claimReadable: true,
+      envelope: posted.envelope,
+      postedAt: posted.consensusTimestamp,
+      claimedBy: held.claimantAccountId,
+      claimedAt: held.claimedAt,
+      signBy: epochSecondsToUtc(held.signByEpochSeconds),
     };
   }
 
   if (posted !== undefined) {
+    // Unclaimed, or claimed by somebody whose window ran out. Both read as
+    // POSTED: the order is open to a claim again, and the one case where it is
+    // not — a second window expired, so no reopen remains — is the lifecycle's
+    // to close, not a status read's to invent a state for.
     return {
       orderId,
       state: "POSTED",
-      claimReadable: false,
+      claimReadable: true,
       envelope: posted.envelope,
       postedAt: posted.consensusTimestamp,
     };
@@ -191,5 +320,5 @@ export async function readOrderStatus(
   // Not a 404. The order may be seconds old and the mirror node lags about six
   // seconds behind consensus, so "we cannot see it" is the honest answer and
   // "it does not exist" is a guess.
-  return { orderId, state: "UNKNOWN", claimReadable: false };
+  return { orderId, state: "UNKNOWN", claimReadable: true };
 }
