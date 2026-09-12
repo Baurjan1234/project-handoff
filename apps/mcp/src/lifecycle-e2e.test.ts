@@ -23,7 +23,8 @@ import {
   signFundLock,
 } from "@handoff/schema";
 import { Facilitator, type FetchLike } from "./x402/facilitator.js";
-import { PAYMENT_SIGNATURE_HEADER, buildRequirements, type PaymentPayload } from "./x402/gate.js";
+import { PAYMENT_SIGNATURE_HEADER, buildRequirements } from "./x402/gate.js";
+import type { PaymentPayload } from "./x402/types.js";
 import { InMemoryContentStore } from "./content.js";
 import { handle, type HttpRequest, type ServerDeps } from "./server.js";
 
