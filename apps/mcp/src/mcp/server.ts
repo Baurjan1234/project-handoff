@@ -99,7 +99,11 @@ function transactionId(value: string | undefined): string | undefined {
 }
 
 export function createMcpServer(deps: McpDeps): McpServer {
-  const server = new McpServer({ name: "handoff", version: "0.1.0" });
+  // Kept in step with `packages/mcp-client`'s `version` by hand, because that
+  // is what an installed client actually is and this string is what it reports
+  // back over the protocol. A session debugging a version-skew problem — an
+  // old client against a redeployed server — has nothing else to read.
+  const server = new McpServer({ name: "handoff", version: "0.1.1" });
 
   const certTagCodes = deps.certTags.map((tag) => tag.code);
   // An empty list means the service would not say what it routes to at
