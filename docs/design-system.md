@@ -361,9 +361,11 @@ then, once claimed:
 Claimed by account 0.0.x · under review · sign by 18:12 UTC.
 ```
 
-The claimed line needs an on-wire claim message, which the schema does not have yet.
-Until the claim envelope ships (P4, tracked on the board), status goes from Posted to
-Signed and must not invent the middle state.
+The claimed line **ships**. The claim envelope is in `@handoff/schema` and
+`handoff_status` resolves the holder with the treaty's own `resolveClaims`, so the
+middle state is read off the orders topic rather than invented. The line names the
+claimant's *account*, never "a certified reviewer": the cert tag on a claim is asserted
+by the claimant and no registry checks it, the same limit the signed line carries.
 
 **Beat 10 — close.** The reasons come first, the money second, the slogan last where it
 has earned its place. Without the reasons, “you bought a judgment” reads as “no refunds”
