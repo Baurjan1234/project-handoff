@@ -198,3 +198,46 @@ describe("two settles at once, in one process", () => {
     expect(retried.transactionId).toBe("0.0.999@1789035890.122059080");
   });
 });
+
+describe("a sighting that credited somebody else", () => {
+  it("refuses rather than reporting the order settled", async () => {
+    const chain = adapter();
+    // The memo names this order and the money went somewhere else. Nobody
+    // here can explain that, and the wrong answer is to call it settled.
+    stubMirror([
+      {
+        ...paidRow(PARAMS.orderId),
+        transfers: [
+          { account: ESCROW, amount: -Number(AMOUNT) },
+          { account: "0.0.999999", amount: Number(AMOUNT) },
+        ],
+      },
+    ]);
+
+    const schedule = await chain.createSchedule(PARAMS);
+
+    await expect(chain.signSchedule(schedule.scheduleId)).rejects.toThrow(/credited 0\.0\.999999/);
+  });
+
+  it("accepts a sighting whose payee cannot be named, because the fee nets the leg out", async () => {
+    const chain = adapter();
+    stubMirror([
+      {
+        ...paidRow(PARAMS.orderId),
+        transfers: [
+          { account: ESCROW, amount: -Number(AMOUNT) },
+          // The payee also paid the transaction fee, so their credit no longer
+          // equals the escrow's debit. Observed on testnet 2026-09-12.
+          { account: PAYEE, amount: Number(AMOUNT) - 113_000 },
+        ],
+      },
+    ]);
+
+    const schedule = await chain.createSchedule(PARAMS);
+    const signed = await chain.signSchedule(schedule.scheduleId);
+
+    // The memo is the binding. An unnameable payee is not a wrong payee, and
+    // refusing here would refuse a correct payout.
+    expect(signed.transactionId).toBe("0.0.999@1789035890.122059080");
+  });
+});

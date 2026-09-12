@@ -251,6 +251,26 @@ export class HederaChainAdapter implements ChainAdapter {
       orderId: record.orderId,
     });
     if (alreadyPaid !== null) {
+      // The memo binds that transfer to this order, but it does not promise it
+      // went where this record says. A sighting that credited somebody else is
+      // not "already paid" — it is a fact nobody here can explain, and the
+      // wrong answer to it is to report success and move on.
+      //
+      // Only the payee is compared. Not the amount: a payout whose payee also
+      // paid the transaction fee has that fee netted out of their credit leg,
+      // so the amounts legitimately differ and comparing them would refuse a
+      // correct payout. Measured on testnet 2026-09-12.
+      if (
+        alreadyPaid.payeeAccountId !== null &&
+        alreadyPaid.payeeAccountId !== record.payeeAccountId
+      ) {
+        throw new Error(
+          `order ${record.orderId} was already paid by ${alreadyPaid.transactionId}, but that ` +
+            `transfer credited ${alreadyPaid.payeeAccountId} and this payout is for ` +
+            `${record.payeeAccountId}. Refusing to report it as settled; read the escrow's ` +
+            `transfers on the mirror node before doing anything else.`,
+        );
+      }
       // Not an error. "Payout is an idempotent retry" — a second call returns
       // the first call's transaction id and moves nothing.
       this.#pendingPayouts.markExecuted(scheduleId, alreadyPaid.transactionId);
