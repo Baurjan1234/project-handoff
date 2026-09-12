@@ -822,7 +822,11 @@ describe("POST /orders/:id/settle", () => {
   }
 
   /** POSTED → CLAIMED → DELIVERED on the mock, the expert paying for their own messages. */
-  async function deliver(chain: MockChainAdapter, orderId: string): Promise<void> {
+  async function deliver(
+    chain: MockChainAdapter,
+    orderId: string,
+    options: { artifactHashIn?: string } = {},
+  ): Promise<void> {
     await chain.submitMessage(
       "0.0.orders",
       encodeEnvelope({
@@ -851,7 +855,7 @@ describe("POST /orders/:id/settle", () => {
         verdict: "reject",
         defects: ["NO_MONITORING"],
         notes_hash: HASH_IN,
-        artifact_hash_in: HASH_IN,
+        artifact_hash_in: options.artifactHashIn ?? HASH_IN,
         cert_tag: "cpa-us",
         schema_version: SCHEMA_VERSION,
       }),
@@ -917,23 +921,7 @@ describe("POST /orders/:id/settle", () => {
   it("answers 409 and NOT retryable on a schema violation, so a poller stops", async () => {
     const { deps } = harness();
     const chain = deps.chain as MockChainAdapter;
-    await deliver(chain, "ord_1");
-    // A second attestation from the holder, pinning an artifact the order
-    // never named. The last one from the claimant is the one that counts.
-    await chain.publishClaim(
-      ATTESTATIONS,
-      EXPERT,
-      encodeAttestation({
-        order_id: "ord_1",
-        class: "review",
-        verdict: "approve",
-        defects: [],
-        notes_hash: HASH_IN,
-        artifact_hash_in: sha256Hex("something else entirely"),
-        cert_tag: "cpa-us",
-        schema_version: SCHEMA_VERSION,
-      }),
-    );
+    await deliver(chain, "ord_1", { artifactHashIn: sha256Hex("something else entirely") });
 
     const response = await handle(settle("ord_1"), deps);
 

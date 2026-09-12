@@ -228,3 +228,116 @@ describe("settleOrder", () => {
     await expect(settleOrder("ord_1", deps(chain))).rejects.toThrow(/outcome is unknown/);
   });
 });
+
+describe("a stray attestation cannot revive a claim that timed out", () => {
+  /**
+   * The exploit this closes. `resolveClaims` stops expiring a claim as soon as
+   * it is handed a `deliveredAt`, and the attestations topic takes messages
+   * from anybody — so while that was "the last attestation from anyone", one
+   * stranger's message held the window open and a claimant who let their
+   * window lapse could still sign afterwards and be paid.
+   */
+  const SHORT_TIMEOUT = 300;
+
+  function shortEnvelope(orderId: string, deadline: string): string {
+    return encodeEnvelope({
+      order_id: orderId,
+      class: "review",
+      spec_hash: HASH,
+      artifact_hash_in: HASH,
+      cert_tag: "cpa-us",
+      price_tinybars: PRICE,
+      deadline,
+      claim_timeout_seconds: SHORT_TIMEOUT,
+      schema_version: SCHEMA_VERSION,
+    });
+  }
+
+  it("does not let a stranger's message keep a lapsed claim alive", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, shortEnvelope("ord_1", DEADLINE));
+    // A claimant takes the order and then does nothing with it.
+    const lazy = await chain.publishClaim(ORDERS, "0.0.lazy", claim("ord_1"));
+    // A stranger attests. Nobody asked them to and they hold no claim.
+    await chain.publishClaim(ATTESTATIONS, "0.0.stranger", attestation("ord_1"));
+
+    const windowClosed = Number(lazy.consensusTimestamp.split(".")[0]) + SHORT_TIMEOUT;
+
+    // While any account's attestation counted as delivery, this read CLAIMED:
+    // the stranger's message made the lapsed claim final, so the order stayed
+    // locked to a claimant who never delivered and the reopen could never
+    // happen. It now reads as what it is.
+    await expect(
+      settleOrder("ord_1", deps(chain, { nowEpochSeconds: windowClosed + 1 })),
+    ).rejects.toMatchObject({ refusal: { kind: "not-ready", state: "CLAIM_TIMEOUT" } });
+  });
+
+  it("still pays a holder whose own verdict landed just after the window", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, shortEnvelope("ord_1", DEADLINE));
+    const claimed = await chain.publishClaim(ORDERS, EXPERT, claim("ord_1"));
+    await chain.publishClaim(ATTESTATIONS, EXPERT, attestation("ord_1"));
+
+    // The documented grace: a verdict signed one second after the window
+    // closed is a delivered claim, not an expired one. Narrowing whose
+    // attestation counts must not take that away.
+    const justAfter = Number(claimed.consensusTimestamp.split(".")[0]) + SHORT_TIMEOUT + 1;
+
+    const settlement = await settleOrder("ord_1", deps(chain, { nowEpochSeconds: justAfter }));
+
+    expect(settlement.payeeAccountId).toBe(EXPERT);
+  });
+});
+
+describe("which of the holder's attestations pays", () => {
+  it("pays on the earliest matching one, so a later divergent one cannot undo it", async () => {
+    const chain = await delivered("ord_1");
+    const first = await settleOrder("ord_1", deps(chain));
+
+    // The holder publishes a second attestation pinning a different artifact,
+    // after being paid.
+    await chain.publishClaim(
+      ATTESTATIONS,
+      EXPERT,
+      attestation("ord_1", { artifact_hash_in: OTHER_HASH }),
+    );
+
+    // A retry must still return the settlement, not turn a correctly paid
+    // order into a violation.
+    const retried = await settleOrder("ord_1", deps(chain));
+    expect(retried.state).toBe("SETTLED");
+    expect(retried.payeeAccountId).toBe(first.payeeAccountId);
+  });
+
+  it("pays on a correction when the holder's first attempt was malformed", async () => {
+    const chain = await delivered("ord_1", {
+      attestationBody: attestation("ord_1", { artifact_hash_in: OTHER_HASH }),
+    });
+    // The expert notices and republishes against the right artifact.
+    await chain.publishClaim(ATTESTATIONS, EXPERT, attestation("ord_1"));
+
+    const settlement = await settleOrder("ord_1", deps(chain));
+
+    // "Earliest" means earliest that is a verdict on this order, not earliest
+    // full stop — a fat-fingered first message must not strand the money,
+    // because there is no path to return it either.
+    expect(settlement.state).toBe("SETTLED");
+  });
+});
+
+describe("an order nobody claimed before its deadline", () => {
+  it("refuses non-retryably, because no later claim can count", async () => {
+    const chain = new MockChainAdapter();
+    await chain.submitMessage(ORDERS, envelope("ord_1"));
+
+    const wellPastTheDeadline = Math.floor(Date.parse(DEADLINE) / 1000) + 60;
+
+    await expect(
+      settleOrder("ord_1", deps(chain, { nowEpochSeconds: wellPastTheDeadline })),
+    ).rejects.toMatchObject({
+      // Not a violation: nothing was breached, the order expired. But a poller
+      // has to stop.
+      refusal: { kind: "not-ready", state: "TIMEOUT", retryable: false },
+    });
+  });
+});

@@ -276,7 +276,6 @@ export async function readOrderFacts(orderId: string, deps: StatusDeps): Promise
         : undefined;
     },
   );
-  const delivered = attestations.at(-1);
 
   /**
    * Who holds the order, by the treaty's rule. Unanswerable without the
@@ -284,24 +283,35 @@ export async function readOrderFacts(orderId: string, deps: StatusDeps): Promise
    * timeout off it — a claim for an order we cannot see is a claim we cannot
    * score.
    */
+  /**
+   * Who holds the order, by the treaty's rule.
+   *
+   * Two passes, and the second one is what keeps a stranger from deciding it.
+   * `resolveClaims` treats *any* `deliveredAt` as proof that the **first**
+   * claim was delivered and stops expiring it — it has no way to ask whose
+   * attestation it was handed. The attestations topic has no submit key, so
+   * while this passed the last message from anybody, one stranger's message
+   * made a lapsed claim final and the expert who actually claimed the reopen
+   * and did the work could not be paid.
+   *
+   * So: resolve once on the claims alone to see who that first claimant is,
+   * and pass `deliveredAt` only when it is *their own* attestation and no
+   * reopen has already happened. That preserves the documented grace — a
+   * verdict signed a second after the window closed is a delivered claim, not
+   * an expired one — while a message from anybody else changes nothing.
+   *
+   * TODO(NAS): the exact rule needs `resolveClaims` to see the attestations,
+   * because only it knows which claim won. One case is still wrong here: if
+   * the first claimant delivers late *and* somebody has already claimed the
+   * reopen, the treaty says the delivered first claim wins and this gives it
+   * to the reopener. Narrow, and unreachable while reopen is unwired, but it
+   * belongs in `packages/schema/src/claim.ts`.
+   */
+  const nowEpochSeconds = deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
   const holder =
     posted === undefined
       ? undefined
-      : resolveClaims({
-          order: posted.envelope,
-          claims,
-          nowEpochSeconds: deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
-          // A delivered claim never expires. Without this a verdict signed one
-          // second after the window closed would read as an expired claim.
-          //
-          // TODO: `delivered` here is the last attestation from anybody, so a
-          // stray one on a submit-keyless topic holds a claim window open that
-          // should have expired. Cosmetic today — no money moves on it, and
-          // the reopen it would block is unwired — but it is the same class
-          // `settle.ts` already refuses, and the fix is the same: the
-          // claimant's own, not the last.
-          ...(delivered === undefined ? {} : { deliveredAt: delivered.consensusTimestamp }),
-        });
+      : resolveWithDelivery(posted.envelope, claims, attestations, nowEpochSeconds);
 
   return {
     ...(posted === undefined ? {} : { posted }),
@@ -309,6 +319,49 @@ export async function readOrderFacts(orderId: string, deps: StatusDeps): Promise
     attestations,
     ...(holder === undefined ? {} : { holder }),
   };
+}
+
+/**
+ * `resolveClaims`, told about a delivery only when it is the first claimant's own.
+ *
+ * See the note at the call site for why the shape is two passes rather than
+ * one argument.
+ */
+function resolveWithDelivery(
+  order: OrderEnvelope,
+  claims: readonly ClaimRecord[],
+  attestations: readonly AttestationRecord[],
+  nowEpochSeconds: number,
+): ClaimResolution {
+  const provisional = resolveClaims({ order, claims, nowEpochSeconds });
+
+  const candidate =
+    provisional.state === "claimed"
+      ? provisional.active
+      : provisional.state === "claim_timeout"
+        ? provisional.expired
+        : undefined;
+
+  // A reopen has already happened, so the claim `deliveredAt` would make final
+  // is not the one this candidate holds. Passing it would hand the order back
+  // to the claimant who let their window lapse.
+  if (candidate === undefined || candidate.reopened) {
+    return provisional;
+  }
+
+  const theirs = attestations.find(
+    (record) => record.payerAccountId === candidate.claimantAccountId,
+  );
+  if (theirs === undefined) {
+    return provisional;
+  }
+
+  return resolveClaims({
+    order,
+    claims,
+    nowEpochSeconds,
+    deliveredAt: theirs.consensusTimestamp,
+  });
 }
 
 /** Read what the topics say about one order, as a requester reads it. */

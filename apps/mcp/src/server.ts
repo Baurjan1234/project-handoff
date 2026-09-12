@@ -335,7 +335,9 @@ async function route(request: HttpRequest, deps: ServerDeps): Promise<HttpRespon
           body: {
             error: error.refusal.kind === "violation" ? "schema violation" : "not ready to settle",
             message: error.refusal.message,
-            retryable: error.refusal.kind === "not-ready",
+            // A not-ready that cannot change — an order past its deadline
+            // with nobody holding it — says so, or a poller waits forever.
+            retryable: error.refusal.kind === "not-ready" && error.refusal.retryable !== false,
             ...(error.refusal.kind === "not-ready" ? { state: error.refusal.state } : {}),
           },
         };

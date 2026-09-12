@@ -60,7 +60,20 @@ export interface SettleDeps extends StatusDeps {
  * does not move and this order is over.
  */
 export type SettleRefusal =
-  | { readonly kind: "not-ready"; readonly state: string; readonly message: string }
+  | {
+      readonly kind: "not-ready";
+      readonly state: string;
+      readonly message: string;
+      /**
+       * Whether waiting could change the answer.
+       *
+       * Not every not-ready is worth retrying: an order that passed its
+       * deadline unclaimed can never pay, because no later claim counts. It is
+       * still not a violation — nothing was breached — so it needs its own
+       * flag rather than a second refusal kind.
+       */
+      readonly retryable?: boolean;
+    }
   | { readonly kind: "violation"; readonly message: string };
 
 export class SettleError extends Error {
@@ -131,6 +144,17 @@ function assertAttestationMatchesOrder(attestation: Attestation, envelope: Order
   }
 }
 
+/** The same rule as a predicate, for picking which attestation pays. */
+function matchesOrder(attestation: Attestation, envelope: OrderEnvelope): boolean {
+  try {
+    assertAttestationMatchesOrder(attestation, envelope);
+    return true;
+  } catch (error) {
+    if (error instanceof SettleError) return false;
+    throw error;
+  }
+}
+
 /** Epoch seconds → the schema's `Utc` shape: second precision, `Z` only. */
 function epochSecondsToUtc(seconds: number): string {
   return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -158,12 +182,26 @@ export async function settleOrder(orderId: string, deps: SettleDeps): Promise<Se
   }
 
   if (facts.holder?.state !== "claimed") {
+    const state = facts.holder?.state === "claim_timeout" ? "CLAIM_TIMEOUT" : "POSTED";
+    // Past the order deadline with nobody holding it, no later claim can
+    // count — `resolveClaims` ignores claims that land after the deadline — so
+    // this order can never pay and a caller polling it should stop. Telling
+    // them "retryable" would be telling them to wait for something that cannot
+    // happen. It is still not a violation: nothing was breached, the order
+    // simply expired, and the funds are the requester's to get back once there
+    // is a path for that (Known limits: there is not one yet).
+    const expired =
+      (deps.nowEpochSeconds ?? Math.floor(Date.now() / 1000)) >=
+      Math.floor(Date.parse(posted.envelope.deadline) / 1000);
     throw new SettleError({
       kind: "not-ready",
-      state: facts.holder?.state === "claim_timeout" ? "CLAIM_TIMEOUT" : "POSTED",
-      message:
-        `order ${orderId} is not held by anybody, so there is nobody to pay. ` +
-        `The payout is committed at claim.`,
+      state: expired ? "TIMEOUT" : state,
+      retryable: !expired,
+      message: expired
+        ? `order ${orderId} passed its deadline of ${posted.envelope.deadline} unclaimed, so no ` +
+          `claim can count any more and there is nobody to pay. The funds stay in escrow.`
+        : `order ${orderId} is not held by anybody, so there is nobody to pay. ` +
+          `The payout is committed at claim.`,
     });
   }
   const held = facts.holder.active;
@@ -173,11 +211,11 @@ export async function settleOrder(orderId: string, deps: SettleDeps): Promise<Se
   // basis for moving money. A stray one is ignored here rather than treated as
   // a violation: it did not come from the party under obligation, so it says
   // nothing about whether they delivered.
-  const delivered: AttestationRecord | undefined = facts.attestations
-    .filter((record) => record.payerAccountId === held.claimantAccountId)
-    .at(-1);
+  const byTheHolder = facts.attestations.filter(
+    (record) => record.payerAccountId === held.claimantAccountId,
+  );
 
-  if (delivered === undefined) {
+  if (byTheHolder.length === 0) {
     throw new SettleError({
       kind: "not-ready",
       state: "CLAIMED",
@@ -187,7 +225,28 @@ export async function settleOrder(orderId: string, deps: SettleDeps): Promise<Se
     });
   }
 
-  assertAttestationMatchesOrder(delivered.attestation, posted.envelope);
+  // **The earliest one that matches, not the last one published.** Settling is
+  // an idempotent retry, so its answer has to be a function of facts that only
+  // grow: taking the last would let a claimant publish a second, divergent
+  // attestation *after* being paid and turn every later retry into a violation
+  // for an order that was correctly settled. Taking the earliest match also
+  // does not punish a correction — an expert whose first message was malformed
+  // is paid on the one that was right.
+  const delivered = byTheHolder.find((record) =>
+    matchesOrder(record.attestation, posted.envelope),
+  );
+  if (delivered === undefined) {
+    // Nothing the holder signed is a verdict on this order. Reported from the
+    // latest, because that is the one they most recently stood behind and its
+    // message is the most useful thing to hand back.
+    assertAttestationMatchesOrder(
+      (byTheHolder[byTheHolder.length - 1] as AttestationRecord).attestation,
+      posted.envelope,
+    );
+    // Unreachable: `matchesOrder` and `assertAttestationMatchesOrder` are the
+    // same rule, so a record that fails the first makes the second throw.
+    throw new SettleError({ kind: "violation", message: `order ${orderId} has no payable attestation` });
+  }
 
   // Straight off the envelope, as a string, with no conversion anywhere in
   // this file. The price is what the requester locked; nothing here recomputes
